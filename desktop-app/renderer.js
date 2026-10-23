@@ -85,6 +85,7 @@ const idleStartedDuration = document.getElementById("idleStartedDuration");
 const idleLogoutCountdown = document.getElementById("idleLogoutCountdown");
 const idleStartedTime = document.getElementById("idleStartedTime");
 const acknowledgeIdleButton = document.getElementById("acknowledgeIdleButton");
+const timerLockNotice = document.getElementById("timerLockNotice");
 
 const API_BASE_URL =
   window.electronAPI?.apiBaseUrl || "http://localhost:5000/api";
@@ -122,6 +123,9 @@ const reportSnapshots = new Map();
 const reportRequests = new Map();
 let deviceApprovalAbortController = null;
 let todayTimesheetReportDate = null;
+let timerStateConfirmed = false;
+let serverReachable = true;
+let timerLockActive = false;
 const IDLE_CHECK_INTERVAL_MS = 5000;
 const DATA_REFRESH_INTERVAL_MS = 30 * 1000;
 const API_REQUEST_TIMEOUT_MS = 10 * 1000;
@@ -339,7 +343,32 @@ async function loadIdlePolicy() {
   }
 }
 
+// Full-screen lock (see timer-lock.js) while no timer is running. It fails
+// open when the timer state is unconfirmed or the server is unreachable:
+// the employee could neither start a timer to unlock nor reach the network
+// settings hidden behind the overlay.
+function getTimerLockState() {
+  if (isLoginPage || !getToken() || logoutPending || appClosePending) return "inactive";
+  if (!timerStateConfirmed || !serverReachable) return "inactive";
+  if (pendingIdleStop) return "locked";
+  return currentTimeLog?.status === "running" || isIntentionalBreak(currentTimeLog) ? "running" : "locked";
+}
+
+function syncTimerLock(state = getTimerLockState()) {
+  const locked = state === "locked";
+  // Show the Start controls as the lock appears.
+  if (locked && !timerLockActive) showTimerView("timer");
+  timerLockActive = locked;
+  if (timerLockNotice) timerLockNotice.hidden = !locked;
+  window.electronAPI?.setTimerLock?.(state);
+}
+
+function noteServerResponse(response) {
+  serverReachable = response.status < 500;
+}
+
 function clearSessionLoops() {
+  syncTimerLock("inactive");
   reportSnapshots.clear();
   deviceApprovalAbortController?.abort();
   deviceApprovalAbortController = null;
@@ -366,6 +395,7 @@ async function runTimerAction(action) {
   try { return await timerAction; } finally {
     timerAction = null;
     updateBreakUI();
+    syncTimerLock();
   }
 }
 
@@ -374,6 +404,7 @@ async function signOut(inactivity = false) {
   logoutInProgress = true;
   logoutPending = true;
   automaticIdlePause = false;
+  syncTimerLock();
   const token = getToken();
   try {
     // Finish an already submitted timer action before closing the timer.
@@ -494,6 +525,8 @@ function showIdleStartedPopup(timeLog, idleSeconds) {
 }
 
 async function checkSystemIdleState() {
+  // Every poll re-reports the lock state; main releases the lock if reports stop.
+  syncTimerLock();
   if (idleCheckInProgress || appClosePending || !idlePolicy || !getToken()) return;
   idleCheckInProgress = true;
   try {
@@ -518,6 +551,8 @@ async function checkSystemIdleState() {
         timerDuration.textContent = formatDuration(calculateCurrentWorkSeconds(frozen));
         if (pauseTimerButton) pauseTimerButton.disabled = true;
         if (resumeTimerButton) resumeTimerButton.disabled = true;
+        // Lock the screen now rather than after the stop request returns.
+        syncTimerLock();
       }
       await runTimerAction(() => stopTimer({ idleSeconds: Math.max(idleSeconds,
         Math.floor((Date.now() - pendingIdleStop.startedAt) / 1000)) }));
@@ -612,6 +647,7 @@ async function sendTimerHeartbeat() {
       headers: { Authorization: `Bearer ${getToken()}` },
       signal: AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
     });
+    noteServerResponse(response);
     if (response.status === 404) {
       currentTimeLog = null;
       stopLiveDuration();
@@ -622,6 +658,7 @@ async function sendTimerHeartbeat() {
   } catch {
     // The server closes the timer at its last confirmed heartbeat if contact
     // is lost; a transient error is retried on the next interval.
+    serverReachable = false;
   }
 }
 
@@ -1124,11 +1161,13 @@ async function refreshCurrentUser() {
       headers: { Authorization: "Bearer " + token },
       signal: AbortSignal.timeout(10000),
     });
+    noteServerResponse(response);
     if ([401, 403].includes(response.status)) {
       const data = await response.json().catch(() => ({}));
       endRevokedDeviceSession(data.message);
       return false;
     }
+    syncTimerLock();
     if (!response.ok) return true;
     const data = await response.json();
     const user = data.user || data;
@@ -1138,6 +1177,8 @@ async function refreshCurrentUser() {
     updateUserDetails(user);
     return true;
   } catch {
+    serverReachable = false;
+    syncTimerLock();
     return true;
   }
 }
@@ -1733,6 +1774,7 @@ async function loadActiveTimer() {
         signal: AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
       }
     );
+    noteServerResponse(response);
 
     const data = await response.json();
 
@@ -1743,6 +1785,7 @@ async function loadActiveTimer() {
       return;
     }
 
+    timerStateConfirmed = true;
     stopLiveDuration();
     if (!data.timeLog) {
       currentTimeLog = null;
@@ -1824,8 +1867,11 @@ async function loadActiveTimer() {
 
     stopTimerButton.disabled = false;
   } catch (error) {
+    serverReachable = false;
     timerMessage.textContent =
       "Unable to load active timer.";
+  } finally {
+    syncTimerLock();
   }
 }
 async function stopTimer({ idleSeconds = 0 } = {}) {
@@ -1855,6 +1901,7 @@ async function stopTimer({ idleSeconds = 0 } = {}) {
         signal: AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
       }
     );
+    noteServerResponse(response);
 
     const data = await response.json();
 
@@ -1878,6 +1925,7 @@ async function stopTimer({ idleSeconds = 0 } = {}) {
     stopLiveDuration();
 
     currentTimeLog = null;
+    timerStateConfirmed = true;
     automaticIdlePause = false;
     activeTaskIdleLogout = false;
     pendingIdleStop = null;
@@ -1913,6 +1961,7 @@ async function stopTimer({ idleSeconds = 0 } = {}) {
     if (idleSeconds > 0) showIdleStartedPopup(data.timeLog, idleSeconds);
     void loadTodayTimesheet();
   } catch (error) {
+    serverReachable = false;
     timerMessage.textContent =
       "Unable to reach the backend server.";
 
@@ -2141,6 +2190,7 @@ async function startTimer() {
         signal: AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
       }
     );
+    noteServerResponse(response);
 
     const data = await response.json();
 
@@ -2157,6 +2207,7 @@ async function startTimer() {
     timerStatus.textContent = runningStatusLabel(data.timeLog);
 
     currentTimeLog = data.timeLog;
+    timerStateConfirmed = true;
     clearNoteDraft();
     activeTaskIdleLogout = data.timeLog.task?.idleLogout === true
       || taskSelect.selectedOptions[0]?.dataset.idleLogout === "true";
@@ -2178,6 +2229,7 @@ async function startTimer() {
     if (clientSelect) clientSelect.disabled = true;
     taskSelect.disabled = true;
   } catch (error) {
+    serverReachable = false;
     timerMessage.textContent =
       "Unable to reach the backend server.";
 
@@ -2214,6 +2266,15 @@ taskSelect?.addEventListener("change", () => {
 
 window.addEventListener("focus", refreshDesktopData);
 window.addEventListener("online", refreshDesktopData);
+window.addEventListener("offline", () => {
+  serverReachable = false;
+  syncTimerLock();
+});
+// After sleep the server may have closed the timer for missed heartbeats.
+window.electronAPI?.onSystemResume?.(() => {
+  if (isLoginPage || !getToken() || logoutPending || timerAction) return;
+  void loadActiveTimer();
+});
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") void refreshDesktopData();
 });

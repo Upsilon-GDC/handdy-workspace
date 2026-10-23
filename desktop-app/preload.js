@@ -17,4 +17,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   },
   notifyCloseReady: () => ipcRenderer.send("app:close-ready"),
   notifyCloseCancelled: () => ipcRenderer.send("app:close-cancelled"),
+  setTimerLock: (state) => ipcRenderer.send("timer-lock:set", String(state)),
+  onSystemResume: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on("system:resume", listener);
+    return () => ipcRenderer.removeListener("system:resume", listener);
+  },
 });

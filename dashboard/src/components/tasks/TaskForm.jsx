@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import axiosInstance from "../../api/axiosInstance";
 import { getAllEmployeeOptions, getAllMyTeamMembers } from "../../api/employeeApi";
@@ -57,6 +57,15 @@ function TaskForm({
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // `saving` only disables the button after React re-renders; a ref blocks a
+  // second click or Enter press that arrives before then.
+  const submittingRef = useRef(false);
+  const errorRef = useRef(null);
+
+  // The form can be taller than the window; keep a rejection visible.
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [error]);
 
   useEffect(() => {
     if (scope !== "admin") return;
@@ -111,6 +120,7 @@ function TaskForm({
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (submittingRef.current) return;
     setError("");
 
     const taskNames = [taskName, ...additionalTaskNames].map((name) => name.trim());
@@ -143,6 +153,7 @@ function TaskForm({
     };
 
     try {
+      submittingRef.current = true;
       setSaving(true);
       const response =
         mode === "edit"
@@ -152,14 +163,15 @@ function TaskForm({
     } catch (requestError) {
       setError(getApiErrorMessage(requestError, "Unable to save task."));
     } finally {
+      submittingRef.current = false;
       setSaving(false);
     }
   };
 
   return (
-    <form className={formClassName} onSubmit={handleSubmit}>
+    <form className={formClassName} onSubmit={handleSubmit} aria-busy={saving}>
       {header}
-      {error && <p className="admin-error-box" role="alert">{error}</p>}
+      {error && <p ref={errorRef} className="admin-error-box" role="alert">{error}</p>}
 
       <div className="admin-task-basics admin-task-name-list" style={{ gridTemplateColumns: "1fr" }}>
         <label>

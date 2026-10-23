@@ -23,6 +23,8 @@ test("identity and NSIS install scope remain unchanged; builds never publish", (
   assert.equal(pkg.build.nsis.perMachine, false);
   assert.deepEqual(pkg.build.win.target, ["nsis"]);
   assert.ok(pkg.build.files.includes("app-updater.js"));
+  assert.ok(pkg.build.files.includes("timer-lock.js"));
+  assert.ok(pkg.build.files.includes("lock-overlay.html"));
   assert.match(pkg.scripts.build, /--publish never/);
   assert.equal(pkg.build.publish[0].releaseType, "draft");
   assert.equal(pkg.build.publish[0].private, false);

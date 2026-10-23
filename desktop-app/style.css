@@ -228,3 +228,5 @@ body[data-page="dashboard"] .clock-status.status-break { color:#ff9fac; font-wei
 .idle-started-actions button:hover { background:#214b9c; }
 .idle-started-actions button:focus-visible { outline:3px solid #aac4ff; outline-offset:3px; }
 @media(max-width:480px) { .idle-started-dialog { padding:26px 24px; } }
+.timer-lock-notice { margin:0 0 16px; padding:12px 16px; border:1px solid #f3c58b; border-radius:8px; background:#fff6ea; color:#6b4300; font-size:13px; line-height:1.5; }
+.timer-lock-notice[hidden] { display:none; }

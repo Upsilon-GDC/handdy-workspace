@@ -28,6 +28,8 @@
     "files": [
       "main.js",
       "app-updater.js",
+      "timer-lock.js",
+      "lock-overlay.html",
       "preload.js",
       "api-config.js",
       "idle-policy-defaults.json",

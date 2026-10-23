@@ -25,6 +25,62 @@ const generateTaskCode = async () => {
 
 const normalizeTeamIds = (value) => [...new Set((Array.isArray(value) ? value : value ? [value] : []).map(String).filter(Boolean))];
 
+const normalizeTaskName = (name) => String(name || "").trim().replace(/\s+/g, " ").toLowerCase();
+const taskTeamIds = (task) => normalizeTeamIds(task.teams?.length ? task.teams : task.team);
+// A work task without a project is offered with every project of its teams,
+// so it collides with a same-named task tied to one of those projects.
+const projectScopesOverlap = (first, second) => !first || !second || String(first) === String(second);
+const taskIdentity = (task) => JSON.stringify([
+  normalizeTaskName(task.taskName), task.taskType || "work", taskTeamIds(task).sort(),
+]);
+
+// Tasks are duplicates when an employee would see both in the same task list:
+// the same name (ignoring case and spacing) and type, a shared team, and an
+// overlapping project. Deleted tasks do not count; inactive ones do, because
+// they can be reactivated instead.
+const findDuplicateTasks = async ({ taskNames, taskType = "work", project = null, teamIds, excludeId = null }) => {
+  const names = new Set(taskNames.map(normalizeTaskName));
+  const candidates = await Task.find({
+    deletedAt: null,
+    $or: [{ team: { $in: teamIds } }, { teams: { $in: teamIds } }],
+    ...(excludeId ? { _id: { $ne: excludeId } } : {}),
+  }).select("taskName taskType project team teams isActive").lean();
+  return candidates.filter((task) => names.has(normalizeTaskName(task.taskName))
+    && (task.taskType || "work") === taskType
+    && projectScopesOverlap(task.project, project)
+    && taskTeamIds(task).some((teamId) => teamIds.includes(teamId)));
+};
+
+const sendDuplicateTaskError = async (res, duplicates, requestedTeamIds) => {
+  const names = [...new Map(duplicates.map((task) => [normalizeTaskName(task.taskName), task.taskName.trim()])).values()];
+  const sharedTeamIds = [...new Set(duplicates.flatMap(taskTeamIds))].filter((teamId) => requestedTeamIds.includes(teamId));
+  const teams = await Team.find({ _id: { $in: sharedTeamIds } });
+  const teamNames = teams.map((team) => team.teamName).filter(Boolean);
+  const scope = teamNames.length ? ` for ${teamNames.join(", ")}` : " for the selected team";
+  const message = names.length === 1
+    ? `A task named "${names[0]}" already exists${scope}.`
+    : `Tasks named ${names.map((name) => `"${name}"`).join(", ")} already exist${scope}.`;
+  const hint = duplicates.every((task) => task.isActive === false)
+    ? " Activate the existing task from the Tasks list instead of creating it again."
+    : " Use the existing task instead of creating a duplicate.";
+  return res.status(409).json({
+    success: false,
+    code: "DUPLICATE_TASK",
+    message: message + hint,
+    duplicates: duplicates.map((task) => ({ _id: task._id, taskName: task.taskName, isActive: task.isActive !== false })),
+  });
+};
+
+// The duplicate check and the write it guards run one at a time, so two
+// identical requests (a double submit or a retried request) cannot both pass
+// the check. The API runs as a single instance (render.yaml).
+let taskWriteQueue = Promise.resolve();
+const serializeTaskWrite = (operation) => {
+  const result = taskWriteQueue.then(() => operation());
+  taskWriteQueue = result.catch(() => {});
+  return result;
+};
+
 const getTeamsForTask = async (user, requestedTeams) => {
   if (isAdminRole(user.role) || ["manager", "hr"].includes(user.role)) {
     const teamIds = normalizeTeamIds(requestedTeams);
@@ -208,32 +264,42 @@ const createTask = async (req, res) => {
       return res.status(400).json({ success: false, message: relationError });
     }
 
-    const task = await Task.create({
-      taskCode: resolvedTaskCode,
-      taskName: taskName.trim(),
-      description: description?.trim() || "",
+    const { task, duplicates } = await serializeTaskWrite(async () => {
+      const existing = await findDuplicateTasks({
+        taskNames: [taskName],
+        taskType: normalizedTaskType,
+        project: resolvedProject || null,
+        teamIds: teamResolution.teamIds,
+      });
+      if (existing.length) return { duplicates: existing };
+      return { task: await Task.create({
+        taskCode: resolvedTaskCode,
+        taskName: taskName.trim(),
+        description: description?.trim() || "",
 
-      taskType: normalizedTaskType,
+        taskType: normalizedTaskType,
 
-      project: resolvedProject || null,
-      team: teamResolution.teamIds[0],
-      teams: teamResolution.teamIds,
+        project: resolvedProject || null,
+        team: teamResolution.teamIds[0],
+        teams: teamResolution.teamIds,
 
-      assignedTo:
-        assignToAllEmployees === true
-          ? []
-          : normalizedAssignments,
+        assignedTo:
+          assignToAllEmployees === true
+            ? []
+            : normalizedAssignments,
 
-      assignToAllEmployees:
-        assignToAllEmployees === true,
+        assignToAllEmployees:
+          assignToAllEmployees === true,
 
-      isActive:
-        isActive !== undefined ? isActive : true,
+        isActive:
+          isActive !== undefined ? isActive : true,
 
-      idleLogout: Boolean(idleLogout),
+        idleLogout: Boolean(idleLogout),
 
-      createdBy: req.user._id,
+        createdBy: req.user._id,
+      }) };
     });
+    if (duplicates) return sendDuplicateTaskError(res, duplicates, teamResolution.teamIds);
 
     const populatedTask = await Task.findById(task._id)
       .populate("project", "projectCode projectName serviceType")
@@ -329,7 +395,22 @@ const createTasksBulk = async (req, res) => {
       }
     }
 
-    const createdTasks = await Task.insertMany(tasks);
+    const { createdTasks, duplicates } = await serializeTaskWrite(async () => {
+      const existing = [];
+      for (const creation of creationConfigurations) {
+        existing.push(...await findDuplicateTasks({
+          taskNames,
+          taskType: creation.taskType,
+          project: creation.project,
+          teamIds: creation.teams,
+        }));
+      }
+      if (existing.length) return { duplicates: [...new Map(existing.map((task) => [String(task._id), task])).values()] };
+      return { createdTasks: await Task.insertMany(tasks) };
+    });
+    if (duplicates) {
+      return sendDuplicateTaskError(res, duplicates, [...new Set(creationConfigurations.flatMap((creation) => creation.teams))]);
+    }
     return res.status(201).json({
       success: true,
       message: `${createdTasks.length} tasks created successfully.`,
@@ -531,6 +612,9 @@ const updateTask = async (req, res) => {
         message: "Task not found.",
       });
     }
+    // Edits that keep the name, type and teams (status, idle logout,
+    // assignees) are never blocked by older duplicate records.
+    const originalIdentity = taskIdentity(task);
 
     const {
       taskCode,
@@ -644,7 +728,21 @@ const updateTask = async (req, res) => {
       return res.status(400).json({ success: false, message: relationError });
     }
 
-    await task.save();
+    const duplicates = await serializeTaskWrite(async () => {
+      if (taskIdentity(task) !== originalIdentity) {
+        const existing = await findDuplicateTasks({
+          taskNames: [task.taskName],
+          taskType: task.taskType,
+          project: task.project,
+          teamIds: taskTeamIds(task),
+          excludeId: task._id,
+        });
+        if (existing.length) return existing;
+      }
+      await task.save();
+      return null;
+    });
+    if (duplicates) return sendDuplicateTaskError(res, duplicates, taskTeamIds(task));
 
     const updatedTask =
       await Task.findById(task._id)

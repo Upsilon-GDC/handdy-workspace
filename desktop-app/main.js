@@ -5,6 +5,7 @@ const {
   Menu,
   ipcMain,
   powerMonitor,
+  screen,
   shell,
 } = require("electron");
 const path = require("path");
@@ -14,6 +15,7 @@ const crypto = require("crypto");
 const { fileURLToPath } = require("url");
 const { PRODUCTION_APP_ORIGIN, resolveApiBaseUrl } = require("./api-config");
 const { startAppUpdater } = require("./app-updater");
+const { createTimerLock } = require("./timer-lock");
 
 // Pin the existing package-derived profile before changing the display name.
 // This preserves saved employee sessions in both development and packaged builds.
@@ -79,6 +81,20 @@ ipcMain.handle("system:get-idle-time", () =>
 );
 ipcMain.handle("system:idle-defaults", () => require("./idle-policy-defaults.json"));
 
+const timerLock = createTimerLock({
+  BrowserWindow,
+  screen,
+  powerMonitor,
+  overlayFile: path.join(__dirname, "lock-overlay.html"),
+  getMainWindow: () => mainWindowRef,
+});
+
+ipcMain.on("timer-lock:set", (event, state) => {
+  // Only the CRM window's own renderer can lock or unlock the screen.
+  if (!mainWindowRef || mainWindowRef.isDestroyed() || event.sender !== mainWindowRef.webContents) return;
+  timerLock.report(String(state));
+});
+
 function createWindow() {
   const mainWindow = new BrowserWindow({
     title: "CRM",
@@ -136,9 +152,19 @@ function createWindow() {
     console.log(`[electron] Page loaded: ${mainWindow.webContents.getURL()}`);
   });
 
+  mainWindow.on("blur", () => timerLock.onMainWindowBlur());
+  mainWindow.on("minimize", () => timerLock.onMainWindowMinimize());
+  // A crashed renderer can no longer start a timer, so it must not keep the
+  // screen locked. Windows shutdown and sign-off must not be blocked either.
+  mainWindow.webContents.on("render-process-gone", () => timerLock.release());
+  mainWindow.on("query-session-end", () => timerLock.release());
+  mainWindow.on("session-end", () => timerLock.release());
+
   mainWindow.on("close", (event) => {
     if (closeReadyWindows.has(mainWindow)) return;
     event.preventDefault();
+    // While the screen is locked, CRM stays open until a timer is started.
+    if (timerLock.isActive()) return;
 
     if (!closeFallbackTimers.has(mainWindow)) {
       mainWindow.webContents.send("app:before-close");
@@ -166,6 +192,8 @@ function createWindow() {
     if (fallbackTimer) clearTimeout(fallbackTimer);
     closeFallbackTimers.delete(mainWindow);
     if (mainWindowRef === mainWindow) mainWindowRef = null;
+    // Overlays would otherwise keep the app alive with no CRM window.
+    timerLock.release();
   });
 }
 
@@ -187,6 +215,13 @@ app.whenReady().then(() => {
   if (!ownsSession) return;
   Menu.setApplicationMenu(null);
   createWindow();
+  timerLock.start({
+    // After sleep the server may have closed the timer; re-check it now
+    // rather than at the next heartbeat.
+    onResume: () => {
+      if (mainWindowRef && !mainWindowRef.isDestroyed()) mainWindowRef.webContents.send("system:resume");
+    },
+  });
   startAppUpdater(app);
 
   app.on("activate", () => {

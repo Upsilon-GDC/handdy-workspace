@@ -191,6 +191,10 @@ function AdminTasks() {
     sortDirection,
   ]);
 
+  // Only legacy projects still carry a service type; see BillingPage.
+  const showServiceType = tasks.some((task) => task.taskType !== "break" && task.project?.serviceType);
+  const columnCount = showServiceType ? 8 : 7;
+
   // ==============================
   // PAGINATION
   // ==============================
@@ -439,7 +443,7 @@ function AdminTasks() {
                     </button>
                   </th>
 
-                  <th>Service</th>
+                  {showServiceType && <th>Service</th>}
 
                   <th>
                     <button
@@ -492,7 +496,7 @@ function AdminTasks() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan="8"
+                      colSpan={columnCount}
                       className="tasks-empty"
                     >
                       Loading tasks...
@@ -502,7 +506,7 @@ function AdminTasks() {
                   0 ? (
                   <tr>
                     <td
-                      colSpan="8"
+                      colSpan={columnCount}
                       className="tasks-empty"
                     >
                       No tasks found.
@@ -533,7 +537,7 @@ function AdminTasks() {
                             {task.taskType === "break" ? "Break time" : "Work time"}
                           </td>
 
-                          <td>{task.taskType === "break" ? "-" : task.project?.serviceType || "Service Type not configured"}</td>
+                          {showServiceType && <td>{task.taskType === "break" ? "-" : task.project?.serviceType || "-"}</td>}
 
                           <td>
                             {getAssignedName(

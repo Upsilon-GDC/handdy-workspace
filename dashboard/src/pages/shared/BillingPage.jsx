@@ -119,6 +119,9 @@ function BillingContent() {
     () => employees.find((employee) => recordId(employee) === employeeId),
     [employeeId, employees],
   );
+  // Projects no longer carry a service type (rates are set per project), so
+  // only legacy projects have one. Show the column only when it has data.
+  const showServiceType = Boolean(report?.taskSummary?.some((task) => task.serviceType));
 
   const changeTeam = (value) => {
     setTeamId(value);
@@ -177,7 +180,7 @@ function BillingContent() {
       ...report.taskSummary.map((task) => [
         task.projectName,
         task.clientName,
-        task.serviceType || "Service Type not configured",
+        task.serviceType || "",
         task.taskName,
         task.taskDescription,
         formatClockDuration(task.totalSeconds),
@@ -202,7 +205,7 @@ function BillingContent() {
         entry.type === "break" ? "Break" : "Task",
         entry.projectName,
         entry.clientName,
-        entry.serviceType || (entry.type === "break" ? "-" : "Service Type not configured"),
+        entry.serviceType || "",
         entry.taskName,
         entry.taskDescription,
         new Date(entry.startedAt).toLocaleString(undefined, { timeZone: report.period.timezone }),
@@ -298,7 +301,7 @@ function BillingContent() {
             {report.projects.length === 0 ? <div className="billing-no-data">No completed task time was recorded in this period.</div> : report.projects.map((project) => (
               <article className="billing-project" key={project.key || project.projectId}>
                 <div className="billing-project-heading"><div><FolderKanban size={18} /><div><h4>{project.projectName}</h4><p>{project.clientName || project.projectCode || "No client assigned"}</p></div></div><div className="billing-project-totals"><strong>{formatDuration(project.totalSeconds)}</strong><span>{project.hasMissingRates ? "Known subtotal: " : ""}{formatMoney(project.totalBillableAmount)}{project.hasMissingRates ? " (missing rates excluded)" : ""}</span></div></div>
-                <div className="billing-table-wrap"><table><thead><tr><th>Service type</th><th>Task</th><th>Description</th><th>Total time</th><th>Hourly rate</th><th>Billable amount</th></tr></thead><tbody>{project.tasks.map((task) => <tr key={task.taskId}><td>{task.serviceType || "Service Type not configured"}</td><td><strong>{task.taskName}</strong>{task.taskCode && <small>{task.taskCode}</small>}</td><td>{task.taskDescription || "-"}</td><td>{formatClockDuration(task.totalSeconds)}</td><td className={task.billingWarning ? "billing-missing-rate" : ""}>{formatRate(task.chargeRate, task.billingWarning)}</td><td className={task.billingWarning ? "billing-missing-rate" : ""}>{formatMoney(task.billableAmount, task.billingWarning)}</td></tr>)}</tbody></table></div>
+                <div className="billing-table-wrap"><table><thead><tr>{showServiceType && <th>Service type</th>}<th>Task</th><th>Description</th><th>Total time</th><th>Hourly rate</th><th>Billable amount</th></tr></thead><tbody>{project.tasks.map((task) => <tr key={task.taskId}>{showServiceType && <td>{task.serviceType || "-"}</td>}<td><strong>{task.taskName}</strong>{task.taskCode && <small>{task.taskCode}</small>}</td><td>{task.taskDescription || "-"}</td><td>{formatClockDuration(task.totalSeconds)}</td><td className={task.billingWarning ? "billing-missing-rate" : ""}>{formatRate(task.chargeRate, task.billingWarning)}</td><td className={task.billingWarning ? "billing-missing-rate" : ""}>{formatMoney(task.billableAmount, task.billingWarning)}</td></tr>)}</tbody></table></div>
               </article>
             ))}
           </section>
@@ -317,7 +320,7 @@ function BillingContent() {
                       : <strong>{formatMoney(day.totalBillableAmount)}{day.hasMissingRates && <em className="billing-missing-rate"> + Missing Rate</em>}</strong>}
                   </span>
                 </summary>
-                <div className="billing-table-wrap"><table><thead><tr><th>Type</th><th>Project</th><th>Service</th><th>Task</th><th>Start</th><th>End</th><th>Time</th><th>Rate</th><th>Amount</th></tr></thead><tbody>{day.entries.map((entry, index) => <tr key={`${entry.logId}-${index}`}><td><span className={`billing-type ${entry.type}`}>{entry.type === "break" ? "Break" : "Task"}</span></td><td>{entry.projectName}</td><td>{entry.serviceType || (entry.type === "break" ? "-" : "Service Type not configured")}</td><td>{entry.taskName}</td><td>{new Date(entry.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone: report.period.timezone })}</td><td>{new Date(entry.stoppedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone: report.period.timezone })}</td><td>{formatDuration(entry.durationSeconds)}</td><td className={entry.billingWarning ? "billing-missing-rate" : ""}>{entry.type === "break" ? "-" : formatRate(entry.chargeRate, entry.billingWarning)}</td><td className={entry.billingWarning ? "billing-missing-rate" : ""}>{entry.type === "break" ? "-" : formatMoney(entry.billableAmount, entry.billingWarning)}</td></tr>)}</tbody></table></div>
+                <div className="billing-table-wrap"><table><thead><tr><th>Type</th><th>Project</th>{showServiceType && <th>Service</th>}<th>Task</th><th>Start</th><th>End</th><th>Time</th><th>Rate</th><th>Amount</th></tr></thead><tbody>{day.entries.map((entry, index) => <tr key={`${entry.logId}-${index}`}><td><span className={`billing-type ${entry.type}`}>{entry.type === "break" ? "Break" : "Task"}</span></td><td>{entry.projectName}</td>{showServiceType && <td>{entry.serviceType || "-"}</td>}<td>{entry.taskName}</td><td>{new Date(entry.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone: report.period.timezone })}</td><td>{new Date(entry.stoppedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone: report.period.timezone })}</td><td>{formatDuration(entry.durationSeconds)}</td><td className={entry.billingWarning ? "billing-missing-rate" : ""}>{entry.type === "break" ? "-" : formatRate(entry.chargeRate, entry.billingWarning)}</td><td className={entry.billingWarning ? "billing-missing-rate" : ""}>{entry.type === "break" ? "-" : formatMoney(entry.billableAmount, entry.billingWarning)}</td></tr>)}</tbody></table></div>
               </details>
             ))}
           </section>

@@ -39,6 +39,10 @@ function TeamLeadTasks() {
     });
   }, [search, status, tasks]);
 
+  // Only legacy projects still carry a service type; see BillingPage.
+  const showServiceType = tasks.some((task) => task.taskType !== "break" && task.project?.serviceType);
+  const columnCount = showServiceType ? 7 : 6;
+
   const toggleTask = async (taskId) => {
     try {
       await axiosInstance.patch(`/tasks/${taskId}/toggle-status`);
@@ -77,12 +81,12 @@ function TeamLeadTasks() {
           </div>
           <div className="tl-tasks-table-wrapper">
             <table className="tl-tasks-table">
-              <thead><tr><th>Task</th><th>Type</th><th>Service</th><th>Project</th><th>Assigned to</th><th>Status</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Task</th><th>Type</th>{showServiceType && <th>Service</th>}<th>Project</th><th>Assigned to</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody>
-                {loading ? <tr><td colSpan="7">Loading tasks...</td></tr> : filteredTasks.length === 0 ? <tr><td colSpan="7">No tasks found.</td></tr> : filteredTasks.map((task) => (
+                {loading ? <tr><td colSpan={columnCount}>Loading tasks...</td></tr> : filteredTasks.length === 0 ? <tr><td colSpan={columnCount}>No tasks found.</td></tr> : filteredTasks.map((task) => (
                   <tr key={task._id}>
                     <td>{task.taskName} <small>{task.taskCode}</small></td>
-                    <td>{task.taskType}</td><td>{task.taskType === "break" ? "-" : task.project?.serviceType || "Service Type not configured"}</td><td>{task.project?.projectName || (task.taskType === "work" ? "All team projects" : "-")}</td>
+                    <td>{task.taskType}</td>{showServiceType && <td>{task.taskType === "break" ? "-" : task.project?.serviceType || "-"}</td>}<td>{task.project?.projectName || (task.taskType === "work" ? "All team projects" : "-")}</td>
                     <td>{task.assignToAllEmployees ? "Entire team" : (task.assignedTo || []).map((item) => item.fullName).join(", ") || "-"}</td>
                     <td><span className={`tl-task-status ${task.isActive ? "is-active" : "is-inactive"}`}>{task.isActive ? "Active" : "Inactive"}</span></td>
                     <td className="tl-task-actions">

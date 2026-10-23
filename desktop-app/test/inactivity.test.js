@@ -5,7 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const defaults = require("../idle-policy-defaults.json");
 
-function harness({ timer = "running", idle = 0, outage = false, activeTaskIdleLogout = true, stopWorkedSeconds = 23 * 60 + 26 } = {}) {
+function harness({ timer = "running", idle = 0, outage = false, activeTaskIdleLogout = true, stopWorkedSeconds = 23 * 60 + 26, page = "login" } = {}) {
   const calls = [];
   const intervals = new Map();
   let nextInterval = 0;
@@ -15,13 +15,13 @@ function harness({ timer = "running", idle = 0, outage = false, activeTaskIdleLo
     return { getItem: key => values.get(key) || null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
   };
   const localStorage = storage();
-  const state = { idle, outage, stopBody: null, timer: timer ? { _id: "existing", status: timer, startedAt: new Date().toISOString(), pauses: [], totalWorkedSeconds: 0 } : null, beforeClose: null, closeReady: 0, closeCancelled: 0 };
+  const state = { idle, outage, stopBody: null, timer: timer ? { _id: "existing", status: timer, startedAt: new Date().toISOString(), pauses: [], totalWorkedSeconds: 0 } : null, beforeClose: null, closeReady: 0, closeCancelled: 0, lock: [] };
   const context = vm.createContext({
     console, AbortSignal, Date, localStorage, sessionStorage: storage(),
     setInterval(callback) { intervals.set(++nextInterval, callback); return nextInterval; },
     clearInterval(id) { intervals.delete(id); },
     document: {
-      body: { dataset: { page: "login" } },
+      body: { dataset: { page } },
       getElementById(id) {
         if (!nodes.has(id)) nodes.set(id, { textContent: "", style: {}, open: false, shown: 0,
           classList: { add() {}, remove() {} }, listeners: {},
@@ -37,6 +37,7 @@ function harness({ timer = "running", idle = 0, outage = false, activeTaskIdleLo
       onBeforeClose: (callback) => { state.beforeClose = callback; },
       notifyCloseReady: () => { state.closeReady += 1; },
       notifyCloseCancelled: () => { state.closeCancelled += 1; },
+      setTimerLock: (value) => { state.lock.push(value); },
     }, location: { replace: value => calls.push(value) }, addEventListener() {} },
     fetch: async (url, options = {}) => {
       calls.push(url);
@@ -776,4 +777,72 @@ test("settings outage uses defaults; pause outage blocks logout until retry succ
   await h.check();
   assert.equal(h.state.timer.status, "stopped");
   assert.equal(h.context.localStorage.getItem("token"), null);
+});
+
+test("screen lock follows the server-confirmed timer state after a restart", async () => {
+  const h = harness({ page: "dashboard", timer: null });
+  await h.check();
+  assert.equal(h.state.lock.at(-1), "inactive", "no lock before the server confirms the timer");
+  await h.context.loadActiveTimer();
+  assert.equal(h.state.lock.at(-1), "locked", "a restart with no running timer locks the screen");
+  assert.equal(h.nodes.get("timerLockNotice").hidden, false);
+  await h.check();
+  assert.equal(h.state.lock.at(-1), "locked", "every idle poll repeats the lock report");
+
+  h.state.timer = { _id: "on-break", status: "paused", startedAt: new Date().toISOString(),
+    pauses: [{ pausedAt: new Date().toISOString(), reason: "break" }] };
+  await h.context.loadActiveTimer();
+  assert.equal(h.state.lock.at(-1), "running", "an intentional break is not locked");
+
+  h.state.timer = { _id: "started", status: "running", startedAt: new Date().toISOString(), pauses: [] };
+  await h.context.loadActiveTimer();
+  assert.equal(h.state.lock.at(-1), "running");
+  assert.equal(h.nodes.get("timerLockNotice").hidden, true);
+});
+
+test("idle detection locks the screen before the stop request returns", async () => {
+  const h = harness({ page: "dashboard", idle: 300 });
+  h.run("timerStateConfirmed = true");
+  const fetch = h.context.fetch;
+  let lockWhenStopSent;
+  h.context.fetch = (url, options) => {
+    if (url.endsWith("/stop")) lockWhenStopSent = h.state.lock.at(-1);
+    return fetch(url, options);
+  };
+  await h.check();
+  assert.equal(lockWhenStopSent, "locked");
+  assert.equal(h.run("currentTimeLog"), null);
+  assert.equal(h.state.lock.at(-1), "locked");
+  h.nodes.get("acknowledgeIdleButton").listeners.click({ isTrusted: true });
+  await h.check();
+  assert.equal(h.state.lock.at(-1), "locked", "Continue does not unlock; only a running timer does");
+});
+
+test("screen lock fails open while the server is unreachable and returns with it", async () => {
+  const h = harness({ page: "dashboard", timer: null });
+  await h.context.loadActiveTimer();
+  assert.equal(h.state.lock.at(-1), "locked");
+  h.state.outage = true;
+  await h.run("refreshCurrentUser()");
+  assert.equal(h.state.lock.at(-1), "inactive");
+  h.state.outage = false;
+  await h.run("refreshCurrentUser()");
+  assert.equal(h.state.lock.at(-1), "locked");
+});
+
+test("signing out releases the screen lock", async () => {
+  const h = harness({ page: "dashboard", timer: null });
+  await h.context.loadActiveTimer();
+  assert.equal(h.state.lock.at(-1), "locked");
+  await h.run("signOut(false)");
+  assert.equal(h.context.localStorage.getItem("token"), null);
+  assert.equal(h.state.lock.at(-1), "inactive");
+});
+
+test("the login page never locks the screen", async () => {
+  const h = harness({ timer: null });
+  await h.context.loadActiveTimer();
+  await h.check();
+  assert.ok(h.state.lock.length > 0);
+  assert.ok(h.state.lock.every((value) => value === "inactive"));
 });

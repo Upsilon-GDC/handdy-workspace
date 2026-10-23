@@ -1,5 +1,5 @@
 import ModalFrame from "../../components/layout/ModalFrame";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import DashboardLayout from "../../components/layout/DashboardLayout";
 import axiosInstance from "../../api/axiosInstance";
 import getApiErrorMessage from "../../utils/getApiErrorMessage";
@@ -12,6 +12,10 @@ function AdminClients() {
 
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
+  // The Add Client dialog covers the page, so its errors are shown inside it.
+  const [formError, setFormError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   const loadClients = async () => {
     try {
@@ -44,6 +48,7 @@ function AdminClients() {
       clientName: "",
     });
 
+    setFormError("");
     setShowAddClient(true);
   };
 
@@ -53,19 +58,27 @@ function AdminClients() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    // A second click before the first request returns would add the client twice.
+    if (savingRef.current) return;
 
     if (!formData.clientName.trim()) {
-      window.alert("Client name is required.");
+      setFormError("Client name is required.");
       return;
     }
 
+    savingRef.current = true;
+    setSaving(true);
+    setFormError("");
     try {
       await axiosInstance.post("/clients", { clientName: formData.clientName.trim() });
       setFormData({ clientName: "" });
       setShowAddClient(false);
       await loadClients();
     } catch (requestError) {
-      setError(getApiErrorMessage(requestError, "Unable to add client."));
+      setFormError(getApiErrorMessage(requestError, "Unable to add client."));
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   };
 
@@ -238,7 +251,9 @@ function AdminClients() {
             <form
               className="employee-form"
               onSubmit={handleSubmit}
+              aria-busy={saving}
             >
+              {formError && <p className="admin-error-box" role="alert">{formError}</p>}
 
               <div>
                 <label htmlFor="add-client-name">Client Name</label>
@@ -259,6 +274,7 @@ function AdminClients() {
                   type="button"
                   className="secondary-button"
                   onClick={closeAddClient}
+                  disabled={saving}
                 >
                   Cancel
                 </button>
@@ -266,8 +282,9 @@ function AdminClients() {
                 <button
                   type="submit"
                   className="primary-button"
+                  disabled={saving}
                 >
-                  Add Client
+                  {saving ? "Adding..." : "Add Client"}
                 </button>
 
               </div>

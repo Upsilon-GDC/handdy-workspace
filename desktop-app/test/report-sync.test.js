@@ -135,7 +135,7 @@ test("session cleanup aborts the outstanding approval request and clears report 
   const cleanup = renderer.slice(renderer.indexOf("function clearSessionLoops()"), renderer.indexOf("async function runTimerAction("));
   let signal;
   const context = vm.createContext({
-    AbortController, AbortSignal, clearInterval() {}, clearIdleNoticeDisplay() {}, getToken: () => "test-token",
+    AbortController, AbortSignal, clearInterval() {}, clearIdleNoticeDisplay() {}, syncTimerLock() {}, getToken: () => "test-token",
     fetch: (_url, options) => new Promise((_resolve, reject) => {
       signal = options.signal;
       signal.addEventListener("abort", () => reject(new Error("cancelled")), { once: true });
