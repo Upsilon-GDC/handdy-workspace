@@ -1,4 +1,5 @@
 const TaskTimeLog = require("../models/TaskTimeLog");
+const { recordAttendanceActivity } = require("./attendanceService");
 
 const HEARTBEAT_TIMEOUT_MS = 90_000;
 const sweeps = new Map();
@@ -44,6 +45,7 @@ async function sweepStaleDesktopTimers(now, employeeId) {
     );
     closed += result.modifiedCount || 0;
     if (result.modifiedCount) {
+      await recordAttendanceActivity(log.employee, log.startedAt);
       // The server only knows the heartbeats stopped, not why (app crash,
       // shutdown/sleep, lost internet, server outage or an expired session all
       // look identical), so log the facts without claiming a cause. IDs only:

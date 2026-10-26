@@ -4,8 +4,12 @@ import DashboardLayout from "../../components/layout/DashboardLayout";
 import axiosInstance from "../../api/axiosInstance";
 import getApiErrorMessage from "../../utils/getApiErrorMessage";
 import useDataRefresh from "../../hooks/useDataRefresh";
+import useAuth from "../../context/useAuth";
+import PermissionNote from "../../components/layout/PermissionNote";
 
 function AdminProjects() {
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission("manage_projects");
   const [projects, setProjects] = useState([]);
   const [teams, setTeams] = useState([]);
   const [search, setSearch] = useState("");
@@ -281,15 +285,16 @@ function AdminProjects() {
             </p>
 
             <h2>Projects</h2>
+            {!canManage && <PermissionNote permissions={["manage_projects"]} />}
           </div>
 
-          <button
+          {canManage && <button
             className="add-project-button"
             type="button"
             onClick={() => setShowAddProject(true)}
           >
             + Add New Project
-          </button>
+          </button>}
         </div>
 
         <div className="projects-toolbar">
@@ -341,20 +346,20 @@ function AdminProjects() {
                 <th>Project Name</th>
                 <th>Teams</th>
                 <th>Status</th>
-                <th>Action</th>
+                {canManage && <th>Action</th>}
               </tr>
             </thead>
 
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan="4">
+                  <td colSpan={canManage ? 4 : 3}>
                     Loading projects...
                   </td>
                 </tr>
               ) : projects.length === 0 ? (
                 <tr>
-                  <td colSpan="4">
+                  <td colSpan={canManage ? 4 : 3}>
                     No projects match your filters. Try a different search or create a project.
                   </td>
                 </tr>
@@ -382,7 +387,7 @@ function AdminProjects() {
                       </span>
                     </td>
 
-                    <td>
+                    {canManage && <td>
                       <div className="project-actions">
 
                         <button
@@ -406,7 +411,7 @@ function AdminProjects() {
                         </button>
 
                       </div>
-                    </td>
+                    </td>}
                   </tr>
                 ))
               )}

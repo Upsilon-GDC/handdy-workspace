@@ -629,3 +629,8 @@ body,button,input,select,textarea,h1,h2,h3,h4,p,a { font-family: Inter, "Segoe U
 .crm-device-modal button:last-child { background:#176c51; color:#fff; }
 .crm-device-modal button:disabled { opacity:.6; cursor:wait; }
 .crm-device-modal .crm-device-error { color:#a52d2d; }
+.crm-access-denied { display:grid; justify-items:start; gap:8px; max-width:640px; padding:28px; }
+.crm-access-denied svg { color:var(--primary); }
+.crm-access-denied h2 { margin:4px 0 0; font-size:18px; color:var(--text-primary); }
+.crm-access-denied p { margin:0; color:var(--text-secondary); line-height:1.55; }
+.crm-permission-note { margin:0; color:var(--text-secondary); font-size:12px; }

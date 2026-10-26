@@ -3,6 +3,11 @@ services:
     name: handdy-workspace
     runtime: node
     plan: starter
+    # Rate limits, auth/catalog/permission caches, the task duplicate check,
+    # attendance updates and the timer-lease sweep are coordinated in process
+    # memory. Keep exactly one instance until those move to shared storage
+    # (see CODEBASE_GUIDE.md, "Single-instance assumptions").
+    numInstances: 1
     buildCommand: npm ci --include=dev --prefix backend && npm ci --include=dev --prefix dashboard && npm run build --prefix dashboard
     startCommand: npm start --prefix backend
     healthCheckPath: /health
@@ -33,4 +38,17 @@ services:
       # Optional on Render because RENDER_EXTERNAL_URL is supplied automatically.
       # Set this explicitly when the dashboard uses a custom production domain.
       - key: FRONTEND_URL
+        sync: false
+      # Password-reset email. Without these, "Forgot password" answers
+      # normally in production but no email is sent (the failure is logged).
+      # Enter the values in the Render dashboard; never commit them.
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: MAIL_FROM
         sync: false

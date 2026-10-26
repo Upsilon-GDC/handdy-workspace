@@ -22,6 +22,10 @@ for (const file of sourceFiles) {
   const source = await readFile(file, "utf8");
   for (const match of source.matchAll(/\bto="(\/[^"?#]*)"/g)) targets.add(match[1]);
   for (const match of source.matchAll(/\bnavigate\(\s*["'](\/[^"'?#]*)["']/g)) targets.add(match[1]);
+  // Sidebar entries are data, not JSX links.
+  if (path.basename(file) === "workspaceNavigation.js") {
+    for (const match of source.matchAll(/\bpath:\s*"(\/[^"?#]*)"/g)) targets.add(match[1]);
+  }
 }
 
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

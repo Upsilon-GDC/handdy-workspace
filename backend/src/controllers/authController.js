@@ -825,7 +825,13 @@ const forgotPassword = async (req, res) => {
     try {
       await sendPasswordResetEmail({ to: employee.email, resetUrl });
     } catch (mailError) {
-      console.error("Unable to send password reset email:", mailError);
+      // Log what failed, never the message or link, which carry the token.
+      console.error("Unable to send password reset email:", JSON.stringify({
+        code: mailError.code,
+        responseCode: mailError.responseCode,
+        command: mailError.command,
+        message: String(mailError.message || "").replaceAll(rawToken, "[redacted]"),
+      }));
     }
 
     return genericResponse();

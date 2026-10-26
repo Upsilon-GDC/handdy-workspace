@@ -18,6 +18,16 @@ let pending = false;
 let clientReportEnabled = false;
 let auditRegressionMode = false;
 let desktopTimerRunning = true;
+// Role grants returned by /permissions/me (the API's defaults unless a step
+// overrides them); admin-level roles hold every permission regardless.
+const roleGrants = {
+  hr: ["view_tasks", "create_tasks", "edit_tasks", "assign_tasks", "reassign_tasks", "archive_tasks", "add_manual_entries",
+    "view_teams", "create_teams", "edit_teams", "view_clients", "manage_clients", "view_projects", "manage_projects",
+    "view_personal_reports", "view_all_reports", "export_reports", "view_billing_amounts"],
+  team_lead: [],
+  employee: ["view_tasks", "view_clients", "view_projects", "view_personal_reports", "export_reports"],
+};
+const teamsCallTimes = [];
 const employees = Array.from({ length: 125 }, (_, index) => ({
   _id: `employee-${index + 1}`, employeeId: `EMP${index + 1}`, fullName: `Employee ${index + 1}`,
   email: `employee${index + 1}@example.test`, role: "employee", isActive: true,
@@ -52,6 +62,7 @@ const server = http.createServer((req, res) => {
   if (url.pathname.startsWith("/api/")) {
     const endpoint = url.pathname.slice(4);
     calls.set(endpoint, (calls.get(endpoint) || 0) + 1);
+    if (endpoint === "/teams") teamsCallTimes.push(Date.now());
     lastQueries.set(endpoint, url.searchParams);
     let requestBody = "";
     req.on("data", chunk => { requestBody += chunk; });
@@ -65,6 +76,7 @@ const server = http.createServer((req, res) => {
       }
       let body = {};
       if (endpoint === "/auth/me") body = { user };
+      if (endpoint === "/permissions/me") body = { permissions: [...(roleGrants[user.role] || []), ...user.permissions] };
       if (endpoint === "/auth/login-requests/pending") body = { loginRequest: pending ? { requestId: "test-request", deviceName: "Test device" } : null };
       if (endpoint.endsWith("/decision")) pending = false;
       if (endpoint === "/teams") body = { teams: [{ _id: "team", teamName: "Stable team", isActive: true }] };
@@ -118,6 +130,7 @@ app.whenReady().then(async () => {
     await until(`document.body.textContent.includes('Stable team')`);
     const initialDocuments = documents;
     const initialMe = calls.get("/auth/me");
+    const pollStart = Date.now();
     await evaluate(`
       window.testMain = document.querySelector('#workspace-content');
       window.testSidebar = document.querySelector('.crm-nav');
@@ -130,9 +143,16 @@ app.whenReady().then(async () => {
       window.dispatchEvent(new Event('focus'));
       window.dispatchEvent(new Event('online'));
     `);
-    const teamsBefore = calls.get("/teams");
+    // Management pages refresh on focus/online at once, then every 30 seconds
+    // (hooks/useDataRefresh.js). Assert the cadence from call times rather
+    // than a raw count: the online refresh is skipped while the focus one is
+    // still in flight, and the interval started when the page mounted.
     await delay(31_000);
-    assert.ok(calls.get("/teams") >= teamsBefore + 3, "30 seconds of polling occurred");
+    const polls = teamsCallTimes.filter((time) => time >= pollStart).map((time) => time - pollStart);
+    assert.ok(polls.some((offset) => offset < 2_000), "focus/online refresh immediately");
+    const intervalPolls = polls.filter((offset) => offset >= 2_000);
+    assert.equal(intervalPolls.length, 1, `one background poll in 31 s (30-second interval), got ${JSON.stringify(polls)}`);
+    assert.ok(intervalPolls[0] >= 20_000, `the background poll waits about 30 s, not 10 s (${intervalPolls[0]} ms)`);
     assert.equal(await evaluate("loadingFlashes"), 0, "background refresh never removes rows");
     assert.equal(await evaluate("testRow === document.querySelector('.team-table tbody tr')"), true);
     for (const route of ["/admin/employees", "/admin/tasks", "/admin/team"]) {
@@ -286,6 +306,19 @@ app.whenReady().then(async () => {
     await restoreUser("/admin/timesheets/detailed");
     await until(`!!document.querySelector('select[aria-label="Employee"] option[value="employee-125"]')`);
     assert.equal(calls.get("/employees"), employeeReadsBefore, "HR reports use safe employee options");
+    // Permission-driven UI: without "Create/edit clients" the Clients page is
+    // read-only and explains why; without reports the menu drops them and the
+    // page explains instead of failing.
+    roleGrants.hr = roleGrants.hr.filter((key) => !["manage_clients", "view_all_reports"].includes(key));
+    await win.loadURL(`${base}/admin/clients`);
+    await until(`!!document.querySelector('.crm-permission-note')`);
+    assert.match(await evaluate("document.querySelector('.crm-permission-note').textContent"), /Create\/edit clients/);
+    assert.equal(await evaluate(`[...document.querySelectorAll('button')].some(button => button.textContent.includes('Add Client'))`), false);
+    assert.equal(await evaluate(`!!document.querySelector('a[href="/admin/timesheets/detailed"]')`), false, "report menu hidden");
+    assert.equal(await evaluate(`!!document.querySelector('a[href="/admin/timesheets/attendance"]')`), true, "attendance stays");
+    await win.loadURL(`${base}/admin/timesheets/detailed`);
+    await until(`document.querySelector('.crm-access-denied')?.textContent.includes('View all employee reports')`);
+    roleGrants.hr.push("manage_clients", "view_all_reports");
     await win.loadURL(`${base}/admin/scheduler/schedule`);
     await until(`!!document.querySelector('.schedule-filter-row option[value="employee-125"]')`);
     await until(`document.querySelectorAll('.schedule-table tbody tr').length === 125`);
@@ -315,7 +348,7 @@ app.whenReady().then(async () => {
     await until(`location.pathname === '/login'`);
     assert.equal(calls.get("/time-logs/stop") || 0, timerStopsBefore, "web sign-out never stops the desktop timer");
     assert.equal(desktopTimerRunning, true);
-    console.log("PASS: Teams polling, navigation, bulk task controls, session restoration, Client timesheets/exports, device approval/revocation, HR lookups, 125 employees/shifts/schedules, delegated editing, and independent web sign-out.");
+    console.log("PASS: Teams polling (30 s), permission-driven menus/actions, navigation, bulk task controls, session restoration, Client timesheets/exports, device approval/revocation, HR lookups, 125 employees/shifts/schedules, delegated editing, and independent web sign-out.");
   } catch (error) {
     console.error(error);
     process.exitCode = 1;

@@ -11,8 +11,11 @@ import "../../styles/adminPermissions.css";
 const ENFORCEMENT_LABELS = {
   backend: "Enforced by the server",
   frontend: "Screen only",
-  none: "Not enforced yet",
+  none: "Not used yet",
 };
+
+// A permission without `roles` applies to every configurable role.
+const appliesTo = (permission, role) => !permission.roles || permission.roles.includes(role);
 
 const FILTERS = [
   { key: "all", label: "All" },
@@ -67,8 +70,10 @@ function AdminPermissions() {
   const isDirty = (role) => !sameSet(draft[role] || [], saved[role] || []);
   const activeLabel = config?.roles.find((role) => role.role === activeRole)?.label || "this role";
 
-  const totalPermissions = useMemo(() => (config?.categories || [])
-    .reduce((sum, category) => sum + category.permissions.length, 0), [config]);
+  // Switches that can have an effect for a role; the server ignores the rest.
+  const availableCount = useCallback((role) => (config?.categories || [])
+    .reduce((sum, category) => sum + category.permissions.filter((permission) => appliesTo(permission, role)).length, 0), [config]);
+  const totalPermissions = availableCount(activeRole);
   const changedCount = useMemo(() => {
     const before = saved[activeRole] || [];
     return current.filter((key) => !before.includes(key)).length + before.filter((key) => !current.includes(key)).length;
@@ -80,7 +85,7 @@ function AdminPermissions() {
     return (config?.categories || []).map((category) => ({
       ...category,
       shown: category.permissions.filter((permission) => {
-        if (needle && !permission.label.toLowerCase().includes(needle)) return false;
+        if (needle && !`${permission.label} ${permission.description || ""}`.toLowerCase().includes(needle)) return false;
         if (filter === "enabled") return current.includes(permission.key);
         if (filter === "disabled") return !current.includes(permission.key);
         if (filter === "sensitive") return Boolean(permission.sensitive);
@@ -89,7 +94,8 @@ function AdminPermissions() {
     })).filter((category) => category.shown.length);
   }, [config, query, filter, current]);
 
-  const setMany = (keys, on) => {
+  const setMany = (permissions, on) => {
+    const keys = permissions.filter((permission) => appliesTo(permission, activeRole)).map((permission) => permission.key);
     setMessage("");
     setDraft((previous) => {
       const granted = new Set(previous[activeRole] || []);
@@ -175,7 +181,7 @@ function AdminPermissions() {
                     onClick={() => { setActiveRole(role.role); setMessage(""); }}
                   >
                     <span className="permissions-tab-name">{role.label}{isDirty(role.role) && <span className="permissions-unsaved" title="Unsaved changes" />}</span>
-                    <small>{(draft[role.role] || []).length} of {totalPermissions} enabled</small>
+                    <small>{(draft[role.role] || []).length} of {availableCount(role.role)} enabled</small>
                   </button>
                 ))}
               </div>
@@ -211,7 +217,6 @@ function AdminPermissions() {
             )}
 
             {visibleCategories.map((category) => {
-              const keys = category.shown.map((permission) => permission.key);
               const enabledHere = category.permissions.filter((permission) => current.includes(permission.key)).length;
               const isCollapsed = collapsed.has(category.key);
               return (
@@ -224,23 +229,26 @@ function AdminPermissions() {
                       <span className="permissions-count">{enabledHere}/{category.permissions.length} enabled</span>
                     </button>
                     <div className="permissions-bulk">
-                      <button type="button" onClick={() => setMany(keys, true)}>Select all</button>
-                      <button type="button" onClick={() => setMany(keys, false)}>Clear</button>
+                      <button type="button" onClick={() => setMany(category.shown, true)}>Select all</button>
+                      <button type="button" onClick={() => setMany(category.shown, false)}>Clear</button>
                     </div>
                   </header>
                   {!isCollapsed && (
                     <ul className="permissions-grid">
                       {category.shown.map((permission) => {
-                        const on = current.includes(permission.key);
+                        const available = appliesTo(permission, activeRole);
+                        const on = available && current.includes(permission.key);
                         const weak = permission.enforcement !== "backend";
                         return (
                           <li key={permission.key}>
-                            <label className={`permissions-item${on ? " is-on" : ""}`}>
+                            <label className={`permissions-item${on ? " is-on" : ""}${available ? "" : " is-unavailable"}`}>
                               <input type="checkbox" role="switch" className="permissions-switch" checked={on}
-                                onChange={() => toggle(permission.key)} />
+                                disabled={!available} onChange={() => toggle(permission.key)} />
                               <span className="permissions-item-text">
                                 <strong>{permission.label}</strong>
+                                {permission.description && <span className="permissions-description">{permission.description}</span>}
                                 <span className="permissions-tags">
+                                  {!available && <em className="permissions-tag is-none">Not available for {activeLabel}</em>}
                                   {permission.sensitive && <em className="permissions-tag is-sensitive"><AlertTriangle size={11} aria-hidden="true" />Sensitive</em>}
                                   {weak
                                     ? <em className={`permissions-tag is-${permission.enforcement}`}>{ENFORCEMENT_LABELS[permission.enforcement]}</em>

@@ -33,6 +33,15 @@ const attendanceSchema = new mongoose.Schema(
       enum: ["Present", "Absent"],
       default: "Present",
     },
+
+    // "timer": maintained automatically from timer activity
+    // (services/attendanceService.js). "check_in": created by the older
+    // check-in/check-out endpoints, which no current screen calls.
+    source: {
+      type: String,
+      enum: ["check_in", "timer"],
+      default: "check_in",
+    },
   },
   {
     timestamps: true,

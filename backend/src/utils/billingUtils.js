@@ -320,7 +320,9 @@ const aggregateBillingLogs = ({ logs, employee, startDate, endDate, timezone, ra
 module.exports = {
   DEFAULT_TIMEZONE,
   MAX_BILLING_RANGE_DAYS,
+  addDateKeyDays,
   aggregateBillingLogs,
+  dateKeyToUtc,
   getBillingDateRange,
   getBillingEmployeeAccess,
   getDateKeyInTimezone,

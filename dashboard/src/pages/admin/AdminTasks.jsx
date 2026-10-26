@@ -7,6 +7,9 @@ import TaskForm from "../../components/tasks/TaskForm";
 import "../../styles/adminTasks.css";
 import { deleteTask, getAllTasks } from "../../api/taskApi";
 import getApiErrorMessage from "../../utils/getApiErrorMessage";
+import useAuth from "../../context/useAuth";
+import PermissionNote from "../../components/layout/PermissionNote";
+import { TASK_CREATE_PERMISSIONS, missingTaskPermissions } from "../../utils/permissions";
 
 const getTaskName = (task) =>
   task.taskName || task.name || task.taskCode || "-";
@@ -41,6 +44,11 @@ const getAssignedName = (task) => {
 
 function AdminTasks() {
   const navigate = useNavigate();
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission(...TASK_CREATE_PERMISSIONS);
+  const canEdit = hasPermission("edit_tasks");
+  const canArchive = hasPermission("archive_tasks");
+  const missingPermissions = missingTaskPermissions(hasPermission);
   const [tasks, setTasks] = useState([]);
 
   const [loading, setLoading] = useState(true);
@@ -193,7 +201,7 @@ function AdminTasks() {
 
   // Only legacy projects still carry a service type; see BillingPage.
   const showServiceType = tasks.some((task) => task.taskType !== "break" && task.project?.serviceType);
-  const columnCount = showServiceType ? 8 : 7;
+  const columnCount = (showServiceType ? 8 : 7) - (canEdit || canArchive ? 0 : 1);
 
   // ==============================
   // PAGINATION
@@ -372,14 +380,17 @@ function AdminTasks() {
               />
             </div>
 
-            <button
+            {canCreate && <button
               type="button"
               className="tasks-add-button"
               onClick={() => navigate("/admin/tasks/new")}
             >
               Add New Task
-            </button>
+            </button>}
           </div>
+          {missingPermissions.length > 0 && <PermissionNote permissions={missingPermissions}>
+            {canCreate || canEdit || canArchive ? "Some task actions are hidden." : "View only."}
+          </PermissionNote>}
 
           {message && (
             <div className="tasks-message success">
@@ -463,9 +474,9 @@ function AdminTasks() {
                     </button>
                   </th>
 
-                  <th>
+                  {(canEdit || canArchive) && <th>
                     Action
-                  </th>
+                  </th>}
 
                   <th className="tasks-status-heading">
                     <select
@@ -545,9 +556,9 @@ function AdminTasks() {
                             )}
                           </td>
 
-                          <td>
+                          {(canEdit || canArchive) && <td>
                             <div className="task-actions">
-                              <button
+                              {canEdit && <button
                                 type="button"
                                 className="task-icon-button task-edit-button"
                                 title="Edit"
@@ -559,9 +570,9 @@ function AdminTasks() {
                                 }
                               >
                                 <Pencil size={17} strokeWidth={2} aria-hidden="true" />
-                              </button>
+                              </button>}
 
-                              <button
+                              {canArchive && <button
                                 type="button"
                                 className="task-icon-button task-delete-button"
                                 title="Delete"
@@ -573,9 +584,9 @@ function AdminTasks() {
                                 }
                               >
                                 <Trash2 size={17} strokeWidth={2} aria-hidden="true" />
-                              </button>
+                              </button>}
                             </div>
-                          </td>
+                          </td>}
 
                           <td>
                             <span

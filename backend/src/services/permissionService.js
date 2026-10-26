@@ -5,6 +5,7 @@ const {
   ALL_PERMISSION_KEYS,
   DEFAULT_ROLE_PERMISSIONS,
   isConfigurableRole,
+  permissionAppliesToRole,
 } = require("../utils/permissions");
 
 // Role grants change rarely, so permission checks read an in-memory snapshot
@@ -51,7 +52,8 @@ function getRolePermissionsSync(role) {
   if (isAdminRole(role)) return [...ALL_PERMISSION_KEYS];
   if (!isConfigurableRole(role)) return [];
   refreshIfStale();
-  return overrides.has(role) ? [...overrides.get(role)] : [...(DEFAULT_ROLE_PERMISSIONS[role] || [])];
+  const granted = overrides.has(role) ? overrides.get(role) : DEFAULT_ROLE_PERMISSIONS[role] || [];
+  return granted.filter((key) => permissionAppliesToRole(key, role));
 }
 
 // Effective permissions = role grants + the older per-employee delegations

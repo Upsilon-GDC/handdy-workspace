@@ -13,6 +13,10 @@ import {
   logoutUser,
   waitForLoginApproval,
 } from "../api/authApi";
+import { getMyPermissions } from "../api/permissionApi";
+import { isAdminRole } from "../utils/permissions";
+
+const NO_PERMISSIONS = [];
 
 function normalizeRole(role = "") {
   const normalized = String(role)
@@ -165,6 +169,51 @@ function AuthProvider({ children }) {
   }, [clearAuth]);
 
   // ==========================================
+  // EFFECTIVE PERMISSIONS
+  // ==========================================
+
+  // Role grants plus delegations, as the API computes them. They decide which
+  // menus, pages and buttons the dashboard offers; the API still enforces
+  // every action on its own. Results are tied to the session that requested
+  // them, so a different sign-in never sees another account's grants.
+  const permissionOwner = token && user?._id ? `${user._id}:${token}` : "";
+  const [permissionResult, setPermissionResult] = useState({ owner: "", keys: [], failed: false });
+
+  useEffect(() => {
+    if (!permissionOwner) return undefined;
+    let active = true;
+    const load = () => getMyPermissions()
+      .then((keys) => { if (active) setPermissionResult({ owner: permissionOwner, keys, failed: false }); })
+      .catch(() => {
+        if (!active) return;
+        // Keep grants that already loaded; otherwise offer nothing extra
+        // until a later attempt succeeds.
+        setPermissionResult((current) => (current.owner === permissionOwner && !current.failed
+          ? current
+          : { owner: permissionOwner, keys: [], failed: true }));
+      });
+    void load();
+    // An administrator may change a role while this tab is open; pick the
+    // change up when the person returns to the tab.
+    const onVisible = () => { if (document.visibilityState === "visible") void load(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      active = false;
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [permissionOwner]);
+
+  const hasFullAccess = isAdminRole(user?.role);
+  const permissionsLoaded = permissionResult.owner === permissionOwner;
+  const permissions = permissionsLoaded ? permissionResult.keys : NO_PERMISSIONS;
+  // True when the user holds every named permission. Admin-level roles always
+  // do, matching the API.
+  const hasPermission = useCallback(
+    (...keys) => hasFullAccess || keys.every((key) => permissions.includes(key)),
+    [hasFullAccess, permissions],
+  );
+
+  // ==========================================
   // LOGIN
   // ==========================================
 
@@ -291,6 +340,11 @@ function AuthProvider({ children }) {
     ),
 
     isAuthLoading,
+
+    permissions,
+    permissionsReady: hasFullAccess || permissionsLoaded,
+    permissionsFailed: !hasFullAccess && permissionsLoaded && permissionResult.failed,
+    hasPermission,
 
     login,
     quickLogin,

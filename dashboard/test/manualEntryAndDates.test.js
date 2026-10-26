@@ -63,15 +63,17 @@ test("projects follow the chosen client and tasks follow the chosen project", ()
   assert.deepEqual(tasksForProject(options, ""), []);
 });
 
-test("manual-entry UI follows the role hierarchy and supports the manager's own entries", () => {
+test("manual-entry UI: manager and HR act on every employee, leads only on their team", () => {
   const manager = { _id: "manager", role: "manager" };
+  const hr = { _id: "hr", role: "hr" };
   const lead = { _id: "lead", role: "team_lead", team: "team" };
   const employee = { _id: "employee", role: "employee", team: "team" };
-  assert.equal(canManageManualEntries(manager, manager), true);
-  assert.equal(canManageManualEntries(manager, lead), true);
-  assert.equal(canManageManualEntries(manager, employee), true);
-  assert.equal(canManageManualEntries(manager, { _id: "other", role: "manager" }), false);
-  assert.equal(canManageManualEntries(manager, { _id: "admin", role: "admin" }), false);
+  for (const actor of [manager, hr]) {
+    assert.equal(canManageManualEntries(actor, actor), true);
+    for (const role of ["employee", "team_lead", "hr", "manager", "admin", "alpha"]) {
+      assert.equal(canManageManualEntries(actor, { _id: `other-${role}`, role }), true, `${actor.role} -> ${role}`);
+    }
+  }
   assert.equal(canManageManualEntries(lead, employee), true);
   assert.equal(canManageManualEntries(lead, lead), false);
   assert.equal(canManageManualEntries(lead, { ...employee, role: "team_lead" }), false);

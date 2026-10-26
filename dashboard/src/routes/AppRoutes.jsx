@@ -102,6 +102,13 @@ import ProtectedRoute
 // ROLE WRAPPERS
 // ==========================================
 
+// Permissions a page's data needs (see ProtectedRoute `needs`).
+const ALL_REPORTS = ["view_all_reports"];
+const TEAM_REPORTS = ["view_team_timesheets"];
+const BILLING = ["view_billing_amounts"];
+// The task form always assigns new tasks to the whole team.
+const CREATE_TASKS = ["create_tasks", "assign_tasks"];
+
 function AdminOnly({ children }) {
   return (
     <ProtectedRoute allowedRoles={["admin", "alpha", "manager"]}>
@@ -112,18 +119,18 @@ function AdminOnly({ children }) {
 
 // Manager has full admin access. HR receives the business/operational admin
 // features below, without account or security settings access.
-function AdminStaffOnly({ children }) {
+function AdminStaffOnly({ children, needs }) {
   return (
-    <ProtectedRoute allowedRoles={["admin", "alpha", "manager", "hr"]}>
+    <ProtectedRoute allowedRoles={["admin", "alpha", "manager", "hr"]} needs={needs}>
       {children}
     </ProtectedRoute>
   );
 }
 
 
-function TeamLeadOnly({ children }) {
+function TeamLeadOnly({ children, needs }) {
   return (
-    <ProtectedRoute allowedRoles={["team_lead"]}>
+    <ProtectedRoute allowedRoles={["team_lead"]} needs={needs}>
       {children}
     </ProtectedRoute>
   );
@@ -213,7 +220,7 @@ function AppRoutes() {
       <Route
         path="/admin/dashboard"
         element={
-          <AdminStaffOnly>
+          <AdminStaffOnly needs={ALL_REPORTS}>
             <AdminReportPage title="Employee insights" description="Company project and task timer activity by employee." />
           </AdminStaffOnly>
         }
@@ -221,7 +228,7 @@ function AppRoutes() {
 
       <Route
         path="/admin/billing"
-        element={<AdminStaffOnly><BillingPage /></AdminStaffOnly>}
+        element={<AdminStaffOnly needs={BILLING}><BillingPage /></AdminStaffOnly>}
       />
 
       <Route
@@ -307,7 +314,7 @@ function AppRoutes() {
       <Route
         path="/admin/timesheets/team"
         element={
-          <AdminStaffOnly>
+          <AdminStaffOnly needs={ALL_REPORTS}>
             <AdminReportPage title="Team timesheet" description="Employee totals across company project and task timer activity." variant="team" />
           </AdminStaffOnly>
         }
@@ -316,7 +323,7 @@ function AppRoutes() {
       <Route
         path="/admin/timesheets/detailed"
         element={
-          <AdminStaffOnly>
+          <AdminStaffOnly needs={ALL_REPORTS}>
             <AdminReportPage title="Detailed timesheet" description="Every company timer session with start, finish, worked, idle, and status details." variant="detailed" />
           </AdminStaffOnly>
         }
@@ -325,7 +332,7 @@ function AppRoutes() {
       <Route
         path="/admin/timesheets/project-hours"
         element={
-          <AdminStaffOnly>
+          <AdminStaffOnly needs={ALL_REPORTS}>
             <AdminReportPage title="Project work details" description="Worked, break, and idle time by employee and project. Same-day gaps between timers count as idle against the previous project." variant="project" />
           </AdminStaffOnly>
         }
@@ -343,7 +350,7 @@ function AppRoutes() {
       <Route
         path="/admin/timesheets/count"
         element={
-          <AdminStaffOnly>
+          <AdminStaffOnly needs={ALL_REPORTS}>
             <AdminReportPage title="Count report" description="Company timer records and total worked duration." />
           </AdminStaffOnly>
         }
@@ -352,7 +359,7 @@ function AppRoutes() {
       <Route
         path="/admin/timesheets/working-today"
         element={
-          <AdminStaffOnly>
+          <AdminStaffOnly needs={ALL_REPORTS}>
             <AdminReportPage title="Who is working today" description="Today’s active and completed timer records by employee." />
           </AdminStaffOnly>
         }
@@ -361,7 +368,7 @@ function AppRoutes() {
       <Route
         path="/admin/timesheets/task-tracker"
         element={
-          <AdminStaffOnly>
+          <AdminStaffOnly needs={ALL_REPORTS}>
             <AdminReportPage title="Task tracker" description="Task-level timer records across the company." />
           </AdminStaffOnly>
         }
@@ -370,7 +377,7 @@ function AppRoutes() {
       <Route
         path="/admin/timesheets/project-work"
         element={
-          <AdminStaffOnly>
+          <AdminStaffOnly needs={ALL_REPORTS}>
             <AdminReportPage title="Project work details" description="Project and task work records across the company." />
           </AdminStaffOnly>
         }
@@ -429,7 +436,7 @@ function AppRoutes() {
       <Route
         path="/admin/tasks/new"
         element={
-          <AdminStaffOnly>
+          <AdminStaffOnly needs={CREATE_TASKS}>
             <AdminAddTask />
           </AdminStaffOnly>
         }
@@ -583,7 +590,7 @@ function AppRoutes() {
       <Route
         path="/team-lead/dashboard"
         element={
-          <TeamLeadOnly>
+          <TeamLeadOnly needs={TEAM_REPORTS}>
             <RoleReportPage title="Team activity" description="Recorded project and task timer activity for your assigned employees." />
           </TeamLeadOnly>
         }
@@ -592,7 +599,7 @@ function AppRoutes() {
       <Route
         path="/team-lead/employee-insights"
         element={
-          <TeamLeadOnly>
+          <TeamLeadOnly needs={TEAM_REPORTS}>
             <RoleReportPage title="Employee insights" description="Recorded project and task timer activity for your assigned employees." />
           </TeamLeadOnly>
         }
@@ -624,7 +631,7 @@ function AppRoutes() {
       <Route
         path="/team-lead/timesheets/team"
         element={
-          <TeamLeadOnly>
+          <TeamLeadOnly needs={TEAM_REPORTS}>
             <RoleReportPage title="Team timesheet" description="Timer activity for your assigned employees." showClientView />
           </TeamLeadOnly>
         }
@@ -633,7 +640,7 @@ function AppRoutes() {
       <Route
         path="/team-lead/timesheets/detailed"
         element={
-          <TeamLeadOnly>
+          <TeamLeadOnly needs={TEAM_REPORTS}>
             <RoleReportPage title="Detailed team timesheet" description="Detailed timer activity for your assigned employees." />
           </TeamLeadOnly>
         }
@@ -642,7 +649,7 @@ function AppRoutes() {
       <Route
         path="/team-lead/timesheets/project-hours"
         element={
-          <TeamLeadOnly>
+          <TeamLeadOnly needs={TEAM_REPORTS}>
             <RoleReportPage title="Project hours" description="Project timer activity for your assigned employees." />
           </TeamLeadOnly>
         }
@@ -660,7 +667,7 @@ function AppRoutes() {
       <Route
         path="/team-lead/timesheets/count"
         element={
-          <TeamLeadOnly>
+          <TeamLeadOnly needs={TEAM_REPORTS}>
             <RoleReportPage title="Team count report" description="Team timer records and total worked duration." />
           </TeamLeadOnly>
         }
@@ -669,7 +676,7 @@ function AppRoutes() {
       <Route
         path="/team-lead/timesheets/working-today"
         element={
-          <TeamLeadOnly>
+          <TeamLeadOnly needs={TEAM_REPORTS}>
             <RoleReportPage title="Who is working today" description="Today’s recorded timer activity for your assigned employees." />
           </TeamLeadOnly>
         }
@@ -678,7 +685,7 @@ function AppRoutes() {
       <Route
         path="/team-lead/timesheets/task-tracker"
         element={
-          <TeamLeadOnly>
+          <TeamLeadOnly needs={TEAM_REPORTS}>
             <RoleReportPage title="Task tracker" description="Task-level timer activity for your assigned employees." />
           </TeamLeadOnly>
         }
@@ -687,7 +694,7 @@ function AppRoutes() {
       <Route
         path="/team-lead/timesheets/project-work"
         element={
-          <TeamLeadOnly>
+          <TeamLeadOnly needs={TEAM_REPORTS}>
             <RoleReportPage title="Project work details" description="Project and task activity for your assigned employees." />
           </TeamLeadOnly>
         }
@@ -705,7 +712,7 @@ function AppRoutes() {
       <Route
         path="/team-lead/tasks/add"
         element={
-          <TeamLeadOnly>
+          <TeamLeadOnly needs={CREATE_TASKS}>
             <TeamLeadAddTask />
           </TeamLeadOnly>
         }

@@ -26,7 +26,6 @@ import ClientTimesheet from "../../components/reports/ClientTimesheet";
 import AddEntryModal from "../../components/reports/AddEntryModal";
 import ManualEntriesModal from "../../components/reports/ManualEntriesModal";
 import { canManageManualEntries } from "../../utils/manualEntry";
-import { getMyPermissions } from "../../api/permissionApi";
 import { readReportState, writeReportState } from "../../utils/reportPersistence";
 import useAuth from "../../context/useAuth";
 
@@ -89,7 +88,8 @@ function AdminReportContent({
   allowEmployeeFilter = scope === "company",
 }) {
   const { pathname } = useLocation();
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
+  const canExport = hasPermission("export_reports");
   const reportStorageKey = `crm-report:${user?._id || user?.email || "user"}:${pathname}`;
   // The team timesheet filters by team instead of by employee.
   const hasTeamFilter = variant === "project" || variant === "team";
@@ -147,24 +147,17 @@ function AdminReportContent({
   const [teamView, setTeamView] = useState(() => savedReportState.teamView === "client" ? "client" : "employee");
   // Manual entries: the button is only offered to users holding the
   // permission. The API enforces it independently of this flag.
-  const [canAddEntry, setCanAddEntry] = useState(false);
   const [entryEmployee, setEntryEmployee] = useState(null);
   const [manualEntryEmployee, setManualEntryEmployee] = useState(null);
   const [entryNotice, setEntryNotice] = useState("");
+  // Managers and HR may also correct their own time from "My timesheet".
+  const canAddOwnEntry = ["manager", "hr"].includes(user?.role);
   const manualEntriesAvailable = mode === "time" && (variant === "team" && scope === "company"
-    || scope === "personal" && user?.role === "manager");
+    || scope === "personal" && canAddOwnEntry);
+  const canAddEntry = manualEntriesAvailable && hasPermission("add_manual_entries");
   const canAddFor = (target) => canAddEntry && canManageManualEntries(user, target);
   const manualEntryCount = (id) => records.filter((record) => record.entrySource === "manual" && !record.manualEntry?.deletedAt
     && String(record.employee?._id || record.employee || user?._id || "") === String(id)).length;
-
-  useEffect(() => {
-    if (!manualEntriesAvailable) return undefined;
-    let active = true;
-    getMyPermissions()
-      .then((permissions) => { if (active) setCanAddEntry(permissions.includes("add_manual_entries")); })
-      .catch(() => { if (active) setCanAddEntry(false); });
-    return () => { active = false; };
-  }, [manualEntriesAvailable]);
 
   useEffect(() => {
     if (mode === "tracking") return;
@@ -643,11 +636,11 @@ function AdminReportContent({
                 </div>
               )}
               <div className="admin-report-export-actions" aria-label="Export report">
-                {manualEntriesAvailable && user?.role === "manager" && canAddFor(user) && <>
+                {manualEntriesAvailable && canAddOwnEntry && canAddFor(user) && <>
                   <button type="button" className="report-add-entry-button" onClick={() => setEntryEmployee({ id: user._id, name: user.fullName })}><Plus size={14} />Add my entry</button>
                   {scope === "personal" && manualEntryCount(user._id) > 0 && <button type="button" className="secondary-button" onClick={() => setManualEntryEmployee({ id: user._id, name: user.fullName })}>Manual entries ({manualEntryCount(user._id)})</button>}
                 </>}
-                <button
+                {canExport && <><button
                   type="button"
                   className="report-export-button excel"
                   onClick={() => exportCurrentReport("excel")}
@@ -664,7 +657,7 @@ function AdminReportContent({
                 >
                   <FileDown size={16} />
                   {exporting === "pdf" ? "Exporting..." : "Export PDF"}
-                </button>
+                </button></>}
               </div>
             </div>
           </header>

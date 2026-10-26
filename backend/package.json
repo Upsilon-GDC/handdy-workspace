@@ -11,7 +11,8 @@
     "create:idle-exempt": "node scripts/createIdleExemptEmployee.js",
     "create:alpha": "node scripts/createAlpha.js",
     "audit:teams": "node scripts/repairEmployeeTeams.js",
-    "repair:teams": "node scripts/repairEmployeeTeams.js --apply"
+    "repair:teams": "node scripts/repairEmployeeTeams.js --apply",
+    "backfill:attendance": "node scripts/backfillAttendance.js"
   },
   "keywords": [],
   "author": "",

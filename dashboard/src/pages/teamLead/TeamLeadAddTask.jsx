@@ -1,6 +1,5 @@
 import { useNavigate } from "react-router-dom";
 
-import TeamLeadSidebar from "./TeamLeadSidebar";
 import TaskForm from "../../components/tasks/TaskForm";
 
 import "../../styles/teamLeadSidebar.css";
@@ -12,8 +11,6 @@ function TeamLeadAddTask() {
 
   return (
     <div className="tl-page">
-      <TeamLeadSidebar />
-
       <main className="tl-main">
         <button
           type="button"

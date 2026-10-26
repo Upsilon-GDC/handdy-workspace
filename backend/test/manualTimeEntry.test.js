@@ -58,15 +58,16 @@ test("validation requires ids, a sensible time range and an explanatory reason",
   }
 });
 
-test("manual-entry hierarchy limits managers to employees, team leads and self, and leads to their employees", async (t) => {
+test("manual-entry hierarchy: admin, manager and HR act on every employee; leads only on their employees", async (t) => {
   t.mock.method(Team, "exists", async (filter) => (String(filter._id) === ids.team && String(filter.teamLead) === ids.lead ? { _id: ids.team } : null));
   const target = { _id: ids.employee, role: "employee", team: ids.team, teamLead: null };
-  assert.equal(await canActOnEmployee({ _id: ids.admin, role: "admin" }, target), true);
-  assert.equal(await canActOnEmployee({ _id: ids.admin, role: "manager" }, target), true);
-  assert.equal(await canActOnEmployee({ _id: ids.admin, role: "manager" }, { ...target, role: "team_lead" }), true);
-  assert.equal(await canActOnEmployee({ _id: ids.admin, role: "manager" }, { _id: ids.admin, role: "manager" }), true);
+  for (const actorRole of ["admin", "alpha", "manager", "hr"]) {
+    for (const role of ["employee", "team_lead", "hr", "manager", "admin", "alpha"]) {
+      assert.equal(await canActOnEmployee({ _id: ids.admin, role: actorRole }, { ...target, role }), true, `${actorRole} -> ${role}`);
+    }
+    assert.equal(await canActOnEmployee({ _id: ids.admin, role: actorRole }, { _id: ids.admin, role: actorRole }), true, `${actorRole} self`);
+  }
   for (const role of ["manager", "hr", "admin", "alpha"]) {
-    assert.equal(await canActOnEmployee({ _id: ids.admin, role: "manager" }, { ...target, role }), false);
     assert.equal(await canActOnEmployee({ _id: ids.lead, role: "team_lead" }, { ...target, teamLead: ids.lead, role }), false);
   }
   assert.equal(await canActOnEmployee({ _id: ids.lead, role: "team_lead" }, { ...target, role: "team_lead" }), false);
@@ -74,7 +75,6 @@ test("manual-entry hierarchy limits managers to employees, team leads and self, 
   assert.equal(await canActOnEmployee({ _id: ids.lead, role: "team_lead" }, { ...target, team: "64b000000000000000000a99" }), false);
   assert.equal(await canActOnEmployee({ _id: ids.lead, role: "team_lead" }, { _id: ids.lead, team: ids.team }), false, "no self-entry");
   assert.equal(await canActOnEmployee({ _id: ids.employee, role: "employee" }, target), false);
-  assert.equal(await canActOnEmployee({ _id: ids.lead, role: "hr" }, target), false);
 });
 
 const mockHappyPath = (t, { conflict = null, taskFound = true, createdRef } = {}) => {
@@ -197,7 +197,7 @@ test("manual deletion retains its audit record and rejects timer logs, wrong rol
   assert.equal((await call("employee")).statusCode, 403);
   assert.equal(update, undefined);
   target.role = "admin";
-  assert.equal((await call("manager")).statusCode, 403);
+  assert.equal((await call("team_lead")).statusCode, 403, "a team lead cannot delete an admin's entry");
   target.role = "employee";
   entry.status = "running";
   assert.equal((await call("manager")).statusCode, 409);

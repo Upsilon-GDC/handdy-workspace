@@ -4,11 +4,15 @@ import {
 } from "react-router-dom";
 
 import useAuth from "../context/useAuth";
+import AccessDenied from "../components/layout/AccessDenied";
 
 function ProtectedRoute({
   children,
   allowedRoles = [],
   requiredPermissions = [],
+  // Role permissions the page's data needs (all of them). Without them the
+  // page explains what is missing instead of failing with API errors.
+  needs = [],
 }) {
   const location = useLocation();
 
@@ -16,6 +20,9 @@ function ProtectedRoute({
     user,
     isAuthenticated,
     isAuthLoading,
+    hasPermission,
+    permissionsReady,
+    permissionsFailed,
   } = useAuth();
 
   // Wait for existing token/session validation.
@@ -109,6 +116,13 @@ function ProtectedRoute({
         replace
       />
     );
+  }
+
+  if (needs.length > 0 && !hasPermission(...needs)) {
+    if (!permissionsReady) {
+      return <p className="crm-permission-note" role="status">Checking access...</p>;
+    }
+    return <AccessDenied permissions={needs} failed={permissionsFailed} />;
   }
 
   return children;

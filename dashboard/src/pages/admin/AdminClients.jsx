@@ -4,8 +4,12 @@ import DashboardLayout from "../../components/layout/DashboardLayout";
 import axiosInstance from "../../api/axiosInstance";
 import getApiErrorMessage from "../../utils/getApiErrorMessage";
 import useDataRefresh from "../../hooks/useDataRefresh";
+import useAuth from "../../context/useAuth";
+import PermissionNote from "../../components/layout/PermissionNote";
 
 function AdminClients() {
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission("manage_clients");
   const [showAddClient, setShowAddClient] = useState(false);
 
   const [clients, setClients] = useState([]);
@@ -132,15 +136,16 @@ function AdminClients() {
             </p>
 
             <h2>Clients</h2>
+            {!canManage && <PermissionNote permissions={["manage_clients"]} />}
           </div>
 
-          <button
+          {canManage && <button
             type="button"
             className="add-employee-button"
             onClick={openAddClient}
           >
             + Add Client
-          </button>
+          </button>}
         </div>
 
         {/* SEARCH */}
@@ -169,14 +174,14 @@ function AdminClients() {
             <thead>
               <tr>
                 <th>Client Name</th>
-                <th>Action</th>
+                {canManage && <th>Action</th>}
               </tr>
             </thead>
 
             <tbody>
               {filteredClients.length === 0 ? (
                 <tr>
-                  <td colSpan="2">
+                  <td colSpan={canManage ? 2 : 1}>
                     {search
                       ? "No matching clients found."
                       : "No clients found."}
@@ -190,7 +195,7 @@ function AdminClients() {
                       {client.clientName || "-"}
                     </td>
 
-                    <td>
+                    {canManage && <td>
                       <div className="employee-actions">
 
                         <button
@@ -212,7 +217,7 @@ function AdminClients() {
                         </button>
 
                       </div>
-                    </td>
+                    </td>}
                   </tr>
                 ))
               )}

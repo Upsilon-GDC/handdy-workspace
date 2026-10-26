@@ -12,8 +12,6 @@ import {
 } from "../../api/reportApi";
 import { getAllActiveProjects } from "../../api/projectApi";
 import { getAllActiveTasksByProject } from "../../api/taskApi";
-import TeamLeadSidebar from "../teamLead/TeamLeadSidebar";
-import EmployeeSidebar from "../employee/EmployeeSidebar";
 import ReportSummary from "../../components/dashboard/ReportSummary";
 import PageHeader from "../../components/layout/PageHeader";
 import useDataRefresh from "../../hooks/useDataRefresh";
@@ -26,7 +24,6 @@ import ClientTimesheet from "../../components/reports/ClientTimesheet";
 import AddEntryModal from "../../components/reports/AddEntryModal";
 import ManualEntriesModal from "../../components/reports/ManualEntriesModal";
 import { canManageManualEntries } from "../../utils/manualEntry";
-import { getMyPermissions } from "../../api/permissionApi";
 
 import "../../styles/adminReportPage.css";
 import "../../styles/roleReportPage.css";
@@ -34,7 +31,7 @@ import "../../styles/roleReportPage.css";
 const duration = formatReportDuration;
 
 function RoleReportPage({ title, description, mode = "time", scope = "team", showDesktopDownload = false, showClientView = false }) {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const { pathname } = useLocation();
   const reportStorageKey = `crm-report:${user?._id || user?.email || "user"}:${pathname}`;
   const [savedReportState] = useState(() => readReportState(reportStorageKey));
@@ -68,20 +65,11 @@ function RoleReportPage({ title, description, mode = "time", scope = "team", sho
   const isTeamReport = isTeamLead && scope !== "personal";
   // A team lead only sees Add Entry when an administrator granted
   // "add_manual_entries" to the role; the API enforces it regardless.
-  const [canAddEntry, setCanAddEntry] = useState(false);
   const [entryEmployee, setEntryEmployee] = useState(null);
   const [manualEntryEmployee, setManualEntryEmployee] = useState(null);
   const [entryNotice, setEntryNotice] = useState("");
   const manualEntriesAvailable = showClientView && isTeamReport && mode === "time";
-
-  useEffect(() => {
-    if (!manualEntriesAvailable) return undefined;
-    let active = true;
-    getMyPermissions()
-      .then((permissions) => { if (active) setCanAddEntry(permissions.includes("add_manual_entries")); })
-      .catch(() => { if (active) setCanAddEntry(false); });
-    return () => { active = false; };
-  }, [manualEntriesAvailable]);
+  const canAddEntry = manualEntriesAvailable && hasPermission("add_manual_entries");
 
   useEffect(() => {
     if (mode !== "time") return;
@@ -301,8 +289,8 @@ function RoleReportPage({ title, description, mode = "time", scope = "team", sho
   );
 
   return isTeamLead
-    ? <div className="tl-page"><TeamLeadSidebar /><div className="tl-main"><main className="tl-content"><PageHeader title={showDesktopDownload ? `Welcome back${user?.fullName ? `, ${user.fullName.split(" ")[0]}` : ""}` : title} description={showDesktopDownload ? "Your work summary, timesheets and desktop workspace." : description} />{report}</main></div></div>
-    : <div className="employee-page"><EmployeeSidebar /><div className="employee-main"><main className="employee-content"><PageHeader title={showDesktopDownload ? `Welcome back${user?.fullName ? `, ${user.fullName.split(" ")[0]}` : ""}` : title} description={showDesktopDownload ? "Your work summary, timesheets and desktop workspace." : description} />{report}</main></div></div>;
+    ? <div className="tl-page"><div className="tl-main"><main className="tl-content"><PageHeader title={showDesktopDownload ? `Welcome back${user?.fullName ? `, ${user.fullName.split(" ")[0]}` : ""}` : title} description={showDesktopDownload ? "Your work summary, timesheets and desktop workspace." : description} />{report}</main></div></div>
+    : <div className="employee-page"><div className="employee-main"><main className="employee-content"><PageHeader title={showDesktopDownload ? `Welcome back${user?.fullName ? `, ${user.fullName.split(" ")[0]}` : ""}` : title} description={showDesktopDownload ? "Your work summary, timesheets and desktop workspace." : description} />{report}</main></div></div>;
 }
 
 export default RoleReportPage;

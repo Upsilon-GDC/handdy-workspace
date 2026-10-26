@@ -56,7 +56,7 @@ const updateRolePermissions = async (req, res) => {
         message: "Administrator-level roles always have full access and cannot be edited.",
       });
     }
-    const { permissions, invalid } = normalizePermissionList(req.body?.permissions);
+    const { permissions, invalid } = normalizePermissionList(req.body?.permissions, role);
     if (!permissions) {
       return res.status(400).json({
         success: false,

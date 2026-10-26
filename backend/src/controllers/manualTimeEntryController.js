@@ -7,6 +7,7 @@ const Team = require("../models/Team");
 const Client = require("../models/Client");
 const sendErrorResponse = require("../utils/sendErrorResponse");
 const { isAdminRole } = require("../utils/roles");
+const { recordAttendanceActivity } = require("../services/attendanceService");
 
 const MAX_ENTRY_SECONDS = 24 * 60 * 60;
 const MIN_REASON_LENGTH = 5;
@@ -52,14 +53,13 @@ function validateManualEntryInput(body = {}, now = new Date()) {
   };
 }
 
-// Manual corrections have a narrower hierarchy than the general admin
-// permissions managers inherit elsewhere in the application.
+// Who may correct whose time. Admin, alpha, manager and HR act on every
+// employee (product decision, 2026-10-23); a team lead only on the employees
+// of the team they lead, never on themselves. The route separately requires
+// the add_manual_entries permission, which managers always hold.
 async function canActOnEmployee(actor, target) {
   if (!actor?._id || !target?._id) return false;
-  if (["alpha", "admin"].includes(actor.role)) return true;
-  if (actor.role === "manager") {
-    return toId(actor) === toId(target) || ["employee", "team_lead"].includes(target.role);
-  }
+  if (["alpha", "admin", "manager", "hr"].includes(actor.role)) return true;
   if (actor.role !== "team_lead" || target.role !== "employee" || toId(actor) === toId(target)) return false;
   if (toId(target.teamLead) === toId(actor)) return true;
   if (!target.team) return false;
@@ -213,6 +213,7 @@ const createManualEntry = async (req, res) => {
       entrySource: "manual",
       manualEntry: { createdBy: req.user._id, createdAt, reason: value.reason },
     });
+    await recordAttendanceActivity(employee._id, value.startedAt);
 
     console.info("[manual-entry] created", JSON.stringify({
       log: String(timeLog._id), employee: String(employee._id), by: String(req.user._id), seconds: value.seconds,
@@ -244,7 +245,7 @@ const deleteManualEntry = async (req, res) => {
       return res.status(400).json({ success: false, message: "Select a valid manual entry." });
     }
     const entry = await TaskTimeLog.findOne({ _id: req.params.id, entrySource: "manual", "manualEntry.deletedAt": null })
-      .select("employee status isActiveTimer").lean();
+      .select("employee status isActiveTimer startedAt").lean();
     if (!entry) return res.status(404).json({ success: false, message: "Manual entry not found." });
     const employee = await loadTargetEmployee(toId(entry.employee));
     if (!employee || !await canActOnEmployee(req.user, employee)) {
@@ -259,6 +260,7 @@ const deleteManualEntry = async (req, res) => {
     }, { $set: { "manualEntry.deletedAt": new Date(), "manualEntry.deletedBy": req.user._id } },
     { returnDocument: "after", projection: { _id: 1 } });
     if (!deleted) return res.status(409).json({ success: false, message: "This manual entry has already changed. Refresh the report." });
+    await recordAttendanceActivity(employee._id, entry.startedAt);
     console.info("[manual-entry] deleted", JSON.stringify({ log: toId(deleted), employee: toId(employee), by: toId(req.user) }));
     return res.status(200).json({ success: true, message: "Manual entry deleted.", timeLogId: deleted._id });
   } catch (error) {

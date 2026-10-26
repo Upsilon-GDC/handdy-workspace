@@ -5,8 +5,19 @@ import axiosInstance from "../../api/axiosInstance";
 import getApiErrorMessage from "../../utils/getApiErrorMessage";
 import useDataRefresh from "../../hooks/useDataRefresh";
 import { getAllEmployeeOptions } from "../../api/employeeApi";
+import useAuth from "../../context/useAuth";
+import PermissionNote from "../../components/layout/PermissionNote";
+import { missingPermissionHint } from "../../utils/permissions";
 
 function AdminTeams() {
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission("create_teams");
+  const canEdit = hasPermission("edit_teams");
+  const canAssignLead = hasPermission("assign_team_leads");
+  const missingTeamPermissions = [
+    ...(canCreate ? [] : ["create_teams"]),
+    ...(canEdit ? [] : ["edit_teams"]),
+  ];
   const [teams, setTeams] = useState([]);
   const [teamLeads, setTeamLeads] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -142,6 +153,9 @@ function AdminTeams() {
     <DashboardLayout title="Team">
       <section className="admin-card team-management-card">
         {error && <p className="admin-error-box" role="alert">{error}</p>}
+        {missingTeamPermissions.length > 0 && <PermissionNote permissions={missingTeamPermissions}>
+          {canCreate || canEdit ? "Some team actions are hidden." : "View only."}
+        </PermissionNote>}
         <div className="team-toolbar">
           <div className="team-search-box">
             <label htmlFor="team-search">
@@ -158,13 +172,13 @@ function AdminTeams() {
             />
           </div>
 
-          <button
+          {canCreate && <button
             type="button"
             className="team-add-button"
             onClick={openAddTeam}
           >
             Add New Team
-          </button>
+          </button>}
         </div>
 
         <div className="team-table-wrapper">
@@ -177,9 +191,9 @@ function AdminTeams() {
 
                 <th>Team Lead</th>
 
-                <th>
+                {canEdit && <th>
                   Action
-                </th>
+                </th>}
 
                 <th className="team-status-header">
                   <select
@@ -202,10 +216,10 @@ function AdminTeams() {
 
             <tbody>
               {loading ? (
-                <tr><td colSpan="4" className="team-empty">Loading teams...</td></tr>
+                <tr><td colSpan={canEdit ? 4 : 3} className="team-empty">Loading teams...</td></tr>
               ) : filteredTeams.length === 0 ? (
                 <tr>
-                  <td colSpan="4" className="team-empty">
+                  <td colSpan={canEdit ? 4 : 3} className="team-empty">
                     No teams found. Create a team to organize your employees.
                   </td>
                 </tr>
@@ -218,7 +232,7 @@ function AdminTeams() {
 
                     <td>{team.teamLead}</td>
 
-                    <td>
+                    {canEdit && <td>
                       <div className="team-actions">
                         <button
                           type="button"
@@ -238,7 +252,7 @@ function AdminTeams() {
                           Delete
                         </button>
                       </div>
-                    </td>
+                    </td>}
 
                     <td>
                       <span
@@ -366,11 +380,14 @@ function AdminTeams() {
               <label htmlFor="edit-team-name">Team name</label>
               <input id="edit-team-name" value={teamName} onChange={(event) => setTeamName(event.target.value)} required autoFocus />
               <label htmlFor="edit-team-lead">Team Lead</label>
-              <select id="edit-team-lead" value={teamLeadId} onChange={(event) => setTeamLeadId(event.target.value)}>
+              <select id="edit-team-lead" value={teamLeadId} onChange={(event) => setTeamLeadId(event.target.value)}
+                disabled={!canAssignLead} title={canAssignLead ? undefined : missingPermissionHint(["assign_team_leads"])}>
                 <option value="">No team lead assigned</option>
                 {teamLeads.map((lead) => <option key={lead._id} value={lead._id}>{lead.fullName} ({lead.employeeId})</option>)}
               </select>
-              <p className="team-form-help">Changing the Team Lead updates the team assignment for its active members.</p>
+              <p className="team-form-help">{canAssignLead
+                ? "Changing the Team Lead updates the team assignment for its active members."
+                : missingPermissionHint(["assign_team_leads"])}</p>
               <div className="team-modal-actions">
                 <button type="button" className="team-cancel-button" onClick={closeEditTeam}>Cancel</button>
                 <button type="submit" className="team-save-button">Save changes</button>

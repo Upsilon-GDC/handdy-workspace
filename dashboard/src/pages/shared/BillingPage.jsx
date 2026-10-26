@@ -4,6 +4,7 @@ import { CalendarRange, Clock3, Download, FileSearch, FolderKanban, ReceiptText,
 import DashboardLayout from "../../components/layout/DashboardLayout";
 import { getBillingEmployees, getBillingReport } from "../../api/billingApi";
 import getApiErrorMessage from "../../utils/getApiErrorMessage";
+import useAuth from "../../context/useAuth";
 import { addDaysToDateKey, dayOfWeekOfDateKey, todayDateKey } from "../../utils/appDate";
 
 import "../../styles/billingPage.css";
@@ -73,6 +74,8 @@ const formatDate = (dateKey) => new Intl.DateTimeFormat(undefined, {
 const recordId = (value) => String(value?._id || value?.id || value || "");
 
 function BillingContent() {
+  // Exports are built in the browser, so this only controls the button.
+  const canExport = useAuth().hasPermission("export_reports");
   const initialDates = getPeriodDates("today");
   const [employees, setEmployees] = useState([]);
   const [teams, setTeams] = useState([]);
@@ -263,7 +266,7 @@ function BillingContent() {
     <div className="billing-page">
       <section className="billing-hero">
         <div><span>Company billing</span><h2>Billing report</h2><p>Aggregate completed task and break time from the existing employee timer.</p></div>
-        {report && <button type="button" className="billing-export" onClick={exportReport}><Download size={17} />Export Excel</button>}
+        {report && canExport && <button type="button" className="billing-export" onClick={exportReport}><Download size={17} />Export Excel</button>}
       </section>
 
       <section className="billing-filters card" aria-label="Billing report filters">

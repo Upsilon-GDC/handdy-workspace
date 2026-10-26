@@ -15,10 +15,10 @@ const offsetMilliseconds = (date, timezone) => {
 const id = (value) => String(value?._id || value?.id || (typeof value === "string" ? value : ""));
 
 // UI eligibility; the API also checks current grants and team membership.
+// Admin, alpha, manager and HR act on every employee (2026-10-23 decision).
 export const canManageManualEntries = (actor, employee, { teamReport = false } = {}) => {
   if (!actor || !employee || !id(employee)) return false;
-  if (["alpha", "admin"].includes(actor.role)) return true;
-  if (actor.role === "manager") return id(actor) === id(employee) || ["employee", "team_lead"].includes(employee.role);
+  if (["alpha", "admin", "manager", "hr"].includes(actor.role)) return true;
   if (actor.role !== "team_lead" || employee.role !== "employee" || id(actor) === id(employee)) return false;
   return teamReport || id(employee.teamLead) === id(actor)
     || Boolean(actor.team && id(actor.team) === id(employee.team));

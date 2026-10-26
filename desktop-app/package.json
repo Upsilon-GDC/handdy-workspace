@@ -1,6 +1,6 @@
 {
   "name": "handdy-desktop-app",
-  "version": "1.2.30",
+  "version": "1.2.31",
   "description": "Employee Time & Attendance System Desktop App",
   "main": "main.js",
   "scripts": {
@@ -59,7 +59,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "ORUGANTIVINODKUMAR",
+        "owner": "Upsilon-GDC",
         "repo": "handdy-workspace",
         "private": false,
         "releaseType": "draft"

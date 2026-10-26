@@ -4,6 +4,7 @@ import axiosInstance from "../../api/axiosInstance";
 import { getAllEmployeeOptions, getAllMyTeamMembers } from "../../api/employeeApi";
 import useAuth from "../../context/useAuth";
 import getApiErrorMessage from "../../utils/getApiErrorMessage";
+import PermissionNote from "../layout/PermissionNote";
 
 import "../../styles/adminAddTask.css";
 
@@ -22,7 +23,10 @@ function TaskForm({
   onCancel,
   onSaved,
 }) {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
+  // Without it the form keeps the current assignment; the API accepts an
+  // edit that re-submits unchanged assignees (middleware/taskPermissions.js).
+  const canReassign = hasPermission("reassign_tasks");
 
   const [taskName, setTaskName] = useState(initialTask?.taskName || "");
   const [additionalTaskNames, setAdditionalTaskNames] = useState([]);
@@ -299,7 +303,10 @@ function TaskForm({
             <h3>Who can use this task?</h3>
           </div>
         </div>
-        <div className="admin-task-assignment-toggle">
+        {!canReassign && <PermissionNote permissions={["reassign_tasks"]}>
+          {assignType === "team" ? "Entire selected team." : `${assignedTo.length} selected employee${assignedTo.length === 1 ? "" : "s"}.`}
+        </PermissionNote>}
+        {canReassign && <div className="admin-task-assignment-toggle">
           <button
             type="button"
             className={`admin-task-assignment-option ${assignType === "team" ? "selected" : ""}`}
@@ -314,9 +321,9 @@ function TaskForm({
           >
             Specific employees
           </button>
-        </div>
+        </div>}
 
-        {assignType === "employee" && (
+        {canReassign && assignType === "employee" && (
           <div className="admin-task-employee-panel">
             <div>
               <label>

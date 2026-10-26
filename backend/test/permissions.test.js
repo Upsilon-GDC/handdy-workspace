@@ -32,9 +32,11 @@ test("admin-level roles always pass; configurable roles follow their grants", as
   assert.equal((await run(requirePermission("manage_clients"), { role: "hr" })).allowed, true);
 });
 
-test("defaults preserve previous access and never grant sensitive manual-entry or rate permissions", async () => {
+test("defaults preserve previous access; only HR gets manual entries and nobody gets rate permissions", async () => {
+  assert.equal(DEFAULT_ROLE_PERMISSIONS.hr.includes("add_manual_entries"), true, "HR adds manual entries (2026-10-23 decision)");
+  assert.equal((await run(requirePermission("add_manual_entries"), { role: "hr" })).allowed, true);
   for (const role of ["hr", "team_lead", "employee"]) {
-    assert.equal(DEFAULT_ROLE_PERMISSIONS[role].includes("add_manual_entries"), false);
+    assert.equal(DEFAULT_ROLE_PERMISSIONS[role].includes("add_manual_entries"), role === "hr");
     assert.equal(DEFAULT_ROLE_PERMISSIONS[role].includes("manage_service_rates"), false);
     assert.equal(DEFAULT_ROLE_PERMISSIONS[role].includes("view_financial_reports"), false);
     assert.equal(DEFAULT_ROLE_PERMISSIONS[role].every((key) => ALL_PERMISSION_KEYS.includes(key)), true);
@@ -104,13 +106,51 @@ test("saving a role validates the role and every permission key", async (t) => {
   assert.equal(saved, undefined);
 
   try {
-    const ok = await save("employee", ["view_tasks", "view_tasks", "create_tasks"]);
+    const ok = await save("team_lead", ["view_tasks", "view_tasks", "create_tasks"]);
     assert.equal(ok.statusCode, 200);
     assert.deepEqual(saved.update.$set.permissions, ["view_tasks", "create_tasks"]);
     assert.equal(saved.update.$set.updatedBy, "admin-1");
-    assert.equal((await run(requirePermission("create_tasks"), { role: "employee" })).allowed, true);
+    assert.equal((await run(requirePermission("create_tasks"), { role: "team_lead" })).allowed, true);
+  } finally {
+    setRoleOverride("team_lead", DEFAULT_ROLE_PERMISSIONS.team_lead);
+  }
+});
+
+test("a permission that cannot apply to a role is dropped on save and never granted", async (t) => {
+  let saved;
+  t.mock.method(RolePermission, "findOneAndUpdate", async (filter, update) => { saved = update.$set.permissions; return {}; });
+  try {
+    const res = response();
+    await updateRolePermissions({ user: { _id: "admin-1" }, params: { role: "employee" },
+      body: { permissions: ["view_tasks", "create_tasks", "manage_clients", "view_billing_amounts", "export_reports"] } }, res);
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(saved, ["view_tasks", "export_reports"]);
+    assert.deepEqual(res.body.role.permissions, ["view_tasks", "export_reports"]);
+
+    // A grant stored before role limits existed stays harmless.
+    setRoleOverride("employee", ["create_tasks", "edit_tasks", "manage_clients", "view_tasks"]);
+    assert.deepEqual(getRolePermissionsSync("employee"), ["view_tasks"]);
+    assert.equal((await run(requirePermission("edit_tasks"), { role: "employee" })).res.statusCode, 403);
+    setRoleOverride("team_lead", [...DEFAULT_ROLE_PERMISSIONS.team_lead, "manage_clients", "view_billing_amounts"]);
+    assert.equal((await run(requirePermission("manage_clients"), { role: "team_lead" })).res.statusCode, 403);
+    assert.equal((await run(requirePermission("view_billing_amounts"), { role: "team_lead" })).res.statusCode, 403);
+    assert.equal((await run(requirePermission("create_tasks"), { role: "team_lead" })).allowed, true);
   } finally {
     setRoleOverride("employee", DEFAULT_ROLE_PERMISSIONS.employee);
+    setRoleOverride("team_lead", DEFAULT_ROLE_PERMISSIONS.team_lead);
+  }
+});
+
+test("every catalog entry documents its effect and the roles it applies to", () => {
+  const { PERMISSION_CATEGORIES, CONFIGURABLE_ROLES, permissionAppliesToRole } = require("../src/utils/permissions");
+  for (const permission of PERMISSION_CATEGORIES.flatMap((category) => category.permissions)) {
+    assert.ok(["backend", "frontend", "none"].includes(permission.enforcement), permission.key);
+    assert.ok(permission.description?.length > 10, `${permission.key} needs a description`);
+    if (permission.enforcement === "none") assert.match(permission.description, /^Not used yet/, permission.key);
+    for (const role of permission.roles || []) assert.ok(CONFIGURABLE_ROLES.includes(role), `${permission.key}: ${role}`);
+  }
+  for (const [role, keys] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
+    for (const key of keys) assert.equal(permissionAppliesToRole(key, role), true, `default ${role} grant ${key} must apply`);
   }
 });
 
@@ -147,7 +187,7 @@ test("manual-entry, all-employee report and billing endpoints sit behind their p
   };
   return Promise.all([
     denies(layers(taskTimeLogRoutes, "/manual", "post"), { role: "employee" }),
-    denies(layers(taskTimeLogRoutes, "/manual", "post"), { role: "hr" }),
+    denies(layers(taskTimeLogRoutes, "/manual", "post"), { role: "team_lead" }),
     denies(layers(taskTimeLogRoutes, "/manual/options", "get"), { role: "team_lead" }),
     denies(layers(taskTimeLogRoutes, "/manual/:id", "delete"), { role: "employee" }),
     denies(layers(taskTimeLogRoutes, "/admin", "get"), { role: "team_lead" }),

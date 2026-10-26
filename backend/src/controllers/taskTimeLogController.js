@@ -9,6 +9,7 @@ const { getBillingDateRange, getDateKeyInTimezone } = require("../utils/billingU
 const sendErrorResponse = require("../utils/sendErrorResponse");
 const { isAdminRole } = require("../utils/roles");
 const { closeStaleDesktopTimers } = require("../services/desktopTimerLease");
+const { recordAttendanceActivity } = require("../services/attendanceService");
 const { beginReportSync, changedTimeLogFilter, deltaRows } = require("../services/reportSync");
 
 const APP_TIMEZONE = process.env.APP_TIMEZONE || "Asia/Kolkata";
@@ -231,6 +232,7 @@ const startTimer = async (req, res) => {
             isActiveTimer: true,
             desktopHeartbeatAt: req.body?.clientType === "desktop" ? startedAt : null,
         });
+        await recordAttendanceActivity(employeeId, startedAt);
 
         await timeLog.populate("project", "projectCode projectName serviceType");
         await timeLog.populate("client", "clientName");
@@ -506,6 +508,7 @@ const stopTimer = async (req, res) => {
         }
 
         await activeTimer.save();
+        await recordAttendanceActivity(employeeId, activeTimer.startedAt);
 
         return res.status(200).json({
             success: true,
