@@ -1,5 +1,27 @@
 # CRM automatic updates: implementation and pilot release guide
 
+## Version 1.2.32: automatic restart to install
+
+Before 1.2.32 a downloaded update waited until the employee closed CRM.
+From 1.2.32 CRM restarts by itself to install it, at a moment that cannot
+interrupt work:
+
+- no timer is running: CRM shows the login page, or the screen is locked
+  because the timer is confirmed stopped (a break task counts as running);
+- that has lasted one minute, and the PC has had no keyboard or mouse input
+  for one minute (`RESTART_QUIET_MS` in `app-updater.js`).
+
+CRM then shows "Updating CRM", runs the normal close handshake (the renderer
+confirms with the server that no timer is running), installs silently and
+opens again with the same sign-in. If the handshake is refused (for example
+the server is unreachable) CRM stays open and tries again later, without the
+"Timer stop not confirmed" warning. Closing CRM earlier still installs the
+update on close, without reopening it.
+
+Installed 1.2.31 and older copies still use their own updater, so they
+install 1.2.32 the old way (on close) once; updates after 1.2.32 restart
+automatically.
+
 ## Version 1.2.24: company shortcut repair
 
 Version 1.2.24 adds Stop Break below the active break clock and an NSIS installer

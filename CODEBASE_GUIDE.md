@@ -2,7 +2,7 @@
 
 This guide explains how the whole system is built and how it works, from the
 database up to the desktop app. It describes the code as it is in this
-repository (desktop version 1.2.31). Older notes such as `README_MERGED.md`
+repository (desktop version 1.2.32). Older notes such as `README_MERGED.md`
 describe earlier versions and list files that no longer exist.
 
 **Contents**
@@ -794,8 +794,16 @@ the existing window (single-instance lock).
 
 - **Auto-update** (`app-updater.js`, installed Windows builds only): checks
   GitHub Releases 15 s after start, then every 6 h (15 min after a failure).
-  It downloads silently, shows a notification when ready, and installs when
-  CRM is closed normally. See `AUTO_UPDATE.md`.
+  It downloads silently and shows a notification when ready. Since 1.2.32 it
+  then **restarts CRM by itself** to install the update, but only when no
+  timer can be interrupted: CRM is on the login page or the screen is locked
+  (timer confirmed stopped), that has lasted a minute, and the PC has had no
+  keyboard or mouse input for a minute. `main.js` runs the normal close
+  handshake first, then the installer runs silently and reopens CRM (the
+  session is kept). A refused close is retried later without a warning. If
+  CRM is closed before that, the update installs on close as before. A
+  running timer, including a break task, is never stopped for an update.
+  See `AUTO_UPDATE.md`.
 - **Build**: `npm run build` produces the NSIS installer
   `dist/CRM-<version>-Windows-x64.exe`. `build/installer.nsh` repairs
   existing CRM shortcuts. The files that ship are listed in

@@ -58,6 +58,47 @@ let mainWindowRef = null;
 const closeReadyWindows = new WeakSet();
 const closeFallbackTimers = new WeakMap();
 
+// Automatic update restart (app-updater.js decides when). It must never
+// interrupt work, so it is allowed only on the login page or while the
+// renderer reports the timer confirmed stopped ("locked"). The usual close
+// handshake still runs before installing.
+const RENDERER_REPORT_FRESH_MS = 15_000;
+let updateService = null;
+let restartingForUpdate = false;
+let lastTimerLockState = { state: "inactive", at: 0 };
+
+function isSafeToRestartForUpdate() {
+  const main = mainWindowRef;
+  if (!main || main.isDestroyed() || restartingForUpdate || closeFallbackTimers.has(main)) return false;
+  let onLoginPage = false;
+  try {
+    onLoginPage = new URL(main.webContents.getURL()).pathname.endsWith("/index.html");
+  } catch {
+    // The first page has not loaded yet.
+  }
+  if (onLoginPage) return lastTimerLockState.state !== "running";
+  // The renderer repeats its report every few seconds; an old one proves nothing.
+  return lastTimerLockState.state === "locked" && Date.now() - lastTimerLockState.at < RENDERER_REPORT_FRESH_MS;
+}
+
+function restartForUpdate() {
+  const main = mainWindowRef;
+  if (!main || main.isDestroyed()) {
+    updateService?.resumeAutoRestart();
+    return;
+  }
+  restartingForUpdate = true;
+  // The screen lock would otherwise refuse the close below.
+  timerLock.release();
+  main.close();
+}
+
+function cancelUpdateRestart() {
+  if (!restartingForUpdate) return;
+  restartingForUpdate = false;
+  updateService?.resumeAutoRestart();
+}
+
 ipcMain.on("app:close-ready", (event) => {
   const window = BrowserWindow.fromWebContents(event.sender);
   if (!window || window.isDestroyed()) return;
@@ -74,6 +115,7 @@ ipcMain.on("app:close-cancelled", (event) => {
   const fallbackTimer = closeFallbackTimers.get(window);
   if (fallbackTimer) clearTimeout(fallbackTimer);
   closeFallbackTimers.delete(window);
+  cancelUpdateRestart();
 });
 
 ipcMain.handle("system:get-idle-time", () =>
@@ -92,6 +134,9 @@ const timerLock = createTimerLock({
 ipcMain.on("timer-lock:set", (event, state) => {
   // Only the CRM window's own renderer can lock or unlock the screen.
   if (!mainWindowRef || mainWindowRef.isDestroyed() || event.sender !== mainWindowRef.webContents) return;
+  lastTimerLockState = { state: String(state), at: Date.now() };
+  // An update restart is closing CRM; do not lock the screen again meanwhile.
+  if (restartingForUpdate) return;
   timerLock.report(String(state));
 });
 
@@ -164,13 +209,19 @@ function createWindow() {
     if (closeReadyWindows.has(mainWindow)) return;
     event.preventDefault();
     // While the screen is locked, CRM stays open until a timer is started.
-    if (timerLock.isActive()) return;
+    // An update restart has released the lock and may continue.
+    if (timerLock.isActive() && !restartingForUpdate) return;
 
     if (!closeFallbackTimers.has(mainWindow)) {
       mainWindow.webContents.send("app:before-close");
       const fallbackTimer = setTimeout(() => {
         if (mainWindow.isDestroyed()) return;
         closeFallbackTimers.delete(mainWindow);
+        // Nobody asked to close: give up quietly and try the update later.
+        if (restartingForUpdate) {
+          cancelUpdateRestart();
+          return;
+        }
         // A hung renderer is not proof that the backend timer stopped.
         // Keep the window open so the employee can retry the close request.
         void dialog.showMessageBox(mainWindow, {
@@ -222,7 +273,11 @@ app.whenReady().then(() => {
       if (mainWindowRef && !mainWindowRef.isDestroyed()) mainWindowRef.webContents.send("system:resume");
     },
   });
-  startAppUpdater(app);
+  updateService = startAppUpdater(app, {
+    isSafeToRestart: isSafeToRestartForUpdate,
+    restartForUpdate,
+    getSystemIdleSeconds: () => powerMonitor.getSystemIdleTime(),
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -232,6 +287,11 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
+  // The close handshake for an update restart finished: install and reopen.
+  if (restartingForUpdate && updateService) {
+    updateService.installAndRestart();
+    return;
+  }
   if (process.platform !== "darwin") {
     app.quit();
   }
