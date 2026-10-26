@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const Task = require("../src/models/Task");
 const Team = require("../src/models/Team");
 const Project = require("../src/models/Project");
-const { createTask, createTasksBulk, getAllTasks, updateTask } = require("../src/controllers/taskController");
+const { createTask, createTasksBulk, getAllTasks, updateTask } = require("../src/modules/tasks/taskController");
 
 const response = () => ({
   statusCode: 200,

@@ -55,6 +55,12 @@ function harness({ role = "employee" } = {}) {
     clientPending: null,
     clientFailure: false,
     clientResponse: null,
+    cacheModes: [],
+    startFailures: 0,
+    startError: null,
+    stopBodies: [],
+    stopError: null,
+    activeRequests: 0,
   };
   const context = vm.createContext({
     console: { ...console, log() {}, trace() {}, debug() {}, warn() {} },
@@ -72,6 +78,7 @@ function harness({ role = "employee" } = {}) {
     window: { electronAPI: {}, location: { replace() {} }, addEventListener() {} },
     fetch: async (url, options = {}) => {
       const json = (body, ok = true) => ({ ok, status: ok ? 200 : 500, json: async () => body });
+      state.cacheModes.push([new URL(url).pathname, options.cache]);
       if (url.includes("/clients")) {
         assert.equal(options.headers.Authorization, "Bearer test-only");
         state.clientRequests.push(url);
@@ -102,12 +109,23 @@ function harness({ role = "employee" } = {}) {
         const body = JSON.parse(options.body);
         state.startBodies.push(body);
         if (state.pendingStart) await state.pendingStart;
+        if (state.startFailures > 0) {
+          state.startFailures -= 1;
+          throw new TypeError("network down");
+        }
+        if (state.startError) return { ok: false, status: state.startError.status, json: async () => state.startError.body };
         return json({ timeLog: {
           _id: "log-1", status: "running", startedAt: new Date().toISOString(),
           project: { _id: body.project }, client: body.client ? { _id: body.client } : null,
           task: { _id: body.task, taskType: "work" }, pauses: [],
         } });
       }
+      if (url.includes("/time-logs/stop")) {
+        state.stopBodies.push(JSON.parse(options.body || "{}"));
+        if (state.stopError) return { ok: false, status: state.stopError.status, json: async () => state.stopError.body };
+        return json({ timeLogs: [] });
+      }
+      if (url.includes("/time-logs/active")) state.activeRequests += 1;
       if (url.includes("/auth/me")) return json({ user: { _id: "test-user", fullName: "Test Employee", role } });
       return json({ timeLogs: [] });
     },
@@ -439,4 +457,66 @@ test("an inactive server timer clears the previous task and requires a fresh sel
   assert.equal(h.run("selectedTaskId"), "");
   assert.equal(h.task.value, "");
   assert.deepEqual(h.task.options.map((option) => option.value), ["", "t1", "t2"]);
+});
+
+test("project and task lists revalidate with the server's ETag; the timesheet sync is never stored", async () => {
+  const h = harness();
+  await h.context.loadProjects();
+  await h.project.choose("p1");
+  await h.run("loadTodayTimesheet()");
+  const modes = Object.fromEntries(h.state.cacheModes.map(([pathname, mode]) => [pathname.replace(/^.*\/api/, ""), mode]));
+  assert.equal(modes["/projects"], "no-cache", "unchanged projects cost a 304 instead of the full list");
+  assert.equal(modes["/tasks"], "no-cache");
+  assert.equal(modes["/time-logs/history"], "no-store");
+});
+
+// Phase 3: retried starts and stops are safe (operation IDs, named timers).
+async function readyToStart(h) {
+  await h.context.loadProjects();
+  await h.context.loadClients();
+  await h.project.choose("p1");
+  await h.task.choose("t1");
+  await h.client.choose("client-b");
+}
+
+test("a start retried after a lost response reuses its operation ID; the next start gets a new one", async () => {
+  const h = harness();
+  await readyToStart(h);
+  h.state.startFailures = 1;
+  await h.context.startTimer();
+  assert.equal(h.run("timerMessage.textContent"), "Unable to reach the backend server.");
+  const first = h.state.startBodies[0].operationId;
+  assert.match(first, /^[A-Za-z0-9_-]{8,100}$/);
+  await h.context.startTimer();
+  assert.equal(h.state.startBodies[1].operationId, first, "the retry can be recognised by the server");
+  await h.context.stopTimer();
+  await h.task.choose("t1"); // a manual Stop clears the task selection
+  await h.context.startTimer();
+  assert.notEqual(h.state.startBodies[2].operationId, first, "a new start after the server answered");
+});
+
+test("a start refused because a timer already runs shows that timer instead of an error", async () => {
+  const h = harness();
+  await readyToStart(h);
+  h.state.startError = { status: 400, body: { success: false, code: "ACTIVE_TIMER_EXISTS", message: "You already have an active timer." } };
+  await h.context.startTimer();
+  assert.equal(h.state.activeRequests, 1, "reloads the running timer from the server");
+  assert.equal(h.run("timerMessage.textContent"), "A timer was already running. It is shown again.");
+});
+
+test("the stop button names its timer, and a changed timer is reconciled instead of stopped", async () => {
+  const h = harness();
+  await readyToStart(h);
+  await h.context.startTimer();
+  await h.context.stopTimer();
+  assert.equal(h.state.stopBodies[0].timeLogId, "log-1");
+  assert.match(h.state.stopBodies[0].operationId, /^[A-Za-z0-9_-]{8,100}$/);
+  await h.task.choose("t1");
+  await h.context.startTimer();
+  h.state.stopError = { status: 409, body: { success: false, code: "TIMER_CHANGED", message: "A different timer is running now." } };
+  const before = h.state.activeRequests;
+  await h.context.stopTimer();
+  assert.equal(h.state.activeRequests, before + 1);
+  assert.equal(h.run("timerMessage.textContent"), "A different timer is running now. Your timer has been refreshed.");
+  assert.notEqual(h.state.stopBodies[1].operationId, h.state.stopBodies[0].operationId);
 });

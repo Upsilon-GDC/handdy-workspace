@@ -1,5 +1,6 @@
 const TaskTimeLog = require("../models/TaskTimeLog");
 const { recordAttendanceActivity } = require("./attendanceService");
+const { countEvent } = require("../monitoring/trafficMetrics");
 
 const HEARTBEAT_TIMEOUT_MS = 90_000;
 const sweeps = new Map();
@@ -36,6 +37,7 @@ async function sweepStaleDesktopTimers(now, employeeId) {
     desktopHeartbeatAt: { $type: "date", $lte: cutoff },
     ...(employeeId ? { employee: employeeId } : {}),
   };
+  countEvent(employeeId ? "sweep.employee" : "sweep.all");
   const stale = await TaskTimeLog.find(filter).lean();
   let closed = 0;
   for (const log of stale) {
@@ -45,6 +47,7 @@ async function sweepStaleDesktopTimers(now, employeeId) {
     );
     closed += result.modifiedCount || 0;
     if (result.modifiedCount) {
+      countEvent("sweep.closed");
       await recordAttendanceActivity(log.employee, log.startedAt);
       // The server only knows the heartbeats stopped, not why (app crash,
       // shutdown/sleep, lost internet, server outage or an expired session all

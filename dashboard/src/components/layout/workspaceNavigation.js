@@ -56,6 +56,7 @@ export const workspaceNavigation = [
   { path: "/admin/billing", title: "Billing", role: "manager", group: "Finance", needs: BILLING },
   { path: "/admin/help", title: "Help", role: "manager", group: "System" },
   { path: "/admin/settings", title: "Idle & logout", role: "manager", group: "System" },
+  { path: "/admin/permissions", title: "Permissions", role: "manager", group: "System" },
 
   // HR receives business/operational modules but not employee administration
   // or idle/logout security settings.
@@ -79,4 +80,40 @@ export const workspaceNavigation = [
 export const navigationForRole = (role, hasPermission) => {
   const navigationRole = role === "alpha" ? "admin" : role;
   return workspaceNavigation.filter((item) => item.role === navigationRole && hasPermission(...(item.needs || [])));
+};
+
+// Pages HR, team leads and employees reach through duties an administrator
+// gave them (to their role or to them personally). An item appears when the
+// person holds any of `anyOf`; `roles` limits team pages to employees (team
+// leads already have them). Company pages say "Company" for team leads and
+// employees, so they are not mistaken for their own team's pages.
+const TASK_DUTIES = ["create_tasks", "edit_tasks", "assign_tasks", "reassign_tasks", "archive_tasks"];
+const TEAM_ADMIN = ["create_teams", "edit_teams", "assign_team_leads"];
+const EMPLOYEES = ["employee"];
+
+export const dutyNavigation = [
+  { path: "/admin/dashboard", title: "Company overview", group: "Workspace", anyOf: ALL_REPORTS },
+  { path: "/admin/clients", title: "Clients", group: "Workspace", anyOf: ["manage_clients"] },
+  { path: "/admin/projects", title: "Projects", group: "Workspace", anyOf: ["manage_projects"] },
+  { path: "/admin/team", title: "Teams", group: "Workspace", anyOf: TEAM_ADMIN },
+  { path: "/team-lead/tasks", title: "Team tasks", group: "Workspace", anyOf: TASK_DUTIES, roles: EMPLOYEES },
+  { path: "/team-lead/employee-insights", title: "Team insights", group: "Workspace", anyOf: TEAM_REPORTS, roles: EMPLOYEES },
+  { path: "/team-lead/timesheets/team", title: "Team timesheet", group: "Time & attendance", anyOf: TEAM_REPORTS, roles: EMPLOYEES },
+  { path: "/team-lead/timesheets/detailed", title: "Detailed team timesheet", group: "Time & attendance", anyOf: TEAM_REPORTS, roles: EMPLOYEES },
+  { path: "/team-lead/timesheets/project-hours", title: "Team project hours", group: "Time & attendance", anyOf: TEAM_REPORTS, roles: EMPLOYEES },
+  { path: "/team-lead/timesheets/attendance", title: "Team attendance", group: "Time & attendance", anyOf: TEAM_REPORTS, roles: EMPLOYEES },
+  { path: "/admin/timesheets/team", title: "Company timesheet", group: "Time & attendance", anyOf: ALL_REPORTS },
+  { path: "/admin/timesheets/detailed", title: "Company detailed timesheet", group: "Time & attendance", anyOf: ALL_REPORTS },
+  { path: "/admin/timesheets/project-hours", title: "Company project hours", group: "Time & attendance", anyOf: ALL_REPORTS },
+  { path: "/admin/timesheets/attendance", title: "Company attendance", group: "Time & attendance", anyOf: ALL_REPORTS },
+  { path: "/admin/billing", title: "Billing", group: "Finance", anyOf: BILLING },
+];
+
+// Duty pages for a person, leaving out anything their role menu already has.
+export const dutyNavigationFor = (role, hasPermission, rolePaths = []) => {
+  if (["admin", "alpha", "manager"].includes(role)) return [];
+  const taken = new Set(rolePaths);
+  return dutyNavigation.filter((item) => !taken.has(item.path)
+    && (!item.roles || item.roles.includes(role))
+    && item.anyOf.some((key) => hasPermission(key)));
 };

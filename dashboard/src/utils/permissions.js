@@ -29,7 +29,7 @@ export const permissionNames = (keys) => keys
 
 // Tooltip for a control the signed-in role cannot use.
 export const missingPermissionHint = (keys) =>
-  `Your role needs the ${permissionNames(keys)} permission${keys.length === 1 ? "" : "s"}. Ask an administrator.`;
+  `You need the ${permissionNames(keys)} permission${keys.length === 1 ? "" : "s"}. Ask an administrator or manager.`;
 
 // The task form always assigns new tasks to the whole team, so creating one
 // needs both permissions (backend middleware/taskPermissions.js).

@@ -15,13 +15,16 @@ const offsetMilliseconds = (date, timezone) => {
 const id = (value) => String(value?._id || value?.id || (typeof value === "string" ? value : ""));
 
 // UI eligibility; the API also checks current grants and team membership.
-// Admin, alpha, manager and HR act on every employee (2026-10-23 decision).
+// Admin, alpha, manager and HR act on every employee (2026-10-23 decision);
+// a team lead on their team; anyone else given the duty on the employees of
+// their own team. Only the elevated roles add entries for themselves.
 export const canManageManualEntries = (actor, employee, { teamReport = false } = {}) => {
   if (!actor || !employee || !id(employee)) return false;
   if (["alpha", "admin", "manager", "hr"].includes(actor.role)) return true;
-  if (actor.role !== "team_lead" || employee.role !== "employee" || id(actor) === id(employee)) return false;
-  return teamReport || id(employee.teamLead) === id(actor)
-    || Boolean(actor.team && id(actor.team) === id(employee.team));
+  if (employee.role !== "employee" || id(actor) === id(employee)) return false;
+  const sameTeam = Boolean(actor.team && id(actor.team) === id(employee.team));
+  if (actor.role !== "team_lead") return sameTeam;
+  return teamReport || id(employee.teamLead) === id(actor) || sameTeam;
 };
 
 // Converts a wall-clock date + "HH:MM" in the business timezone to a UTC

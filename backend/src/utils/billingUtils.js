@@ -1,6 +1,7 @@
 const DEFAULT_TIMEZONE = "Asia/Kolkata";
 const MAX_BILLING_RANGE_DAYS = 366;
 const { isAdminRole } = require("./roles");
+const { userHasPermission } = require("../services/permissionService");
 
 const parseDateKey = (value) => {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
@@ -79,7 +80,9 @@ const getBillingDateRange = (startDate, endDate, timezone = DEFAULT_TIMEZONE) =>
 
 const getBillingEmployeeAccess = (user, requestedId) => {
   const targetId = String(requestedId || "");
-  if (!isAdminRole(user?.role) && !["manager", "hr"].includes(user?.role)) {
+  // The billing routes require "View billing amounts"; whoever holds it sees
+  // every employee, whatever their role.
+  if (!user || (!isAdminRole(user.role) && !userHasPermission(user, "view_billing_amounts"))) {
     return { forbidden: true, targetId, filter: null };
   }
   const filter = { _id: targetId };

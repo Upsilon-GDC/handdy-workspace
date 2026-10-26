@@ -12,10 +12,10 @@ const Team = require("../src/models/Team");
 const TaskTimeLog = require("../src/models/TaskTimeLog");
 const Attendance = require("../src/models/Attendance");
 const SystemSettings = require("../src/models/SystemSettings");
-const { getPendingLoginRequest, getProfile } = require("../src/controllers/authController");
-const { getIdlePolicy, updateIdlePolicy } = require("../src/controllers/settingsController");
-const { getMyTimeLogs } = require("../src/controllers/taskTimeLogController");
-const { getAttendanceHistory } = require("../src/controllers/attendanceController");
+const { getPendingLoginRequest, getProfile } = require("../src/modules/auth/authController");
+const { getIdlePolicy, updateIdlePolicy } = require("../src/modules/settings/settingsController");
+const { getMyTimeLogs } = require("../src/modules/timers/taskTimeLogController");
+const { getAttendanceHistory } = require("../src/modules/attendance/attendanceController");
 const { closeStaleDesktopTimers } = require("../src/services/desktopTimerLease");
 const { createLoginWaiter, notify, subscribe } = require("../src/services/loginNotifications");
 const { beginReportSync, changedTimeLogFilter } = require("../src/services/reportSync");
@@ -44,6 +44,12 @@ function revisions(t, models = [Project, Task, Client, Employee, Team]) {
     t.mock.method(Model, "aggregate", () => revisionQuery([{ count: 1, latest: new Date("2026-10-01"), total: 1 }]));
   }
 }
+// Sets an optimization switch (config/optimizations.js) for one test.
+const withEnv = (t, name, value) => {
+  const previous = process.env[name];
+  process.env[name] = value;
+  t.after(() => { if (previous === undefined) delete process.env[name]; else process.env[name] = previous; });
+};
 const withMarker = (base, sync) => ({ ...base, sync: "true", syncSince: sync.since, syncScope: sync.scope, syncReferences: sync.references });
 
 test("login waiter preserves a notification during a read and removes disconnect listeners", async () => {
@@ -61,7 +67,8 @@ test("login waiter preserves a notification during a read and removes disconnect
   assert.equal(res.listenerCount("close"), 0);
 });
 
-test("idle approval monitors read every five seconds, wake on revocation, and stop on disconnect", async (t) => {
+test("with OPT_LONGPOLL_EVENTS=false, idle approval monitors read every five seconds, wake on revocation, and stop on disconnect", async (t) => {
+  withEnv(t, "OPT_LONGPOLL_EVENTS", "false");
   t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: Date.now() });
   let reads = 0;
   let active = true;
@@ -97,16 +104,56 @@ test("idle approval monitors read every five seconds, wake on revocation, and st
 });
 
 test("an idle monitor returns the original empty result at the twenty-second deadline", async (t) => {
+  withEnv(t, "OPT_LONGPOLL_EVENTS", "false");
+  for (const [setting, expectedReads] of [["false", 4], ["true", 1]]) {
+    process.env.OPT_LONGPOLL_EVENTS = setting;
+    t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: Date.now() });
+    const reads = t.mock.method(AuthSession, "findOne", async () => ({ clientType: "web" }));
+    const req = Object.assign(new EventEmitter(), { authSession: { _id: "deadline", employee: "person" } });
+    const res = response();
+    const pending = getPendingLoginRequest(req, res);
+    await flush();
+    for (let i = 0; i < 4; i += 1) { t.mock.timers.tick(5000); await flush(); }
+    await pending;
+    assert.deepEqual(res.body, { success: true, loginRequest: null });
+    assert.equal(reads.mock.callCount(), expectedReads, `OPT_LONGPOLL_EVENTS=${setting}`);
+    reads.mock.restore();
+    t.mock.timers.reset();
+  }
+});
+
+test("by default an idle approval monitor reads MongoDB once, then only when woken by a change", async (t) => {
   t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: Date.now() });
-  const reads = t.mock.method(AuthSession, "findOne", async () => ({ clientType: "web" }));
-  const req = Object.assign(new EventEmitter(), { authSession: { _id: "deadline", employee: "person" } });
+  let reads = 0;
+  let active = true;
+  let request = null;
+  t.mock.method(AuthSession, "findOne", async () => { reads += 1; return active ? { _id: "quiet", employee: "person", clientType: "desktop" } : null; });
+  t.mock.method(DeviceLoginRequest, "findOne", () => ({ sort: async () => request }));
+  const req = Object.assign(new EventEmitter(), { authSession: { _id: "quiet", employee: "person" } });
+
+  // Nothing changes: one read at the start, none while waiting.
   const res = response();
   const pending = getPendingLoginRequest(req, res);
   await flush();
-  for (let i = 0; i < 4; i += 1) { t.mock.timers.tick(5000); await flush(); }
+  for (let i = 0; i < 3; i += 1) { t.mock.timers.tick(5000); await flush(); }
+  assert.equal(reads, 1);
+  // A new sign-in request on this server wakes it immediately.
+  request = { requestId: "woken", deviceName: "PC 2", clientType: "desktop" };
+  notify(["employee:person"]);
   await pending;
-  assert.deepEqual(res.body, { success: true, loginRequest: null });
-  assert.equal(reads.mock.callCount(), 4);
+  assert.equal(reads, 2);
+  assert.equal(res.body.loginRequest.deviceName, "PC 2");
+
+  // A revocation also wakes it at once.
+  request = null;
+  const revoked = response();
+  const second = getPendingLoginRequest(req, revoked);
+  await flush();
+  active = false;
+  notify(["session:quiet"]);
+  await second;
+  assert.equal(revoked.statusCode, 401);
+  assert.equal(reads, 4);
 });
 
 test("Mongoose notifications wake desktop monitors for requests and revocations, excluding activity writes", async () => {
@@ -389,4 +436,55 @@ test("catalog lists answer 304 for an unchanged list and a full 200 after any ch
   const changed = await call({ ...base, headers: { "if-none-match": etag } });
   assert.equal(changed.statusCode, 200, "a changed revision forces a full response");
   assert.notEqual(changed.headers.ETag, etag);
+});
+
+// Phase 2 (2.2): report fingerprint for delta copies.
+test("the report fingerprint groups settled rows and lists active timers, dropping zero-length sessions only with a range", async (t) => {
+  const { reportChecksum } = require("../src/services/reportSync");
+  const pipelines = [];
+  t.mock.method(TaskTimeLog, "aggregate", async (pipeline) => {
+    pipelines.push(pipeline);
+    return [
+      { _id: false, count: 3, seconds: 5_000_000_001, activeIds: [] },
+      { _id: true, count: 1, seconds: 42, activeIds: [new mongoose.Types.ObjectId("64b000000000000000000001")] },
+    ];
+  });
+  const filter = { employee: "person", "manualEntry.deletedAt": null };
+  const ranged = await reportChecksum(TaskTimeLog, filter, { timeLogs: true, dropZeroLength: true });
+  assert.deepEqual(ranged, { count: 3, seconds: 5_000_000_001, activeIds: ["64b000000000000000000001"] });
+  assert.deepEqual(pipelines[0][0].$match.$and[0], filter);
+  assert.ok(pipelines[0][0].$match.$and[1].$expr, "zero-length sessions are left out like clipTimeLogToRange does");
+  await reportChecksum(TaskTimeLog, filter, { timeLogs: true });
+  assert.deepEqual(pipelines[1][0].$match, filter, "without a range every row counts");
+  t.mock.method(Attendance, "aggregate", async () => []);
+  assert.deepEqual(await reportChecksum(Attendance, { employee: "person" }), { count: 0, seconds: 0 });
+});
+
+test("report deltas carry the fingerprint only when the client asks and the switch is on", async (t) => {
+  revisions(t);
+  const base = { _id: "work", employee: "person", status: "stopped", startedAt: new Date("2026-09-22T04:30Z"), stoppedAt: new Date("2026-09-22T05:30Z"), pauses: [] };
+  t.mock.method(TaskTimeLog, "countDocuments", async () => 1);
+  t.mock.method(TaskTimeLog, "find", (filter) => (filter.desktopHeartbeatAt ? query([]) : query([base])));
+  const aggregates = t.mock.method(TaskTimeLog, "aggregate", async () => [{ _id: false, count: 1, seconds: 7, activeIds: [] }]);
+  const user = { _id: "person", role: "employee" };
+  const params = { startDate: "2026-09-22", endDate: "2026-09-22", sync: "true" };
+  const first = response();
+  await getMyTimeLogs({ user, query: { ...params, checksum: "true" } }, first);
+  assert.equal(first.body.checksum, undefined, "a complete reply needs no fingerprint");
+  assert.equal(aggregates.mock.callCount(), 0);
+
+  const asked = response();
+  await getMyTimeLogs({ user, query: { ...withMarker(params, first.body.sync), checksum: "true" } }, asked);
+  assert.equal(asked.body.delta, true);
+  assert.deepEqual(asked.body.checksum, { count: 1, seconds: 7, activeIds: [] });
+
+  const notAsked = response();
+  await getMyTimeLogs({ user, query: withMarker(params, asked.body.sync) }, notAsked);
+  assert.equal(notAsked.body.checksum, undefined, "desktops and older dashboards do not trigger the extra query");
+
+  withEnv(t, "OPT_REPORT_CHECKSUM", "false");
+  const off = response();
+  await getMyTimeLogs({ user, query: { ...withMarker(params, notAsked.body.sync), checksum: "true" } }, off);
+  assert.equal(off.body.checksum, undefined);
+  assert.equal(aggregates.mock.callCount(), 1);
 });

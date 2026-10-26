@@ -13,7 +13,7 @@ const {
   deleteManualEntry,
   getManualEntryOptions,
   validateManualEntryInput,
-} = require("../src/controllers/manualTimeEntryController");
+} = require("../src/modules/timers/manualTimeEntryController");
 
 const ids = {
   employee: "64b000000000000000000a01",

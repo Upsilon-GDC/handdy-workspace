@@ -67,10 +67,12 @@ module.exports = {
   authorizeRoles,
   authorizeAccess,
   requirePermission,
+  // Passes the listed roles, or anyone holding one of the permissions (role
+  // grants, personal exceptions or the older per-employee delegations).
   authorizeRolesOrPermissions: ({ roles = [], permissions = [] }) => (req, res, next) => {
     if (!req.user) return res.status(401).json({ success: false, message: "Authentication is required." });
     if (isAdminRole(req.user.role) || roles.includes(req.user.role)
-        || permissions.some((key) => (req.user.permissions || []).includes(key))) return next();
+        || (permissions.length > 0 && userHasPermission(req.user, ...permissions))) return next();
     return res.status(403).json({ success: false, message: "You do not have permission to access this resource." });
   },
 };

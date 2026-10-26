@@ -10,12 +10,12 @@ const Task = require("../src/models/Task");
 const TaskTimeLog = require("../src/models/TaskTimeLog");
 const Client = require("../src/models/Client");
 const { hashSecret } = require("../src/services/authSessionService");
-const { waitForLoginRequest, changePassword } = require("../src/controllers/authController");
-const { startTimer } = require("../src/controllers/taskTimeLogController");
-const { getEmployeeOptions } = require("../src/controllers/employeeController");
-const { getBillingReport } = require("../src/controllers/billingController");
-const employeeRoutes = require("../src/routes/employeeRoutes");
-const teamRoutes = require("../src/routes/teamRoutes");
+const { waitForLoginRequest, changePassword } = require("../src/modules/auth/authController");
+const { startTimer } = require("../src/modules/timers/taskTimeLogController");
+const { getEmployeeOptions } = require("../src/modules/employees/employeeController");
+const { getBillingReport } = require("../src/modules/billing/billingController");
+const employeeRoutes = require("../src/modules/employees/employeeRoutes");
+const teamRoutes = require("../src/modules/teams/teamRoutes");
 
 const response = () => ({
   statusCode: 200,

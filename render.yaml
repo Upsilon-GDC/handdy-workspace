@@ -30,6 +30,11 @@ services:
         value: 120000
       - key: APP_TIMEZONE
         value: Asia/Kolkata
+      # Phase 0 traffic measurement (docs/CRM_OPTIMIZATION_PHASE_PLAN.md):
+      # counts only, no personal data. Summary in the logs every 10 minutes and
+      # at GET /api/metrics (admins). Set to "false" to switch it off.
+      - key: METRICS_ENABLED
+        value: "true"
       # Build-time copy of APP_TIMEZONE so dashboard date defaults match the API.
       - key: VITE_APP_TIMEZONE
         value: Asia/Kolkata

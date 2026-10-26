@@ -11,8 +11,8 @@ export default function AccessDenied({ permissions = [], failed = false }) {
         <h2>We couldn’t check your access</h2>
         <p>Check your connection, then refresh the page.</p>
       </> : <>
-        <h2>This page isn’t available to your role</h2>
-        <p>It needs the {permissionNames(permissions)} permission{permissions.length === 1 ? "" : "s"}. Ask an administrator to turn {permissions.length === 1 ? "it" : "them"} on under Permissions.</p>
+        <h2>This page isn’t available to you</h2>
+        <p>It needs the {permissionNames(permissions)} permission{permissions.length === 1 ? "" : "s"}. Ask an administrator or manager to turn {permissions.length === 1 ? "it" : "them"} on under Permissions.</p>
       </>}
     </section>
   );

@@ -40,7 +40,7 @@ test("logout ends the device session before revoking the remembered credential",
   const Employee = require("../src/models/Employee");
   const AuthSession = require("../src/models/AuthSession");
   const DeviceLoginRequest = require("../src/models/DeviceLoginRequest");
-  const { logout } = require("../src/controllers/authController");
+  const { logout } = require("../src/modules/auth/authController");
 
   const calls = [];
   const originals = [

@@ -2,7 +2,7 @@
 
 This guide explains how the whole system is built and how it works, from the
 database up to the desktop app. It describes the code as it is in this
-repository (desktop version 1.2.32). Older notes such as `README_MERGED.md`
+repository (desktop version 1.2.33). Older notes such as `README_MERGED.md`
 describe earlier versions and list files that no longer exist.
 
 **Contents**
@@ -45,17 +45,19 @@ All three live in one repository and are deployed as:
 ```text
 .
 ├── backend/                  Express API (CommonJS, Node)
-│   ├── server.js             App setup, middleware, route mounting, startup
+│   ├── server.js             App setup, middleware, module mounting, startup, shutdown
 │   ├── src/
-│   │   ├── config/           db.js (Mongo connection), productionConfig.js (env validation)
+│   │   ├── config/           db.js (Mongo connection), productionConfig.js, optimizations.js (switches)
+│   │   ├── modules/          One folder per business area: <area>Routes.js (URL → access rule →
+│   │   │                     handler) + <area>Controller.js; index.js lists module → URL
+│   │   ├── middleware/       Shared: auth, role/permission gates, rate limit, catalog cache, errors
+│   │   ├── services/         Cross-cutting logic: sessions, caches, timer lease, sync, attendance
+│   │   ├── jobs/             timerSweep.js (30 s stale-timer sweep)
+│   │   ├── monitoring/       Traffic metrics, /api/metrics, /health
 │   │   ├── models/           Mongoose schemas (one file per collection)
-│   │   ├── routes/           Express routers: URL → middleware → controller
-│   │   ├── controllers/      Request handlers (business logic)
-│   │   ├── middleware/       Auth, role/permission gates, rate limit, caching, errors
-│   │   ├── services/         Cross-cutting logic: sessions, caches, timer lease, sync
 │   │   └── utils/            Pure helpers: dates, billing math, permissions catalog…
-│   ├── scripts/              One-off admin/maintenance scripts
-│   └── test/                 node:test unit tests (31 files)
+│   ├── scripts/              Admin/maintenance scripts (backups, attendance backfill…)
+│   └── test/                 node:test unit tests (40 files)
 ├── dashboard/                React 19 + Vite single-page app (ES modules)
 │   ├── src/
 │   │   ├── main.jsx, App.jsx Entry point and top-level providers
@@ -68,7 +70,7 @@ All three live in one repository and are deployed as:
 │   │   ├── utils/            Report building, exports, dates, validation
 │   │   └── styles/           Plain CSS per page + themes.css / workspace.css
 │   ├── scripts/              audit-routes.mjs (route checker), review-ui.cjs (screenshots)
-│   ├── test/                 node:test unit tests for utils and navigation (10 files)
+│   ├── test/                 node:test unit tests for utils, navigation, report loading (10 files)
 │   └── ui-review/            Screenshots written by UI smoke tests
 ├── desktop-app/              Electron app (CommonJS)
 │   ├── main.js               Main process: windows, IPC, close handshake, lock wiring
@@ -86,6 +88,8 @@ All three live in one repository and are deployed as:
 │   ├── scripts/publish-release.cjs  Signed release to GitHub (draft)
 │   └── test/                 Unit tests + real-Electron smoke tests
 ├── render.yaml               Render deployment blueprint
+├── shared/api-contracts/     Rules that keep desktop, dashboard and server compatible
+├── docs/                     Optimization plan, deploy/rollback, backups, security review
 ├── code-city/                Standalone code-visualization page (not part of the product)
 └── artifacts/                Old logs, review screenshots, legacy files (zips are git-ignored)
 ```
@@ -146,28 +150,38 @@ Stored in `Employee.role` (`backend/src/models/Employee.js`).
 |---|---|---|
 | `alpha` | Super admin | Everything an admin can do, plus alpha-only settings (per-employee idle policies). Alpha accounts are protected from edits by others. |
 | `admin` | Admin | Full access. Manages permissions and idle/logout settings. |
-| `manager` | Admin-equivalent | Same application access as admin (`utils/roles.js` → `isAdminRole`), but cannot edit role permissions. |
+| `manager` | Admin-equivalent | Same application access as admin (`utils/roles.js` → `isAdminRole`), including the Permissions page (since 2026-10-26). |
 | `hr` | Staff | Business modules (clients, projects, tasks, teams, reports, billing), not account administration or security settings. |
 | `team_lead` | Team | Leads exactly one team. Sees and manages their team's tasks and timesheets. |
-| `employee` | Individual | Tracks their own time in the desktop app; sees their own reports. |
+| `employee` | Individual | Tracks their own time in the desktop app; sees their own reports. Can be given any duty (below). |
 
 `isAdminRole(role)` is true for `admin`, `alpha` and `manager`, and most
 checks treat those three the same.
 
-### 4.2 Three access mechanisms
+### 4.2 Four access mechanisms
 
 1. **Role gates** — `authorizeRoles("admin", "hr", …)` in
    `middleware/authorizeRoles.js`. Admin-level roles pass any gate that lists
    `"admin"`.
 2. **Role permissions (configurable)** — `requirePermission("create_tasks")`.
-   The catalog is in `utils/permissions.js`. Admins edit it on the
+   The catalog is in `utils/permissions.js`. Admins and managers edit it on the
    **Permissions** page for the roles `hr`, `team_lead` and `employee`; it is
    saved in the `role_permissions` collection. Admin-level roles always have
    every permission. Roles nobody has edited use
    `DEFAULT_ROLE_PERMISSIONS`, which mirror what the routes allowed before
    the catalog existed. `services/permissionService.js` keeps an in-memory
    snapshot, refreshed at most every 30 s and updated immediately on save.
-3. **Delegated employee permissions** — `Employee.permissions` can hold
+3. **Personal exceptions (one employee)**: on the same page, **By employee**
+   lets an admin switch a permission on or off for one person.
+   `Employee.permissionOverrides.granted` / `.revoked` hold only the switches
+   that differ from the role. Everything else keeps following the role, and an
+   exception stays until it is reset, even if the role changes later.
+   `getEffectivePermissionsSync` applies them (role grants + personal on −
+   personal off), so every `requirePermission` check and `/permissions/me`
+   include them. Admin-level roles ignore exceptions. The fields are
+   loaded with the sign-in check (no extra query), and saving clears the
+   sign-in cache, so the change applies on the person's next request.
+4. **Delegated employee permissions** — `Employee.permissions` can hold
    `create_employees` / `edit_employees` for a specific person, checked by
    `authorizeAccess(...)`. This lets an admin give one HR person employee
    administration without changing the whole role.
@@ -176,29 +190,44 @@ Each catalog entry carries, and the Permissions page shows:
 - a **description** of exactly what the switch does;
 - an `enforcement` tag: `backend` (checked by the API, and the dashboard hides
   the matching menus and buttons), `frontend` (only controls the screen) or
-  `none` ("Not used yet": switching it changes nothing);
-- optional **`roles`**: the configurable roles it can have an effect for.
-  For any other role the switch is disabled ("Not available for …"), saving
-  drops it, and `permissionService` ignores grants stored before the limit
-  existed. This keeps the switches honest: a team lead cannot be given
-  "Create/edit clients" when no screen or rule would let them use it.
+  `none` ("Not used yet": switching it changes nothing).
 
-| Permission key | Enforced by | Applies to | Default for |
-|---|---|---|---|
-| `create_tasks` | POST `/tasks`, `/tasks/bulk`, GET `/tasks/resolve-project`; "Add task" also needs `assign_tasks` | hr, team_lead | hr, team_lead |
-| `edit_tasks` | PUT `/tasks/:id` | hr, team_lead | hr, team_lead |
-| `assign_tasks` | creating a task with assignees, or for the whole team (`taskPermissions.js`) | hr, team_lead | hr, team_lead |
-| `reassign_tasks` | changing assignees on edit | hr, team_lead | hr, team_lead |
-| `archive_tasks` | toggle-status, DELETE `/tasks/:id` | hr, team_lead | hr, team_lead |
-| `add_manual_entries` | `/time-logs/manual*` (+ "Add entry" buttons) | hr, team_lead | hr |
-| `create_teams`, `edit_teams`, `assign_team_leads` | POST/PUT/DELETE `/teams` | hr | hr (not `assign_team_leads`) |
-| `view_team_timesheets` | GET `/time-logs/team`; team lead overview and team reports | team_lead | team_lead |
-| `manage_clients` | POST/PUT/DELETE `/clients` | hr | hr |
-| `manage_projects` | POST/PUT/DELETE `/projects` | hr | hr |
-| `view_all_reports` | GET `/time-logs/admin`; company overview and reports | hr | hr |
-| `view_billing_amounts` | all of `/billing` | hr | hr |
-| `export_reports` | screen only: Export Excel/PDF buttons (exports are built in the browser) | all | hr, team_lead, employee |
-| `view_tasks`, `complete_tasks`, `view_task_timesheets`, `view_teams`, `view_team_productivity`, `assign_team_members`, `remove_team_members`, `view_clients`, `view_projects`, `assign_projects`, `view_personal_reports`, `view_team_reports`, `manage_service_rates`, `view_financial_reports` | not used yet | all | various |
+**Any duty for any role (2026-10-26).** Every permission can be given to HR,
+team leads and employees, by role or to one person, so an administrator or
+manager can hand out different duties. What a duty covers:
+- **Company duties** (clients, projects, teams, all reports, billing) cover
+  the whole company, as for HR. The dashboard adds the pages to the person's
+  menu (`dutyNavigation` in `workspaceNavigation.js`; "Company …" titles for
+  leads and employees), and the routes open by permission (`grants` on
+  `AdminStaffOnly` / `TeamLeadOnly` → `ProtectedRoute requiredPermissions`).
+- **Team duties** (tasks, manual entries, team timesheets) cover the person's
+  own team (`services/teamScope.js`): the team a lead leads, or the team an
+  employee belongs to. HR and admin-level roles keep working with every team
+  for tasks and manual entries; HR has no team, so "View team timesheets"
+  shows HR nothing. Teammates are listed to non-leads without rates or
+  contact details. Employees use the team-lead pages (Team tasks, Team
+  timesheet …), which take their scope from the page (`RoleReportPage scope`),
+  not the role. The task list keeps showing an employee only their own tasks
+  (the desktop list) unless the management page asks for `?scope=manage`.
+- The optional catalog field `roles` would limit a permission to some roles
+  (switch disabled, dropped on save, ignored if stored); no entry uses it now.
+
+| Permission key | Enforced by | Default for |
+|---|---|---|
+| `create_tasks` | POST `/tasks`, `/tasks/bulk`, GET `/tasks/resolve-project`; "Add task" also needs `assign_tasks` | hr, team_lead |
+| `edit_tasks` | PUT `/tasks/:id` | hr, team_lead |
+| `assign_tasks` | creating a task with assignees, or for the whole team (`taskPermissions.js`) | hr, team_lead |
+| `reassign_tasks` | changing assignees on edit | hr, team_lead |
+| `archive_tasks` | toggle-status, DELETE `/tasks/:id` | hr, team_lead |
+| `add_manual_entries` | `/time-logs/manual*` (+ "Add entry" buttons) | hr |
+| `create_teams`, `edit_teams`, `assign_team_leads` | POST/PUT/DELETE `/teams` | hr (not `assign_team_leads`) |
+| `view_team_timesheets` | GET `/time-logs/team`, `/attendance/team/*`; team overview and reports | team_lead |
+| `manage_clients` | POST/PUT/DELETE `/clients` | hr |
+| `manage_projects` | POST/PUT/DELETE `/projects`; lists every project | hr |
+| `view_all_reports` | GET `/time-logs/admin`, `/attendance/admin/history`; company overview and reports | hr |
+| `view_billing_amounts` | all of `/billing` | hr |
+| `export_reports` | screen only: Export Excel/PDF buttons (exports are built in the browser) | hr, team_lead, employee |
+| `view_tasks`, `complete_tasks`, `view_task_timesheets`, `view_teams`, `view_team_productivity`, `assign_team_members`, `remove_team_members`, `view_clients`, `view_projects`, `assign_projects`, `view_personal_reports`, `view_team_reports`, `manage_service_rates`, `view_financial_reports` | not used yet | various |
 
 Admin, alpha and manager always hold every permission. The dashboard reads
 the caller's effective keys from `/permissions/me` (see [7.2](#72-auth-in-the-browser-contextauthproviderjsx)).
@@ -212,7 +241,7 @@ All schemas are in `backend/src/models/`. Most catalog models use the
 
 | Model (collection) | Purpose | Key fields and rules |
 |---|---|---|
-| **Employee** | Every user account | `employeeId` (unique, upper-case), `fullName`, `email` (unique), `password` (bcrypt, `select:false`), `role`, `team`, `teamLead`, `isActive`, `permissions` (delegations), `projectRates[{project, chargeRate}]` (billing), `idleTrackingExempt`, `idlePolicyOverride`, `tokenVersion`, `rememberedSessions[]`, password-reset hash/expiry. Changing password or email invalidates reset links. |
+| **Employee** | Every user account | `employeeId` (unique, upper-case), `fullName`, `email` (unique), `password` (bcrypt, `select:false`), `role`, `team`, `teamLead`, `isActive`, `permissions` (delegations), `permissionOverrides` (personal exceptions, `select:false`), `projectRates[{project, chargeRate}]` (billing), `idleTrackingExempt`, `idlePolicyOverride`, `tokenVersion`, `rememberedSessions[]`, password-reset hash/expiry. Changing password or email invalidates reset links. |
 | **Team** | Group of employees | `teamName` (unique), `teamLead`, `isActive`. Employees point to their team through `Employee.team`. |
 | **Client** | Customer being billed | `clientName`, `status` Active/Inactive. "Delete" sets Inactive. |
 | **Project** | Work stream (e.g. "Audit") | `projectCode` (auto), `projectName`, `clients[]` (+ legacy `client`), `teams[]` (empty = available to all), `status` Active/Completed/On Hold, `deletedAt` (soft delete). `serviceType` is a legacy field that is no longer set. |
@@ -253,8 +282,14 @@ Employee.projectRates: per-project charge rate used by Billing
    - verify SMTP (if configured);
    - connect to MongoDB (zlib wire compression);
    - ensure session indexes; load role permissions;
-   - start a 30-second sweep that closes desktop timers whose heartbeat stopped;
-   - listen on `PORT` (default 5000).
+   - start the 30-second sweep (`jobs/timerSweep.js`) that closes desktop timers
+     whose heartbeat stopped, once immediately and then every 30 s;
+   - listen on `PORT` (default 5000); with `METRICS_ENABLED=true` start the
+     traffic metrics (see [6.12](#612-traffic-metrics-switches-and-operations)).
+4. On `SIGTERM` (every Render deploy) `services/gracefulShutdown.js` refuses new
+   connections, lets open requests finish (long-polls end within 20 s), stops
+   the sweep, logs the last metrics window and closes MongoDB; after 25 s it
+   exits anyway.
 
 ### 6.2 Request pipeline
 
@@ -289,7 +324,7 @@ The employee + session pair is cached for 15 s (`services/authCache.js`). The
 cache is cleared on any Employee or AuthSession write. `lastActivity` is
 updated at most once a minute.
 
-**Sign-in** (`POST /api/auth/login`, `controllers/authController.js`):
+**Sign-in** (`POST /api/auth/login`, `modules/auth/authController.js`):
 email + password + device info → `beginLoginSession()` in
 `services/authSessionService.js`:
 
@@ -328,7 +363,7 @@ Admins can also reset a password (`PUT /employees/:id/reset-password`).
 
 All paths are under `/api`. "Auth" means a valid session (`protect`).
 
-**Auth** — `routes/authRoutes.js`
+**Auth** — `modules/auth/authRoutes.js`
 
 | Method | Path | Access | Purpose |
 |---|---|---|---|
@@ -344,16 +379,16 @@ All paths are under `/api`. "Auth" means a valid session (`protect`).
 | PUT | `/auth/profile`, `/auth/change-password` | auth | Self-service profile/password |
 | POST | `/auth/logout` | auth | End this session |
 
-**People** — `routes/employeeRoutes.js`, `routes/teamRoutes.js`
+**People** — `modules/employees/employeeRoutes.js`, `modules/teams/teamRoutes.js`
 
 | Method | Path | Access | Purpose |
 |---|---|---|---|
-| GET | `/employees/options` | hr, or `create/edit_employees` | Lightweight list for selectors |
+| GET | `/employees/options` | hr, or `create/edit_employees`, `view_all_reports`, team admin duties | Lightweight list for selectors |
 | GET | `/employees`, `/employees/:id` | admin or `create/edit_employees` | Employee administration |
 | PUT | `/employees/:id` | admin or `edit_employees` | Update (including team and project rates) |
 | PUT | `/employees/:id/permissions`, `/:id/reset-password`, `/:id/team-lead`; DELETE `/employees/:id` | admin | Delegations, password reset, team lead, delete |
-| GET | `/employees/my-team`, `/my-team/:id` | team_lead | The lead's team members |
-| GET | `/teams` | hr, or `create/edit_employees` | List teams |
+| GET | `/employees/my-team`, `/my-team/:id` | team_lead, or a team duty | Own team's members (names only for non-leads) |
+| GET | `/teams` | hr, or `create/edit_employees`, team admin duties, `manage_projects`, `view_all_reports` | List teams |
 | POST / PUT / DELETE | `/teams`, `/teams/:id` | `create_teams` / `edit_teams` | Manage teams (keeps `Team.teamLead` and members in sync via `services/teamAssignmentService.js`) |
 
 **Work catalog** — clients, projects, tasks
@@ -370,7 +405,7 @@ All paths are under `/api`. "Auth" means a valid session (`protect`).
 | PATCH | `/tasks/:id/toggle-status`; DELETE `/tasks/:id` | `archive_tasks` | Activate/deactivate; soft delete |
 | GET | `/tasks/resolve-project` | `create_tasks` or `edit_tasks` | Which project a team set maps to |
 
-**Time** — `routes/taskTimeLogRoutes.js`, `routes/attendanceRoutes.js`
+**Time** — `modules/timers/taskTimeLogRoutes.js`, `modules/attendance/attendanceRoutes.js`
 
 | Method | Path | Access | Purpose |
 |---|---|---|---|
@@ -381,14 +416,14 @@ All paths are under `/api`. "Auth" means a valid session (`protect`).
 | PATCH | `/time-logs/note` | auth | Edit the running timer's note |
 | GET | `/time-logs/active` | auth | Current timer or `null` |
 | GET | `/time-logs/history` (alias `/my`) | auth | Own sessions; supports `today=true`, date range, `sync=true` |
-| GET | `/time-logs/team` | team_lead + `view_team_timesheets` | The team's sessions |
+| GET | `/time-logs/team` | `view_team_timesheets` | The own team's sessions |
 | GET | `/time-logs/admin` | `view_all_reports` | Company-wide sessions |
 | GET | `/time-logs/live` | admin, team_lead | Timers running right now |
 | GET / POST / DELETE | `/time-logs/manual/options`, `/manual`, `/manual/:id` | `add_manual_entries` | Back-filled entries (see [6.5](#65-the-timer-engine)) |
 | POST | `/attendance/check-in`, `/attendance/check-out` | auth | Older manual check-in/out; no screen calls them (attendance is automatic) |
 | GET | `/attendance/today`, `/attendance/history` | auth | Own attendance |
-| GET | `/attendance/team/today`, `/team/history` | team_lead | Team attendance |
-| GET | `/attendance/admin/history` | admin, hr, manager | Company attendance |
+| GET | `/attendance/team/today`, `/team/history` | team_lead, or `view_team_timesheets` | Own team's attendance |
+| GET | `/attendance/admin/history` | admin, hr, manager, or `view_all_reports` | Company attendance |
 
 **Scheduling, billing, settings, permissions**
 
@@ -400,14 +435,19 @@ All paths are under `/api`. "Auth" means a valid session (`protect`).
 | PUT | `/settings/idle-policy` | admin | Global idle threshold / auto-logout |
 | GET / PUT | `/settings/employee-idle-policies[/:employeeId]` | alpha | Per-employee overrides |
 | GET | `/permissions/me` | auth | Caller's effective permission keys |
-| GET | `/permissions`; PUT `/permissions/roles/:role` | admin, alpha | Permissions page data / save a role |
+| GET | `/permissions`; PUT `/permissions/roles/:role` | admin, alpha, manager | Permissions page data / save a role |
+| GET | `/permissions/employees`; PUT `/permissions/employees/:employeeId` | admin, alpha, manager | Active hr / team lead / employee accounts with their personal exceptions / save one person's exceptions (`{ granted, revoked }`, the complete list) |
 
 ### 6.5 The timer engine
 
-`controllers/taskTimeLogController.js` with `services/desktopTimerLease.js`.
+`modules/timers/taskTimeLogController.js` with `services/desktopTimerLease.js`.
 
 **Start** (`POST /time-logs/start` with `project`, `task`, optional `client`,
-`note`, `clientType`):
+`note`, `clientType`, `operationId`):
+0. With an `operationId` the server first looks for a start already made with
+   it and returns that timer (`replayed: true`), so a retry after a lost
+   response never starts twice (unique per employee; reusing the ID for other
+   work is refused). Desktop 1.2.33+ sends one.
 1. Close this employee's stale desktop timers first.
 2. Project must exist, be Active and not deleted. Client, if given, must be active.
 3. Non-elevated users: a project restricted to teams must include their team.
@@ -418,18 +458,26 @@ All paths are under `/api`. "Auth" means a valid session (`protect`).
      `assignToAllEmployees`.
 
    It must also belong to the project, or be a project-less work/break task.
-5. Refuse if a timer is already running or paused (the unique index also
-   guards against races, returning 409).
+5. Refuse if a timer is already running or paused (`code:
+   "ACTIVE_TIMER_EXISTS"`; the unique index also guards against races, 409).
 6. Create the log. If `clientType` is `desktop`, set `desktopHeartbeatAt`,
    which makes it a **leased** timer.
 
-**Heartbeat**: refreshes `desktopHeartbeatAt`. **Lease**: every 30 s (and
-before every timer action) the server closes leased timers with no
-heartbeat for **90 s**. It stops them *at the last heartbeat*, marks
-`stopReason: desktop_disconnected`, and closes open pauses.
+**Heartbeat**: one conditional update that extends a lease only while it is
+still live (younger than 90 s); a lease already past that is not extended and
+the sweep closes it. **Lease**: every 30 s (and before every timer action
+except report reads, which rely on the 30 s sweep) the server closes leased
+timers with no heartbeat for **90 s**. It stops them *at the last heartbeat*,
+marks `stopReason: desktop_disconnected`, and closes open pauses. The 20 s /
+90 s / 30 s timings belong together.
 
-**Stop**: if the desktop reports `idleSeconds`, an `idle` pause is added
-covering that span. Totals are then computed:
+**Stop** (optional `idleSeconds`, `logoutReason`, `operationId`, `timeLogId`):
+a retried stop with the same `operationId` returns the first result; with
+`timeLogId` only that timer may be stopped (409 `TIMER_CHANGED` if another one
+runs now). The stop is a single conditional update, so it never overwrites a
+stop the lease sweep made at the same moment. If the desktop reports
+`idleSeconds`, an `idle` pause is added covering that span. Totals are then
+computed:
 
 ```text
 totalPausedSeconds = sum of all pauses
@@ -441,7 +489,7 @@ totalWorkedSeconds = (stoppedAt − startedAt) − totalPausedSeconds
 Lunch). The whole session is break time and is excluded from worked and
 billable totals.
 
-**Manual entries** (`controllers/manualTimeEntryController.js`):
+**Manual entries** (`modules/timers/manualTimeEntryController.js`):
 - Who: admin, alpha, manager and HR for every employee, themselves included
   (HR also needs `add_manual_entries`, which it has by default); team leads,
   with that permission, for employees on their team but not themselves.
@@ -453,7 +501,7 @@ billable totals.
 
 ### 6.6 Tasks
 
-`controllers/taskController.js`.
+`modules/tasks/taskController.js`.
 
 - **Visibility**: admin, manager and HR see all tasks. Team leads see their
   team's tasks. Employees see tasks naming them, plus whole-team tasks of
@@ -483,13 +531,17 @@ layers keep load down:
 | Revisions | `services/readRevisions.js` | Per-collection fingerprint (count, latest and sum of `updatedAt`), cached 5 s and invalidated on every write by a Mongoose plugin |
 | Catalog cache | `middleware/catalogCache.js` | For `/clients`, `/projects`, `/tasks`: keyed by caller scope + revisions; in-memory copy for 60 s and an **ETag/304** for up to 5 min |
 | Report sync | `services/reportSync.js` | With `?sync=true` a report returns a `sync` marker; the next request sends it back and receives only **changed rows + `removedIds`** (delta), within 5 minutes and if nothing structural changed |
+| Report fingerprint | `services/reportSync.js` (`reportChecksum`) | With `?checksum=true` a delta also carries the complete report's row count and sum of change-seconds; the dashboard compares it with its merged copy and skips the 5-minute full reload while they match (hourly reload kept) |
+| Long-poll wake-ups | `services/loginNotifications.js` | "Another device" long-polls read MongoDB once and then wait for an in-process change notification instead of re-reading every 5 s |
 
 Clients that support sync: the desktop timesheet (`loadAllPages` in
-`renderer.js`) and dashboard reports (`utils/reportLoader.js`).
+`renderer.js`) and dashboard reports (`utils/reportLoader.js`, which also uses
+the fingerprint). Desktop project and task lists revalidate with the catalog
+ETag (`cache: "no-cache"`, desktop 1.2.33+), so an unchanged list is a 304.
 
 ### 6.8 Billing
 
-`controllers/billingController.js` + `utils/billingUtils.js`; page
+`modules/billing/billingController.js` + `utils/billingUtils.js`; page
 `dashboard/src/pages/shared/BillingPage.jsx`.
 
 - **Input**: one employee and a date range (at most 366 days), in `APP_TIMEZONE`.
@@ -504,7 +556,7 @@ Clients that support sync: the desktop timesheet (`loadAllPages` in
 
 ### 6.9 Idle policy
 
-`utils/idlePolicy.js`, `controllers/settingsController.js`.
+`utils/idlePolicy.js`, `modules/settings/settingsController.js`.
 
 - Defaults come from `desktop-app/idle-policy-defaults.json`: idle threshold
   **5 min**, auto-logout **50 min**. Allowed ranges are idle 1–240 and logout
@@ -527,6 +579,8 @@ Clients that support sync: the desktop timesheet (`loadAllPages` in
 | `copyRecreatedProjectRates.js` | Copy billing rates after a project was recreated |
 | `verifyBandwidthIndexes.js` | Read-only check that performance indexes exist |
 | `verifySmtp.js` (`npm run test:smtp`) | Test email settings |
+| `backupDatabase.js --out <folder> [--keep N]` (`npm run backup:db -- …`) | Save every collection (gzipped Extended JSON + manifest with counts and indexes); read-only |
+| `restoreDatabase.js --from <backup> --to-db <name>` (`npm run restore:db -- …`) | Restore a backup into a **separate** database and verify counts; refuses the live database. See `docs/BACKUP_AND_RESTORE.md` |
 
 ### 6.11 Automatic attendance
 
@@ -547,6 +601,30 @@ in or out by hand.
   are logged (`[attendance]`) and never fail the timer action.
 - Rows from the older check-in API (`source: check_in`) are left untouched by
   the backfill script.
+
+### 6.12 Traffic metrics, switches and operations
+
+- **Metrics** (`monitoring/trafficMetrics.js`, on with `METRICS_ENABLED=true`):
+  counts only, no personal data. Per route: requests, status classes,
+  compressed response bytes, time. Per MongoDB command + collection: count and
+  approximate bytes. Per outside destination (`mongodb-atlas`, SMTP,
+  `http-clients`): bytes and connections. A `[metrics]` line is logged every
+  10 minutes and `GET /api/metrics` (admin-level) returns the totals.
+- **Alerts**: `[alert]` log lines when a 10-minute window shows more than 20
+  server errors, more than 10 timers closed for missed heartbeats, more than 20
+  new MongoDB connections, failed MongoDB monitoring checks, failed sweeps
+  (also after 3 in a row), long-polls that stop waiting (300+ in a window
+  averaging under 5 s), or more than 50 MB to one destination
+  (`METRICS_ALERT_MB_PER_WINDOW`).
+- **Health** (`monitoring/health.js`): `GET /health` is 503 while MongoDB is
+  disconnected (`HEALTH_CHECK_DATABASE=false` restores the old always-200).
+- **Switches** (`config/optimizations.js`), all on unless set to `false`:
+  `OPT_LONGPOLL_EVENTS`, `OPT_HEARTBEAT_SINGLE_WRITE`, `OPT_REPORTS_SKIP_SWEEP`,
+  `OPT_STATIC_ASSET_CACHE`, `OPT_REPORT_CHECKSUM`; pool size
+  `MONGODB_MAX_POOL_SIZE` (default 10). Details:
+  `docs/CRM_OPTIMIZATION_PHASE_PLAN.md`.
+- **Dashboard files**: hashed files under `/assets` are cached for a year;
+  `index.html` is always re-checked.
 
 ---
 
@@ -620,7 +698,7 @@ instead of failing with API errors.
 | `/admin/employees` | admin/alpha/manager **or** delegated `create/edit_employees` | `AdminEmployees` |
 | `/admin/scheduler/shift`, `/shift/add`, `/schedule` | AdminStaffOnly | shifts and schedules (not in the sidebar menu) |
 | `/admin/billing` | AdminStaffOnly + `view_billing_amounts` | `BillingPage` |
-| `/admin/settings`, `/admin/permissions` | AdminOnly | idle/logout settings; role permissions |
+| `/admin/settings`, `/admin/permissions` | AdminOnly | idle/logout settings; permissions by role or by employee |
 | `/team-lead/dashboard`, `/employee-insights`, `/timesheets/*` (except attendance) | TeamLeadOnly + `view_team_timesheets` | `RoleReportPage` (team) |
 | `/team-lead/timesheet[/details]`, `/team-lead/timesheets/attendance` | TeamLeadOnly | `RoleReportPage` (personal; team attendance) |
 | `/team-lead/tasks` | TeamLeadOnly | team task management |
@@ -756,9 +834,11 @@ an app restart), the screen is locked:
   monitor, including the taskbar.
 - **The CRM window** stays on top of the overlays. It cannot be minimized or
   closed, and focus is pulled back to it when another app is activated.
-- **Unlocking.** Starting a timer (including a break task) removes the lock.
-  If CRM was minimized before, it is minimized again. Signing out also
-  releases the lock.
+- **Unlocking.** Starting a timer (including a break task) removes the lock
+  as soon as the start request is sent, not when the server answers (since
+  1.2.33). If the server refuses the start, the lock returns with its
+  message. If CRM was minimized before, it is minimized again. Signing out
+  also releases the lock.
 - **What locks.** The renderer reports `locked` / `running` / `inactive` on
   every state change and every idle poll. It reports `inactive` (no lock) on
   the login page, while signing out or closing, until the server has
@@ -933,17 +1013,19 @@ Tips:
   so the dashboard and API share one domain.
 - Secrets (`MONGODB_URI`, `CORS_ORIGINS`, `FRONTEND_URL`, `SMTP_*`,
   `MAIL_FROM`) are set in Render; `JWT_SECRET` is generated by Render.
-- Health check: `/health`.
+- Health check: `/health` (503 while MongoDB is unreachable).
 
 **Desktop**:
 1. Bump `desktop-app/package.json` → `version`.
 2. Run `npm test`.
-3. Run `npm run publish`. It needs signing and `GH_TOKEN`, and creates a
-   draft GitHub Release with the installer and `latest.yml`.
-4. Publish the draft.
+3. Run `npm run build` (or `npm run publish` with signing and `GH_TOKEN`).
+4. Publish a GitHub Release tagged `v<version>` with the `.exe`, `.blockmap`
+   and `latest.yml`.
 
-Installed apps pick the release up automatically and install it the next
-time CRM is closed.
+Installed apps pick the release up automatically: from 1.2.32 they restart to
+install once no timer runs and the PC is idle for a minute, otherwise on close.
+Step-by-step deploy, checks and rollback: `docs/DEPLOY_AND_ROLLBACK.md`.
+Backups: `docs/BACKUP_AND_RESTORE.md`.
 
 ---
 
@@ -953,10 +1035,10 @@ All suites use Node's built-in `node:test`.
 
 | Suite | Command | What it covers |
 |---|---|---|
-| Backend (172 tests) | `cd backend && npm test` | Auth sessions, remembered login, permissions (role limits, descriptions), billing math, idle policy, timer lease/idle stop, automatic attendance, manual entries, password-reset logging, task bulk create and duplicates, report ranges, caching |
-| Dashboard (48 tests) | `cd dashboard && npm test` | Report helpers, timelines, pagination, manual-entry and client-timesheet utils, form validation, permission-driven navigation |
+| Backend (221 tests) | `cd backend && npm test` | Auth sessions, remembered login, permissions (any duty for any role, own-team scope, descriptions), billing math, idle policy, timer lease/idle stop, timer safety (retries, races, restarts), automatic attendance, manual entries, password-reset email over SMTP, task bulk create and duplicates, report ranges, caching, report fingerprint, traffic metrics, alerts, health, graceful shutdown, backups, module loading |
+| Dashboard (56 tests) | `cd dashboard && npm test` | Report helpers, timelines, pagination, report loading and fingerprint, manual-entry and client-timesheet utils, form validation, permission-driven navigation and duty pages, personal permission rules |
 | Dashboard lint / routes | `npm run lint`, `npm run test:routes` | ESLint; every nav link has a route |
-| Desktop unit (102 tests) | `cd desktop-app && node --test --test-isolation=none test/*.test.js` | Runs the real `renderer.js` in a VM with a fake DOM/API (idle, logout, close, timesheet, lock states), `timer-lock.js` with fake windows, updater, release config, packaged runtime files |
+| Desktop unit (119 tests) | `cd desktop-app && node --test --test-isolation=none test/*.test.js` | Runs the real `renderer.js` in a VM with a fake DOM/API (idle, logout, close, timesheet, lock states (lifted when Start is sent), start/stop retries, list caching), `timer-lock.js` with fake windows, updater and automatic restart, permission refusal, release config, packaged runtime files |
 | Desktop full | `cd desktop-app && npm test` | Unit tests plus real-Electron smokes (`electron-inactivity-smoke.cjs`, `dashboard-lifecycle-smoke.cjs`, which builds the dashboard first). The lifecycle smoke checks the 30-second polling cadence from call times, and permission-driven menus and actions. The smokes rewrite screenshots in `dashboard/ui-review/`. |
 
 ---
@@ -995,6 +1077,12 @@ an admin.
 9. **SMTP values live only in Render.** `render.yaml` declares `SMTP_*` and
    `MAIL_FROM` with `sync: false`; without values, "Forgot password" answers
    normally but no email is sent (the failure is logged).
-10. **Old documentation.** `README_MERGED.md` and the `*_REPORT.md` /
+10. **Backups depend on the Atlas tier.** Free/shared tiers have no automatic
+    snapshots; run `scripts/backupDatabase.js` on a schedule
+    (`docs/BACKUP_AND_RESTORE.md`).
+11. **Tokens are kept in browser/app storage** (`localStorage`). A strict CSP
+    limits the risk; moving them to an httpOnly cookie (dashboard) or the OS
+    keychain (desktop) is a recommended later change (`docs/SECURITY_REVIEW.md`).
+12. **Old documentation.** `README_MERGED.md` and the `*_REPORT.md` /
     `CODE_AUDIT.md` files describe earlier states of the project; prefer this
     guide and the code.

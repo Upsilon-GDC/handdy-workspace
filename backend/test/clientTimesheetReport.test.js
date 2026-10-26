@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const Employee = require("../src/models/Employee");
 const TaskTimeLog = require("../src/models/TaskTimeLog");
-const { getAllTimeLogs, getMyTeamTimeLogs, getMyTimeLogs } = require("../src/controllers/taskTimeLogController");
+const { getAllTimeLogs, getMyTeamTimeLogs, getMyTimeLogs } = require("../src/modules/timers/taskTimeLogController");
 
 test("reports expose existing client relationships without changing log data or employee permissions", async () => {
   const original = { find: TaskTimeLog.find, count: TaskTimeLog.countDocuments, employees: Employee.find };
@@ -27,7 +27,7 @@ test("reports expose existing client relationships without changing log data or 
     assert.equal(query.teamLead, "lead");
     return { select: async () => [{ _id: { toString: () => "member" } }] };
   };
-  const call = async (handler, query = {}, user = { _id: "lead" }) => {
+  const call = async (handler, query = {}, user = { _id: "lead", role: "team_lead" }) => {
     const response = { status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
     await handler({ user, query }, response);
     return response;

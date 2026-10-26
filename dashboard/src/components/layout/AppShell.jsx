@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Building2, CalendarDays, ChevronLeft, ClipboardList, Clock3, LayoutDashboard, LogOut, Menu, Search, Settings2, Users, WalletCards, X } from "lucide-react";
 import useAuth from "../../context/useAuth";
-import { navigationForRole } from "./workspaceNavigation";
+import { navigationForRole, dutyNavigationFor } from "./workspaceNavigation";
 import { decideLoginRequest, getPendingLoginRequest } from "../../api/authApi";
 
 const icons = { Workspace: LayoutDashboard, "Time & attendance": Clock3, Finance: WalletCards, System: Settings2 };
@@ -57,8 +57,10 @@ export default function AppShell({ children }) {
   const hasDelegatedEmployeeAccess = ["create_employees", "edit_employees"].some(
     (key) => (user?.permissions || []).includes(key),
   );
+  const roleNavigation = navigationForRole(user?.role, hasPermission);
   const navigation = [
-    ...navigationForRole(user?.role, hasPermission),
+    ...roleNavigation,
+    ...dutyNavigationFor(user?.role, hasPermission, roleNavigation.map((item) => item.path)),
     ...(user?.role === "team_lead" ? [{ path: "/employees", title: "Team members", group: "Workspace" }] : []),
     // Admin already has this from workspaceNavigation; anyone else only gets
     // it when specifically granted the delegated permission.

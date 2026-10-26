@@ -14,6 +14,7 @@ const generateToken = (employeeId, tokenVersion = 0, session) => {
     },
     process.env.JWT_SECRET,
     {
+      algorithm: "HS256",
       expiresIn: process.env.JWT_EXPIRES_IN || "7d",
     }
   );

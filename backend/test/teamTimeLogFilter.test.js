@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const Employee = require("../src/models/Employee");
 const TaskTimeLog = require("../src/models/TaskTimeLog");
-const { getAllTimeLogs } = require("../src/controllers/taskTimeLogController");
+const { getAllTimeLogs } = require("../src/modules/timers/taskTimeLogController");
 
 test("admin report limits team records and rejects employees outside that team", async () => {
   const originalEmployeeFind = Employee.find;

@@ -201,6 +201,18 @@ const employeeSchema = new mongoose.Schema(
       default: [],
     },
 
+    // Personal exceptions to the role's permissions, set on the Permissions
+    // page ("By employee"). Keys in `granted` are on and keys in `revoked` are
+    // off for this person whatever the role says; every other key follows the
+    // role. Validated against the catalog when saved (no enum here, so a key
+    // later removed from the catalog cannot block other employee edits).
+    permissionOverrides: {
+      granted: { type: [String], default: undefined, select: false },
+      revoked: { type: [String], default: undefined, select: false },
+      updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "Employee", default: null, select: false },
+      updatedAt: { type: Date, default: null, select: false },
+    },
+
     teamLead: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Employee",

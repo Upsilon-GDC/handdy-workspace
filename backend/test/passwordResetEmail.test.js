@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const Employee = require("../src/models/Employee");
-const { forgotPassword } = require("../src/controllers/authController");
+const { forgotPassword } = require("../src/modules/auth/authController");
 
 const response = () => ({
   status(code) { this.statusCode = code; return this; },

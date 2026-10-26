@@ -5,9 +5,9 @@ const Project = require("../src/models/Project");
 const Team = require("../src/models/Team");
 const Task = require("../src/models/Task");
 const TaskTimeLog = require("../src/models/TaskTimeLog");
-const router = require("../src/routes/clientRoutes");
+const router = require("../src/modules/clients/clientRoutes");
 const { protect } = require("../src/middleware/authMiddleware");
-const { startTimer } = require("../src/controllers/taskTimeLogController");
+const { startTimer } = require("../src/modules/timers/taskTimeLogController");
 
 const response = () => ({
   statusCode: 200,

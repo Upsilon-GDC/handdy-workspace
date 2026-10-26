@@ -105,3 +105,59 @@ test("five-minute reconciliation replaces delta caches to recover missed deletio
   await load("/reconcile", "timeLogs", {}, { force: false });
   assert.equal(requests[1].syncSince, undefined);
 });
+
+// Phase 2 (2.2): delta copies proven complete by the server's fingerprint.
+const stamped = (id, updatedAt, extra = {}) => ({ _id: id, startedAt: "2026-10-01T04:00:00.000Z", updatedAt, status: "stopped", ...extra });
+
+test("the copy fingerprint counts rows and change-seconds, leaving out active timers", async () => {
+  const { reportChecksum } = await import("../src/utils/reportLoader.js");
+  const rows = [
+    stamped("a", "2026-10-01T04:00:00.900Z"),
+    stamped("b", "2026-10-01T05:00:01.000Z"),
+    stamped("live", "2026-10-01T06:00:00.000Z", { status: "running" }),
+    { _id: "legacy" },
+  ];
+  const expected = Math.floor(Date.parse(rows[0].updatedAt) / 1000) + Math.floor(Date.parse(rows[1].updatedAt) / 1000);
+  assert.deepEqual(reportChecksum(rows, ["live"]), { count: 3, seconds: expected }, "rows without updatedAt count but add nothing");
+});
+
+test("a matching fingerprint keeps an open report on deltas past five minutes, with an hourly full reload", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.now() });
+  const { reportChecksum } = await import("../src/utils/reportLoader.js");
+  const rows = [stamped("1", "2026-10-01T04:10:00.000Z"), stamped("2", "2026-10-01T04:20:00.000Z")];
+  const requests = [];
+  const load = createReportLoader(async (_path, params) => {
+    requests.push(params);
+    if (!params.syncSince) return { sync: marker, totalPages: 1, timeLogs: rows };
+    return { delta: true, sync: marker, removedIds: [], timeLogs: [], checksum: { ...reportChecksum(rows), activeIds: [] } };
+  });
+  await load("/time-logs/admin", "timeLogs");
+  assert.equal(requests[0].checksum, "true", "the loader asks for the fingerprint");
+  for (let minute = 0; minute < 55; minute += 1) {
+    t.mock.timers.tick(60_000);
+    await load("/time-logs/admin", "timeLogs", {}, { force: false });
+  }
+  assert.equal(requests.filter((params) => !params.syncSince).length, 1, "no full reload for 55 minutes");
+  t.mock.timers.tick(5 * 60_000);
+  await load("/time-logs/admin", "timeLogs", {}, { force: false });
+  assert.equal(requests.at(-1).syncSince, undefined, "full reload after an hour");
+});
+
+test("a fingerprint mismatch falls back to the five-minute full reload", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.now() });
+  const rows = [stamped("1", "2026-10-01T04:10:00.000Z")];
+  const requests = [];
+  const load = createReportLoader(async (_path, params) => {
+    requests.push(params);
+    if (!params.syncSince) return { sync: marker, totalPages: 1, timeLogs: rows };
+    // The server has a row this copy never received.
+    return { delta: true, sync: marker, removedIds: [], timeLogs: [], checksum: { count: 2, seconds: 1, activeIds: [] } };
+  });
+  await load("/time-logs/admin", "timeLogs");
+  t.mock.timers.tick(4 * 60_000);
+  await load("/time-logs/admin", "timeLogs", {}, { force: false });
+  assert.equal(requests.at(-1).syncSince, marker.since, "still a delta within five minutes");
+  t.mock.timers.tick(60_000);
+  await load("/time-logs/admin", "timeLogs", {}, { force: false });
+  assert.equal(requests.at(-1).syncSince, undefined, "unproven copy is fully reloaded as before");
+});

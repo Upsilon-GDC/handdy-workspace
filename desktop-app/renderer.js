@@ -113,6 +113,13 @@ let logoutPending = false;
 let logoutInProgress = false;
 let appClosePending = false;
 let timerAction = null;
+// IDs for one start or stop action. A retry after a lost or failed response
+// reuses the ID, so the server returns the first result instead of acting
+// twice (backend taskTimeLogController). Cleared once the server has decided.
+let pendingStartOperation = null;
+let pendingStopOperation = null;
+const newOperationId = () => globalThis.crypto?.randomUUID?.()
+  || `op-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 let activeTaskIdleLogout = false;
 let loginInProgress = false;
 let deviceApprovalMonitorActive = false;
@@ -126,6 +133,7 @@ let todayTimesheetReportDate = null;
 let timerStateConfirmed = false;
 let serverReachable = true;
 let timerLockActive = false;
+let timerStartInFlight = false;
 const IDLE_CHECK_INTERVAL_MS = 5000;
 const DATA_REFRESH_INTERVAL_MS = 30 * 1000;
 const API_REQUEST_TIMEOUT_MS = 10 * 1000;
@@ -226,7 +234,10 @@ async function loadAllPages(endpoint, collectionKey, token, { isCurrent, reportS
       ? `&syncSince=${encodeURIComponent(marker.since)}&syncScope=${encodeURIComponent(marker.scope)}&syncReferences=${encodeURIComponent(marker.references)}` : ""}` : "";
     response = await fetch(`${endpoint}${separator}page=${page}&limit=100${syncQuery}`, {
       method: "GET",
-      cache: "no-store",
+      // Project and task lists revalidate with their ETag, so an unchanged
+      // list costs a body-less 304; edits change the ETag at once. Report
+      // syncs run their own delta protocol and are never stored.
+      cache: reportSync ? "no-store" : "no-cache",
       headers: { Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
     });
@@ -351,6 +362,9 @@ function getTimerLockState() {
   if (isLoginPage || !getToken() || logoutPending || appClosePending) return "inactive";
   if (!timerStateConfirmed || !serverReachable) return "inactive";
   if (pendingIdleStop) return "locked";
+  // Lift the lock as soon as Start is sent rather than when the server
+  // answers (a few seconds); a failed start locks the screen again.
+  if (timerStartInFlight) return "running";
   return currentTimeLog?.status === "running" || isIntentionalBreak(currentTimeLog) ? "running" : "locked";
 }
 
@@ -1885,6 +1899,13 @@ async function stopTimer({ idleSeconds = 0 } = {}) {
     return;
   }
 
+  // Name the timer this click means, so a late retry can never stop a timer
+  // started afterwards.
+  const stopTarget = currentTimeLog?._id ? String(currentTimeLog._id) : undefined;
+  if (!pendingStopOperation || pendingStopOperation.timeLogId !== stopTarget) {
+    pendingStopOperation = { timeLogId: stopTarget, id: newOperationId() };
+  }
+
   try {
     stopTimerButton.disabled = true;
     if (stopBreakButton) stopBreakButton.disabled = true;
@@ -1897,21 +1918,29 @@ async function stopTimer({ idleSeconds = 0 } = {}) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(idleSeconds > 0 ? { idleSeconds: Math.floor(idleSeconds) } : {}),
+        body: JSON.stringify({
+          ...(idleSeconds > 0 ? { idleSeconds: Math.floor(idleSeconds) } : {}),
+          operationId: pendingStopOperation.id,
+          ...(stopTarget ? { timeLogId: stopTarget } : {}),
+        }),
         signal: AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
       }
     );
     noteServerResponse(response);
 
     const data = await response.json();
+    if (response.status < 500) pendingStopOperation = null;
 
     if (!response.ok) {
-      if (response.status === 404) {
+      if (response.status === 404 || data.code === "TIMER_CHANGED") {
         // A disconnected desktop timer may have been closed by the server
-        // between the last refresh and this click. Reconcile the controls.
+        // between the last refresh and this click, or another timer is now
+        // running. Reconcile the controls.
         await loadActiveTimer();
         await loadTodayTimesheet();
-        timerMessage.textContent = "The timer was already stopped. Your timesheet has been refreshed.";
+        timerMessage.textContent = data.code === "TIMER_CHANGED"
+          ? "A different timer is running now. Your timer has been refreshed."
+          : "The timer was already stopped. Your timesheet has been refreshed.";
         return;
       }
       timerMessage.textContent =
@@ -2155,6 +2184,12 @@ async function startTimer() {
     return;
   }
 
+  // Retrying the same selection after a lost response reuses its ID.
+  const startKey = `${projectId}|${taskId}|${clientId}`;
+  if (!pendingStartOperation || pendingStartOperation.key !== startKey) {
+    pendingStartOperation = { key: startKey, id: newOperationId() };
+  }
+
   const previousStatus = timerStatus.textContent;
   const pendingStart = Date.now();
   const isStartingBreak = taskSelect.selectedOptions[0]?.dataset.taskType === "break";
@@ -2170,6 +2205,8 @@ async function startTimer() {
       }, 250);
     }
 
+    timerStartInFlight = true;
+    syncTimerLock();
     const response = await fetch(
       `${API_BASE_URL}/time-logs/start`,
       {
@@ -2186,6 +2223,7 @@ async function startTimer() {
           task: taskId,
           note: readNoteDraft().trim() || undefined,
           clientType: "desktop",
+          operationId: pendingStartOperation.id,
         }),
         signal: AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
       }
@@ -2193,14 +2231,31 @@ async function startTimer() {
     noteServerResponse(response);
 
     const data = await response.json();
+    if (response.status < 500) pendingStartOperation = null;
 
     if (!response.ok) {
+      if (data.code === "ACTIVE_TIMER_EXISTS") {
+        // Usually an earlier start whose response was lost. Show the timer
+        // the server is running instead of an error.
+        await loadActiveTimer();
+        await loadTodayTimesheet();
+        timerMessage.textContent = "A timer was already running. It is shown again.";
+        return;
+      }
       timerMessage.textContent =
         data.message ||
         "Unable to start timer.";
 
       startTimerButton.disabled = false;
 
+      return;
+    }
+
+    if (data.replayed && !["running", "paused"].includes(data.timeLog?.status)) {
+      // The earlier start went through and has been stopped since.
+      await loadActiveTimer();
+      await loadTodayTimesheet();
+      timerMessage.textContent = "That timer was already started and stopped. Your timesheet has been refreshed.";
       return;
     }
 
@@ -2235,6 +2290,8 @@ async function startTimer() {
 
     startTimerButton.disabled = false;
   } finally {
+    // runTimerAction re-reports the lock from the confirmed state.
+    timerStartInFlight = false;
     if (pendingInterval !== null) clearInterval(pendingInterval);
     if (!currentTimeLog) {
       timerStatus.textContent = previousStatus;

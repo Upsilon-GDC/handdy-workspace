@@ -12,7 +12,9 @@
     "create:alpha": "node scripts/createAlpha.js",
     "audit:teams": "node scripts/repairEmployeeTeams.js",
     "repair:teams": "node scripts/repairEmployeeTeams.js --apply",
-    "backfill:attendance": "node scripts/backfillAttendance.js"
+    "backfill:attendance": "node scripts/backfillAttendance.js",
+    "backup:db": "node scripts/backupDatabase.js",
+    "restore:db": "node scripts/restoreDatabase.js"
   },
   "keywords": [],
   "author": "",
@@ -27,9 +29,12 @@
     "express-mongo-sanitize": "^2.2.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^9.0.0",
-    "nodemailer": "^9.1.1"
+    "nodemailer": "^10.2.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"
+  },
+  "engines": {
+    "node": ">=20.19.0"
   }
 }

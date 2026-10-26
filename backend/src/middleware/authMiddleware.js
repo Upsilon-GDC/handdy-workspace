@@ -19,7 +19,8 @@ const protect = async (req, res, next) => {
 
     const token = authorizationHeader.split(" ")[1];
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // Only the method tokens are issued with (utils/generateToken.js).
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ["HS256"] });
 
     // Served from a short-lived cache (cleared on any Employee/AuthSession
     // write) so routine polling does not hit Atlas twice per request.
@@ -29,6 +30,7 @@ const protect = async (req, res, next) => {
 
     const employee = cached?.employee ?? await Employee.findById(decoded.employeeId).select(
       "+tokenVersion +idleTrackingExempt +idlePolicyOverride.idleThresholdMinutes +idlePolicyOverride.autoLogoutMinutes"
+      + " +permissionOverrides.granted +permissionOverrides.revoked"
     );
 
     if (!employee) {

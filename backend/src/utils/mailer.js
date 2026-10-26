@@ -1,4 +1,5 @@
 const nodemailer = require("nodemailer");
+const { countEvent } = require("../monitoring/trafficMetrics");
 
 let cachedTransporter;
 
@@ -59,6 +60,7 @@ const sendPasswordResetEmail = async ({ to, resetUrl }) => {
     return;
   }
 
+  countEvent("mail.sent");
   const result = await transporter.sendMail({
     from: process.env.MAIL_FROM || process.env.SMTP_USER,
     to,

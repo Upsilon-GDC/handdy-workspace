@@ -9,8 +9,8 @@ const Task = require("../src/models/Task");
 const Team = require("../src/models/Team");
 const Client = require("../src/models/Client");
 const TaskTimeLog = require("../src/models/TaskTimeLog");
-const attendance = require("../src/controllers/attendanceController");
-const timers = require("../src/controllers/taskTimeLogController");
+const attendance = require("../src/modules/attendance/attendanceController");
+const timers = require("../src/modules/timers/taskTimeLogController");
 const { protect } = require("../src/middleware/authMiddleware");
 const { clearAuthCache } = require("../src/services/authCache");
 const { authorizeRoles } = require("../src/middleware/authorizeRoles");
@@ -67,6 +67,8 @@ test("legacy timer start, manual pause, resume and stop preserve work and break 
   t.mock.method(TaskTimeLog, "findOneAndUpdate", async (filter, update) => {
     assert.equal(filter.employee, user._id);
     if (!timer || timer.status !== filter.status) return null;
+    // Stop: one conditional update with every final value.
+    if (update.$set.stoppedAt) return Object.assign(timer, update.$set);
     if (update.$push) timer.pauses.push(update.$push.pauses);
     if (update.$set["pauses.$[elem].resumedAt"]) timer.pauses.at(-1).resumedAt = update.$set["pauses.$[elem].resumedAt"];
     timer.status = update.$set.status;

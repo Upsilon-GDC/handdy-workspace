@@ -98,3 +98,51 @@
 @media (max-width: 1100px) { .crm-content .permissions-page.permissions-page .permissions-grid { grid-template-columns: 1fr; } }
 .crm-content .permissions-page.permissions-page .permissions-description { display: block; margin-top: 2px; color: var(--text-secondary, #6b7280); font-size: 12px; font-weight: 400; line-height: 1.45; }
 .crm-content .permissions-page.permissions-page .permissions-item.is-unavailable { cursor: not-allowed; opacity: .6; }
+
+/* Mode switch: by role / by employee */
+.crm-content .permissions-page.permissions-page .permissions-hero { flex-wrap: wrap; }
+.crm-content .permissions-page.permissions-page .permissions-modes { display: inline-flex; flex: none; gap: 4px; padding: 4px; border: 1px solid var(--border-color, #dbe5e1); border-radius: 11px; }
+.crm-content .permissions-page.permissions-page .permissions-modes button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 36px; padding: 0 16px; border: 0; border-radius: 8px; font-size: 13.5px; font-weight: 800; cursor: pointer; }
+.crm-content .permissions-page.permissions-page .permissions-modes button:hover { background: color-mix(in srgb, var(--primary) 8%, transparent); }
+.crm-content .permissions-page.permissions-page .permissions-modes button.is-active { background: var(--primary); color: #fff; }
+.crm-content .permissions-page.permissions-page .permissions-hero .permissions-modes svg { display: block; color: currentColor; }
+
+/* Employee picker */
+.crm-content .permissions-page.permissions-page .permissions-people-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
+.crm-content .permissions-page.permissions-page .permissions-people-tools .permissions-fixed { margin-left: auto; }
+.crm-content .permissions-page.permissions-page .permissions-people-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; max-height: 268px; margin: 14px 0 0; padding: 2px; overflow-y: auto; list-style: none; }
+.crm-content .permissions-page.permissions-page .permissions-people-list button { display: grid; justify-content: stretch; justify-items: start; align-content: start; gap: 2px; width: 100%; height: 100%; padding: 9px 12px; border: 1px solid var(--border-color, #dbe5e1); border-radius: 10px; text-align: left; cursor: pointer; transition: border-color .15s, background .15s; }
+.crm-content .permissions-page.permissions-page .permissions-people-list button:hover { border-color: var(--primary); }
+.crm-content .permissions-page.permissions-page .permissions-people-list button small { color: var(--text-secondary, #62716b); font-size: 11.5px; font-weight: 600; }
+.crm-content .permissions-page.permissions-page .permissions-people-list .permissions-tab-name { overflow-wrap: anywhere; }
+.crm-content .permissions-page.permissions-page .permissions-people-list .permissions-tag { margin-top: 3px; }
+.crm-content .permissions-page.permissions-page .permissions-people-list button.is-active { border-color: var(--primary); background: var(--primary); color: #fff; }
+.crm-content .permissions-page.permissions-page .permissions-people-list button.is-active small { color: rgba(255, 255, 255, .82); }
+.crm-content .permissions-page.permissions-page .permissions-people-list button.is-active .permissions-tag.is-personal { background: rgba(255, 255, 255, .2); color: #fff; }
+.crm-content .permissions-page.permissions-page .permissions-people-empty { margin: 14px 0 0; color: var(--text-secondary, #62716b); }
+
+/* Selected employee */
+.crm-content .permissions-page.permissions-page .permissions-person { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 16px; }
+.crm-content .permissions-page.permissions-page .permissions-avatar { display: grid; flex: none; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: color-mix(in srgb, var(--primary) 14%, transparent); color: var(--primary); font-weight: 800; }
+.crm-content .permissions-page.permissions-page .permissions-person-text { display: grid; flex: 1 1 320px; gap: 2px; min-width: 0; }
+.crm-content .permissions-page.permissions-page .permissions-person-text strong { font-size: 16px; }
+.crm-content .permissions-page.permissions-page .permissions-person-text span { color: var(--text-secondary, #62716b); font-size: 13px; overflow-wrap: anywhere; }
+.crm-content .permissions-page.permissions-page .permissions-person-text p { margin: 4px 0 0; color: var(--text-secondary, #62716b); font-size: 12.5px; line-height: 1.45; }
+.crm-content .permissions-page.permissions-page .permissions-person .permissions-reset { display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 14px; font-weight: 700; cursor: pointer; }
+.crm-content .permissions-page.permissions-page .permissions-person .permissions-reset:disabled { opacity: .5; cursor: not-allowed; }
+
+/* A switch set for one person instead of following the role */
+.crm-content .permissions-page.permissions-page .permissions-tag.is-personal { background: color-mix(in srgb, var(--primary) 16%, transparent); color: var(--primary); }
+.crm-content .permissions-page.permissions-page .permissions-tag-reset { margin-left: 4px; padding: 0 2px; border: 0; border-radius: 4px; background: transparent; color: inherit; font-size: 11px; font-weight: 700; text-decoration: underline; cursor: pointer; }
+.crm-content .permissions-page.permissions-page .permissions-tag-reset:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+
+/* Cards may shrink to the screen; the role filter row can be long. */
+.crm-content .permissions-page.permissions-page > * { min-width: 0; }
+
+@media (max-width: 720px) {
+  .crm-content .permissions-page.permissions-page .permissions-filters { flex-wrap: wrap; }
+  .crm-content .permissions-page.permissions-page .permissions-modes { width: 100%; }
+  .crm-content .permissions-page.permissions-page .permissions-modes button { flex: 1 1 0; }
+  .crm-content .permissions-page.permissions-page .permissions-people-tools .permissions-fixed { margin-left: 0; }
+  .crm-content .permissions-page.permissions-page .permissions-people-list { grid-template-columns: 1fr; max-height: 240px; }
+}

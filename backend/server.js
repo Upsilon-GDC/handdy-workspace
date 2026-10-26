@@ -4,6 +4,7 @@ const dns = require("dns");
 const fs = require("fs");
 const path = require("path");
 const express = require("express");
+const mongoose = require("mongoose");
 const cors = require("cors");
 const compression = require("compression");
 const mongoSanitize = require("express-mongo-sanitize");
@@ -13,25 +14,18 @@ const connectDatabase = require("./src/config/db");
 const { validateProductionConfig } = require("./src/config/productionConfig");
 const { verifyEmailTransport } = require("./src/utils/mailer");
 const { ensureAuthSessionIndexes } = require("./src/services/authSessionService");
-const { closeStaleDesktopTimers } = require("./src/services/desktopTimerLease");
+const { startTimerSweep } = require("./src/jobs/timerSweep");
 const { refreshPermissionOverrides } = require("./src/services/permissionService");
+const trafficMetrics = require("./src/monitoring/trafficMetrics");
+const { dashboardCacheHeaders } = require("./src/utils/dashboardCache");
+const { isOn } = require("./src/config/optimizations");
+const { installGracefulShutdown } = require("./src/services/gracefulShutdown");
+const { healthCheck } = require("./src/monitoring/health");
 
 // ==============================
-// ROUTES
+// ROUTES (one folder per business module, see src/modules/index.js)
 // ==============================
-const authRoutes = require("./src/routes/authRoutes");
-const employeeRoutes = require("./src/routes/employeeRoutes");
-const attendanceRoutes = require("./src/routes/attendanceRoutes");
-const projectRoutes = require("./src/routes/projectRoutes");
-const taskRoutes = require("./src/routes/taskRoutes");
-const taskTimeLogRoutes = require("./src/routes/taskTimeLogRoutes");
-const shiftRoutes = require("./src/routes/shiftRoutes");
-const scheduleRoutes = require("./src/routes/scheduleRoutes");
-const teamRoutes = require("./src/routes/teamRoutes");
-const clientRoutes = require("./src/routes/clientRoutes");
-const billingRoutes = require("./src/routes/billingRoutes");
-const settingsRoutes = require("./src/routes/settingsRoutes");
-const permissionRoutes = require("./src/routes/permissionRoutes");
+const { apiModules } = require("./src/modules");
 
 // ==============================
 // MONGODB DNS
@@ -55,6 +49,14 @@ const dashboardBuildPath = path.resolve(__dirname, "../dashboard/dist");
 // ==============================
 // MIDDLEWARE
 // ==============================
+// Traffic measurement (METRICS_ENABLED=true). Installed before the database
+// connects and before compression, so it sees every outgoing connection and
+// the compressed response bytes.
+if (trafficMetrics.enabled) {
+  trafficMetrics.installOutboundMeter();
+  app.use(trafficMetrics.requestMetrics);
+}
+
 // JSON and static assets compress by roughly 80-90%, which is most of the
 // outbound bandwidth. Small bodies (< 1 KB) are left alone by the default.
 app.use(compression());
@@ -151,19 +153,7 @@ app.use("/api", (req, res, next) => {
 // ==============================
 // API ROUTES
 // ==============================
-app.use("/api/auth", authRoutes);
-app.use("/api/employees", employeeRoutes);
-app.use("/api/attendance", attendanceRoutes);
-app.use("/api/projects", projectRoutes);
-app.use("/api/tasks", taskRoutes);
-app.use("/api/time-logs", taskTimeLogRoutes);
-app.use("/api/shifts", shiftRoutes);
-app.use("/api/schedules", scheduleRoutes);
-app.use("/api/teams", teamRoutes);
-app.use("/api/clients", clientRoutes);
-app.use("/api/billing", billingRoutes);
-app.use("/api/settings", settingsRoutes);
-app.use("/api/permissions", permissionRoutes);
+for (const [prefix, router] of apiModules) app.use(prefix, router);
 
 // Keep missing API paths as JSON responses instead of returning the React app.
 app.use("/api", (req, res) => {
@@ -176,13 +166,7 @@ app.use("/api", (req, res) => {
 // ==============================
 // HEALTH CHECK
 // ==============================
-app.get("/health", (req, res) => {
-  return res.status(200).json({
-    success: true,
-    message:
-      "Employee Time & Attendance Backend is Running",
-  });
-});
+app.get("/health", healthCheck);
 
 // Desktop installers are distributed directly by the organization, not
 // through the employee web dashboard.
@@ -199,9 +183,10 @@ app.get("/downloads/{*splat}", (req, res) => {
 // Render builds the React dashboard before starting this server. Serving the
 // static files here keeps the dashboard and API on one domain: / and /api.
 if (fs.existsSync(dashboardBuildPath)) {
-  app.use(express.static(dashboardBuildPath));
+  app.use(express.static(dashboardBuildPath, { setHeaders: dashboardCacheHeaders(dashboardBuildPath) }));
 
   app.get("/{*splat}", (req, res) => {
+    if (isOn("staticAssetCache")) res.set("Cache-Control", "no-cache");
     return res.sendFile(path.join(dashboardBuildPath, "index.html"));
   });
 }
@@ -226,15 +211,12 @@ const startServer = async () => {
     validateProductionConfig();
     await verifyEmailTransport();
     await connectDatabase();
+    if (trafficMetrics.enabled) trafficMetrics.attachMongo(mongoose.connection.getClient());
     await ensureAuthSessionIndexes();
     await refreshPermissionOverrides();
-    const timerSweep = setInterval(() => {
-      closeStaleDesktopTimers().catch((error) => console.error("Unable to close stale desktop timers:", error));
-    }, 30_000);
-    timerSweep.unref();
-    await closeStaleDesktopTimers();
+    const timerSweep = await startTimerSweep();
 
-    app.listen(
+    const server = app.listen(
       PORT,
       "0.0.0.0",
       () => {
@@ -255,6 +237,19 @@ const startServer = async () => {
         );
       }
     );
+    let metricsLog = null;
+    if (trafficMetrics.enabled) {
+      trafficMetrics.meterHttpServer(server);
+      metricsLog = trafficMetrics.startPeriodicLog();
+      console.log("[metrics] Traffic metrics are on; a summary is logged every 10 minutes.");
+    }
+    installGracefulShutdown({
+      server,
+      intervals: [timerSweep, metricsLog],
+      // Keep the numbers of the last, partial metrics window.
+      beforeExit: async () => { if (trafficMetrics.enabled) trafficMetrics.logWindow(); },
+      disconnect: () => mongoose.disconnect(),
+    });
   } catch (error) {
     console.error(
       "Failed to start server:"

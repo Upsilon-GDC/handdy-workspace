@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const TaskTimeLog = require("../src/models/TaskTimeLog");
-const { resumeTimer } = require("../src/controllers/taskTimeLogController");
+const { resumeTimer } = require("../src/modules/timers/taskTimeLogController");
 
 test("End Break closes the existing pause without replacing history or inserting records", async () => {
   const original = TaskTimeLog.findOneAndUpdate;

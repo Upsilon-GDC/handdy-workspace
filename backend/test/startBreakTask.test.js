@@ -5,7 +5,7 @@ const Task = require("../src/models/Task");
 const TaskTimeLog = require("../src/models/TaskTimeLog");
 const Client = require("../src/models/Client");
 const mongoose = require("mongoose");
-const { startTimer } = require("../src/controllers/taskTimeLogController");
+const { startTimer } = require("../src/modules/timers/taskTimeLogController");
 
 test("desktop can start an assigned break task with no project under the selected project", async () => {
   const originals = {

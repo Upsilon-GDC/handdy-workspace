@@ -4,13 +4,13 @@ const assert = require("node:assert/strict");
 const RolePermission = require("../src/models/RolePermission");
 const Task = require("../src/models/Task");
 const { requirePermission } = require("../src/middleware/authorizeRoles");
-const { guardTaskAssignmentOnCreate, guardTaskReassignment } = require("../src/middleware/taskPermissions");
+const { guardTaskAssignmentOnCreate, guardTaskReassignment } = require("../src/modules/tasks/taskPermissions");
 const { setRoleOverride, getRolePermissionsSync } = require("../src/services/permissionService");
-const { updateRolePermissions, getMyPermissions } = require("../src/controllers/permissionController");
+const { updateRolePermissions, getMyPermissions } = require("../src/modules/permissions/permissionController");
 const { DEFAULT_ROLE_PERMISSIONS, ALL_PERMISSION_KEYS } = require("../src/utils/permissions");
-const permissionRoutes = require("../src/routes/permissionRoutes");
-const taskTimeLogRoutes = require("../src/routes/taskTimeLogRoutes");
-const billingRoutes = require("../src/routes/billingRoutes");
+const permissionRoutes = require("../src/modules/permissions/permissionRoutes");
+const taskTimeLogRoutes = require("../src/modules/timers/taskTimeLogRoutes");
+const billingRoutes = require("../src/modules/billing/billingRoutes");
 
 const response = () => ({
   statusCode: 200,
@@ -76,15 +76,15 @@ test("legacy per-employee delegations still count alongside role grants", async 
   assert.equal(res.body.permissions.includes("edit_employees"), true);
 });
 
-test("only admin or alpha can open or save the permission settings", async () => {
+test("admin, alpha and manager can open or save the permission settings; nobody else can", async () => {
   const route = (path, method) => permissionRoutes.stack.find((layer) => layer.route?.path === path && layer.route.methods[method]).route;
   const guard = route("/", "get").stack[1].handle;
-  for (const role of ["manager", "hr", "team_lead", "employee"]) {
+  for (const role of ["hr", "team_lead", "employee"]) {
     const res = response();
     guard({ user: { role } }, res, () => assert.fail(`${role} reached the permission settings`));
     assert.equal(res.statusCode, 403);
   }
-  for (const role of ["admin", "alpha"]) {
+  for (const role of ["admin", "alpha", "manager"]) {
     let allowed = false;
     guard({ user: { role } }, response(), () => { allowed = true; });
     assert.equal(allowed, true);
@@ -116,25 +116,24 @@ test("saving a role validates the role and every permission key", async (t) => {
   }
 });
 
-test("a permission that cannot apply to a role is dropped on save and never granted", async (t) => {
+test("any duty can be given to any configurable role and takes effect at once", async (t) => {
   let saved;
   t.mock.method(RolePermission, "findOneAndUpdate", async (filter, update) => { saved = update.$set.permissions; return {}; });
   try {
     const res = response();
-    await updateRolePermissions({ user: { _id: "admin-1" }, params: { role: "employee" },
-      body: { permissions: ["view_tasks", "create_tasks", "manage_clients", "view_billing_amounts", "export_reports"] } }, res);
+    const duties = ["view_tasks", "create_tasks", "manage_clients", "view_billing_amounts", "view_team_timesheets", "export_reports"];
+    await updateRolePermissions({ user: { _id: "admin-1" }, params: { role: "employee" }, body: { permissions: duties } }, res);
     assert.equal(res.statusCode, 200);
-    assert.deepEqual(saved, ["view_tasks", "export_reports"]);
-    assert.deepEqual(res.body.role.permissions, ["view_tasks", "export_reports"]);
+    assert.deepEqual(saved, duties);
+    for (const key of ["create_tasks", "manage_clients", "view_billing_amounts", "view_team_timesheets"]) {
+      assert.equal((await run(requirePermission(key), { role: "employee" })).allowed, true, key);
+    }
+    assert.equal((await run(requirePermission("edit_tasks"), { role: "employee" })).res.statusCode, 403, "only what was granted");
 
-    // A grant stored before role limits existed stays harmless.
-    setRoleOverride("employee", ["create_tasks", "edit_tasks", "manage_clients", "view_tasks"]);
-    assert.deepEqual(getRolePermissionsSync("employee"), ["view_tasks"]);
-    assert.equal((await run(requirePermission("edit_tasks"), { role: "employee" })).res.statusCode, 403);
-    setRoleOverride("team_lead", [...DEFAULT_ROLE_PERMISSIONS.team_lead, "manage_clients", "view_billing_amounts"]);
-    assert.equal((await run(requirePermission("manage_clients"), { role: "team_lead" })).res.statusCode, 403);
-    assert.equal((await run(requirePermission("view_billing_amounts"), { role: "team_lead" })).res.statusCode, 403);
-    assert.equal((await run(requirePermission("create_tasks"), { role: "team_lead" })).allowed, true);
+    setRoleOverride("team_lead", [...DEFAULT_ROLE_PERMISSIONS.team_lead, "manage_clients", "view_billing_amounts", "view_all_reports"]);
+    for (const key of ["manage_clients", "view_billing_amounts", "view_all_reports", "create_tasks"]) {
+      assert.equal((await run(requirePermission(key), { role: "team_lead" })).allowed, true, key);
+    }
   } finally {
     setRoleOverride("employee", DEFAULT_ROLE_PERMISSIONS.employee);
     setRoleOverride("team_lead", DEFAULT_ROLE_PERMISSIONS.team_lead);
@@ -148,6 +147,8 @@ test("every catalog entry documents its effect and the roles it applies to", () 
     assert.ok(permission.description?.length > 10, `${permission.key} needs a description`);
     if (permission.enforcement === "none") assert.match(permission.description, /^Not used yet/, permission.key);
     for (const role of permission.roles || []) assert.ok(CONFIGURABLE_ROLES.includes(role), `${permission.key}: ${role}`);
+    // 2026-10-26: every switch is available for every configurable role.
+    for (const role of CONFIGURABLE_ROLES) assert.equal(permissionAppliesToRole(permission.key, role), true, `${permission.key}: ${role}`);
   }
   for (const [role, keys] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
     for (const key of keys) assert.equal(permissionAppliesToRole(key, role), true, `default ${role} grant ${key} must apply`);

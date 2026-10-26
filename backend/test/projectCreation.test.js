@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const Project = require("../src/models/Project");
 const Team = require("../src/models/Team");
-const { createProject } = require("../src/controllers/projectController");
+const { createProject } = require("../src/modules/projects/projectController");
 
 test("project creation only requires a name and one or more active teams", async () => {
   const originals = { exists: Project.exists, create: Project.create, teamFind: Team.find };

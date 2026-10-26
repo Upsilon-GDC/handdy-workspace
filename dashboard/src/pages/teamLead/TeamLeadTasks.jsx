@@ -26,7 +26,8 @@ function TeamLeadTasks() {
     try {
       setLoading(true);
       setError("");
-      setTasks(await getAllTasks());
+      // "manage": the own team's tasks, also for an employee given task duties.
+      setTasks(await getAllTasks({ scope: "manage" }));
     } catch (requestError) {
       setError(getApiErrorMessage(requestError, "Unable to load tasks."));
     } finally {

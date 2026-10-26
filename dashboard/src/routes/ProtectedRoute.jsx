@@ -57,12 +57,12 @@ function ProtectedRoute({
     );
   }
 
-  // A route can also be reached via an admin-granted delegated permission
-  // (e.g. a specific HR/employee account given "create_employees"),
-  // regardless of that account's role.
+  // A route can also be reached through a permission, regardless of role:
+  // the older per-employee delegations (e.g. "create_employees") or any duty
+  // an administrator gave the role or the person (e.g. "manage_clients").
   const hasRequiredPermission =
     requiredPermissions.length > 0 &&
-    requiredPermissions.some((key) => (user.permissions || []).includes(key));
+    requiredPermissions.some((key) => (user.permissions || []).includes(key) || hasPermission(key));
   const hasRoleAccess = allowedRoles.includes(user.role)
     || (["alpha", "manager"].includes(user.role) && allowedRoles.includes("admin"));
 
@@ -72,6 +72,11 @@ function ProtectedRoute({
     !hasRoleAccess &&
     !hasRequiredPermission
   ) {
+    // Grants are still loading: decide once they are known.
+    if (requiredPermissions.length > 0 && !permissionsReady) {
+      return <p className="crm-permission-note" role="status">Checking access...</p>;
+    }
+
     if (["admin", "alpha", "manager"].includes(user.role)) {
       return (
         <Navigate

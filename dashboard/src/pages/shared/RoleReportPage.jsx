@@ -62,7 +62,9 @@ function RoleReportPage({ title, description, mode = "time", scope = "team", sho
   const [error, setError] = useState("");
   const [teamView, setTeamView] = useState(() => savedReportState.teamView === "client" ? "client" : "employee");
   const isTeamLead = user?.role === "team_lead";
-  const isTeamReport = isTeamLead && scope !== "personal";
+  // The route decides: team pages show the person's team (a lead's assigned
+  // employees, or an employee's own team when given "View team timesheets").
+  const isTeamReport = scope !== "personal";
   // A team lead only sees Add Entry when an administrator granted
   // "add_manual_entries" to the role; the API enforces it regardless.
   const [entryEmployee, setEntryEmployee] = useState(null);

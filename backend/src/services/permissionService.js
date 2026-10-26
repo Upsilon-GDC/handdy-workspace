@@ -56,11 +56,23 @@ function getRolePermissionsSync(role) {
   return granted.filter((key) => permissionAppliesToRole(key, role));
 }
 
-// Effective permissions = role grants + the older per-employee delegations
-// (create_employees / edit_employees), which are left untouched.
+// Effective permissions = role grants, adjusted by the person's own
+// exceptions (Employee.permissionOverrides), + the older per-employee
+// delegations (create_employees / edit_employees), which are left untouched.
+// A personal grant only counts where the permission can apply to the person's
+// role, and admin-level roles keep everything.
 function getEffectivePermissionsSync(user) {
   if (!user) return [];
-  return [...new Set([...getRolePermissionsSync(user.role), ...(user.permissions || [])])];
+  const effective = new Set(getRolePermissionsSync(user.role));
+  if (isConfigurableRole(user.role)) {
+    const { granted, revoked } = user.permissionOverrides || {};
+    for (const key of granted || []) {
+      if (permissionAppliesToRole(key, user.role)) effective.add(key);
+    }
+    for (const key of revoked || []) effective.delete(key);
+  }
+  for (const key of user.permissions || []) effective.add(key);
+  return [...effective];
 }
 
 function userHasPermission(user, ...keys) {

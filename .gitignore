@@ -36,3 +36,6 @@ dashboard/public/downloads/CRM-Setup.zip
 # Release builds are published through GitHub Releases, not committed (GitHub rejects files over 100 MB)
 artifacts/*.zip
 artifacts/*.exe
+
+# Database backups contain employee data (backend/scripts/backupDatabase.js)
+backend/backups/

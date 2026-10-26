@@ -128,6 +128,12 @@ const taskTimeLogSchema = new mongoose.Schema(
       enum: ["manual", "inactivity"],
       default: null,
     },
+
+    // IDs chosen by the desktop for one start or stop action. A retry with the
+    // same ID (for example after a lost response) returns the first result
+    // instead of acting twice. Absent on older records and older clients.
+    startOperationId: { type: String, default: undefined },
+    stopOperationId: { type: String, default: undefined },
   },
   {
     timestamps: true,
@@ -141,6 +147,16 @@ taskTimeLogSchema.index(
     unique: true,
     partialFilterExpression: { isActiveTimer: true },
   }
+);
+
+// One start per operation ID, even for two identical requests at once.
+taskTimeLogSchema.index(
+  { employee: 1, startOperationId: 1 },
+  { unique: true, partialFilterExpression: { startOperationId: { $type: "string" } } }
+);
+taskTimeLogSchema.index(
+  { employee: 1, stopOperationId: 1 },
+  { partialFilterExpression: { stopOperationId: { $type: "string" } } }
 );
 
 taskTimeLogSchema.index({ employee: 1, status: 1, startedAt: 1, stoppedAt: 1 });

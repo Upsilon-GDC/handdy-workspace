@@ -6,6 +6,7 @@ const {
   ipcMain,
   powerMonitor,
   screen,
+  session,
   shell,
 } = require("electron");
 const path = require("path");
@@ -264,6 +265,10 @@ app.on("second-instance", () => {
 
 app.whenReady().then(() => {
   if (!ownsSession) return;
+  // CRM needs no browser permissions (camera, microphone, location,
+  // notifications from pages…); Electron would otherwise grant them.
+  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+  session.defaultSession.setPermissionCheckHandler(() => false);
   Menu.setApplicationMenu(null);
   createWindow();
   timerLock.start({

@@ -6,8 +6,8 @@ const Task = require("../src/models/Task");
 const Team = require("../src/models/Team");
 const Client = require("../src/models/Client");
 const TaskTimeLog = require("../src/models/TaskTimeLog");
-const { getAllTimeLogs, getMyTeamTimeLogs, clipTimeLogToRange } = require("../src/controllers/taskTimeLogController");
-const { getBillingReport } = require("../src/controllers/billingController");
+const { getAllTimeLogs, getMyTeamTimeLogs, clipTimeLogToRange } = require("../src/modules/timers/taskTimeLogController");
+const { getBillingReport } = require("../src/modules/billing/billingController");
 const query = (rows) => ({ select() { return this; }, populate() { return this; }, sort() { return this; },
   skip() { return this; }, limit() { return this; }, lean: async () => rows,
   then(resolve, reject) { return Promise.resolve(rows).then(resolve, reject); } });

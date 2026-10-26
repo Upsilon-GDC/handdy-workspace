@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { navigationForRole } from "../src/components/layout/workspaceNavigation.js";
+import { dutyNavigationFor, navigationForRole } from "../src/components/layout/workspaceNavigation.js";
 import { isAdminRole, missingPermissionHint, missingTaskPermissions } from "../src/utils/permissions.js";
 
 // Mirrors AuthProvider.hasPermission: admin-level roles hold everything.
@@ -53,4 +53,33 @@ test("task permissions: creating needs both Create and Assign, and hints name wh
   assert.deepEqual(missingTaskPermissions(grants("manager", [])), []);
   assert.match(missingPermissionHint(["assign_tasks"]), /“Assign tasks” permission\./);
   assert.match(missingPermissionHint(["create_teams", "edit_teams"]), /“Create teams” and “Edit teams” permissions/);
+});
+
+// Full menu as AppShell builds it: the role's menu plus pages opened by duties.
+const menu = (role, keys) => {
+  const own = paths(role, keys);
+  return [...own, ...dutyNavigationFor(role, grants(role, keys), own).map((item) => item.path)];
+};
+
+test("duties given to a team lead or employee add their pages to the menu", () => {
+  const lead = menu("team_lead", ["view_team_timesheets", "manage_clients", "view_all_reports", "view_billing_amounts"]);
+  for (const path of ["/admin/clients", "/admin/dashboard", "/admin/timesheets/team", "/admin/timesheets/attendance", "/admin/billing"]) {
+    assert.ok(lead.includes(path), path);
+  }
+  assert.equal(lead.filter((path) => path === "/team-lead/timesheets/team").length, 1, "a lead's own team pages are not repeated");
+
+  const employee = menu("employee", ["create_tasks", "view_team_timesheets", "manage_projects", "edit_teams"]);
+  for (const path of ["/team-lead/tasks", "/team-lead/timesheets/team", "/team-lead/timesheets/attendance", "/admin/projects", "/admin/team"]) {
+    assert.ok(employee.includes(path), path);
+  }
+  for (const path of ["/admin/clients", "/admin/billing", "/admin/dashboard"]) assert.equal(employee.includes(path), false, path);
+  assert.deepEqual(menu("employee", []), paths("employee", []), "no duties, no extra pages");
+});
+
+test("HR gets no duplicate pages, and admin-level roles never need duty pages", () => {
+  const hr = menu("hr", ["view_all_reports", "view_billing_amounts", "manage_clients", "view_team_timesheets"]);
+  assert.equal(new Set(hr).size, hr.length);
+  assert.equal(hr.some((path) => path.startsWith("/team-lead/")), false, "HR has no team");
+  for (const role of ["admin", "alpha", "manager"]) assert.deepEqual(dutyNavigationFor(role, () => true, []), []);
+  assert.ok(paths("manager", []).includes("/admin/permissions"), "managers manage permissions");
 });

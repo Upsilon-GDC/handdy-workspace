@@ -5,7 +5,7 @@ const Attendance = require("../src/models/Attendance");
 const TaskTimeLog = require("../src/models/TaskTimeLog");
 const { deriveAttendance, recordAttendanceActivity, syncAttendanceForDay } = require("../src/services/attendanceService");
 const { closeStaleDesktopTimers } = require("../src/services/desktopTimerLease");
-const { stopTimer } = require("../src/controllers/taskTimeLogController");
+const { stopTimer } = require("../src/modules/timers/taskTimeLogController");
 
 const EMPLOYEE = "64b000000000000000000e01";
 const at = (iso) => new Date(iso);
@@ -117,8 +117,12 @@ test("without a database connection attendance is skipped", async (t) => {
 test("stopping a timer checks the employee out on the day the timer started", async (t) => {
   connected(t);
   const startedAt = at("2026-10-23T03:30:00Z");
-  const timer = { _id: "log", employee: EMPLOYEE, status: "running", startedAt, pauses: [], async save() { this.saved = true; } };
+  const timer = { _id: "log", employee: EMPLOYEE, status: "running", startedAt, pauses: [] };
   t.mock.method(TaskTimeLog, "findOne", async () => timer);
+  t.mock.method(TaskTimeLog, "findOneAndUpdate", async (_filter, update) => {
+    timer.saved = true;
+    return Object.assign(timer, update.$set);
+  });
   t.mock.method(TaskTimeLog, "find", (filter) => (filter.isActiveTimer
     ? { lean: async () => [] }
     : query([{ startedAt, stoppedAt: timer.stoppedAt, status: timer.status }])));

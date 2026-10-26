@@ -830,6 +830,56 @@ test("screen lock fails open while the server is unreachable and returns with it
   assert.equal(h.state.lock.at(-1), "locked");
 });
 
+// Signed in with no timer (screen locked) and a task chosen; the start
+// request waits until the test answers it.
+async function startHarness() {
+  const h = harness({ page: "dashboard", timer: null });
+  await h.context.loadActiveTimer();
+  const task = h.nodes.get("taskSelect");
+  h.nodes.get("projectSelect").value = "project-1";
+  task.value = "task-1";
+  task.selectedOptions = [{ dataset: {} }];
+  h.nodes.get("clientSelect").options = [];
+  h.run("clientsLoaded = true");
+  let answer;
+  h.state.sentLock = null;
+  const fetch = h.context.fetch;
+  h.context.fetch = (url, options) => {
+    if (!url.endsWith("/time-logs/start")) return fetch(url, options);
+    h.state.sentLock = h.state.lock.at(-1);
+    return new Promise((resolve) => { answer = resolve; });
+  };
+  const respond = (ok, data) => answer({ ok, status: ok ? 201 : 400, json: async () => data });
+  return { h, respond };
+}
+
+test("Start lifts the screen lock as soon as the request is sent", async () => {
+  const { h, respond } = await startHarness();
+  assert.equal(h.state.lock.at(-1), "locked");
+  const starting = h.run("runTimerAction(startTimer)");
+  assert.equal(h.state.sentLock, "running", "unlocked before the server answers");
+  await h.check();
+  assert.equal(h.state.lock.at(-1), "running", "idle polls keep it unlocked while the start is pending");
+  respond(true, { timeLog: { _id: "new", status: "running", startedAt: new Date().toISOString(), pauses: [] } });
+  await starting;
+  assert.equal(h.state.lock.at(-1), "running");
+  assert.equal(h.nodes.get("timerLockNotice").hidden, true);
+});
+
+test("a refused start locks the screen again; a start that is never sent never unlocks", async () => {
+  const { h, respond } = await startHarness();
+  h.nodes.get("taskSelect").value = "";
+  await h.run("runTimerAction(startTimer)");
+  assert.ok(!h.state.lock.includes("running"), "no task chosen: the request is not sent and the lock stays");
+  h.nodes.get("taskSelect").value = "task-1";
+  const starting = h.run("runTimerAction(startTimer)");
+  assert.equal(h.state.sentLock, "running");
+  respond(false, { message: "This task is closed." });
+  await starting;
+  assert.equal(h.state.lock.at(-1), "locked");
+  assert.equal(h.nodes.get("timerMessage").textContent, "This task is closed.");
+});
+
 test("signing out releases the screen lock", async () => {
   const h = harness({ page: "dashboard", timer: null });
   await h.context.loadActiveTimer();

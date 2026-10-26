@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const {
   clipTimeLogToRange,
   getRequestedReportRange,
-} = require("../src/controllers/taskTimeLogController");
+} = require("../src/modules/timers/taskTimeLogController");
 
 test("clips an overnight timer and its pauses to the selected report day", () => {
   const log = {

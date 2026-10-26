@@ -1,4 +1,5 @@
 const { dependencyRevision, digest } = require("../services/readRevisions");
+const { getEffectivePermissionsSync } = require("../services/permissionService");
 const entries = new Map();
 const MAX_ENTRIES = 64;
 const MAX_BYTES = 8 * 1024 * 1024;
@@ -19,7 +20,9 @@ function catalogCache(models, { shared = false } = {}) {
       const references = await dependencyRevision(models);
       const key = digest([req.baseUrl, req.path, req.query,
         shared ? null : String(req.user._id), req.user.role, String(req.user.team || ""),
-        String(req.user.teamLead || ""), req.user.permissions || [], references]);
+        // Effective permissions: some lists widen with a duty (every project for
+        // "Create/edit projects"), so a change of grants must change the key.
+        String(req.user.teamLead || ""), [...getEffectivePermissionsSync(req.user)].sort(), references]);
       // The key already encodes the caller's scope and every dependency's
       // revision, so an identical key means an identical list. Answering
       // "304 Not Modified" skips the body entirely.

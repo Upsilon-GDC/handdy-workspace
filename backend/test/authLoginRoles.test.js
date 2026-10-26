@@ -5,7 +5,7 @@ process.env.JWT_SECRET = process.env.JWT_SECRET || "test-only-secret";
 
 const Employee = require("../src/models/Employee");
 const AuthSession = require("../src/models/AuthSession");
-const { login, quickLogin } = require("../src/controllers/authController");
+const { login, quickLogin } = require("../src/modules/auth/authController");
 
 const PASSWORD = "correct-password";
 

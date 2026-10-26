@@ -7,6 +7,18 @@ const vm = require("node:vm");
 const { NsisUpdater } = require("electron-updater");
 const { createUpdateService } = require("../app-updater");
 
+// Fake Electron session: main.js installs permission handlers on it.
+const fakeSession = () => {
+  const handlers = {};
+  return {
+    handlers,
+    defaultSession: {
+      setPermissionRequestHandler(handler) { handlers.request = handler; },
+      setPermissionCheckHandler(handler) { handlers.check = handler; },
+    },
+  };
+};
+
 test("real NSIS quit hook waits for the existing main-process timer-close handshake", async () => {
   const app = Object.assign(new EventEmitter(), {
     isPackaged: true,
@@ -61,7 +73,7 @@ test("real NSIS quit hook waits for the existing main-process timer-close handsh
       if (name === "electron") return {
         app, BrowserWindow: Window, ipcMain, Menu: { setApplicationMenu() {} },
         powerMonitor: new EventEmitter(), screen: Object.assign(new EventEmitter(), { getAllDisplays: () => [] }),
-        shell: {}, dialog: { showMessageBox: async () => ({ response: 0 }) },
+        shell: {}, dialog: { showMessageBox: async () => ({ response: 0 }) }, session: fakeSession(),
       };
       if (name === "./api-config") return require("../api-config");
       if (name === "./timer-lock") return require("../timer-lock");
@@ -136,6 +148,7 @@ async function bootMainWithAutoRestart({ url = "file:///C:/CRM/resources/app.asa
   const installs = [];
   updater.quitAndInstall = (...args) => { installs.push(args); };
   const powerMonitor = Object.assign(new EventEmitter(), { getSystemIdleTime: () => idleSeconds });
+  const electronSession = fakeSession();
   const filename = path.resolve(__dirname, "../main.js");
   const context = vm.createContext({
     __dirname: path.dirname(filename), console, URL, Date, process: { platform: "win32", env: {} },
@@ -144,7 +157,7 @@ async function bootMainWithAutoRestart({ url = "file:///C:/CRM/resources/app.asa
       if (name === "electron") return {
         app, BrowserWindow: Window, ipcMain, Menu: { setApplicationMenu() {} },
         powerMonitor, screen: Object.assign(new EventEmitter(), { getAllDisplays: () => [] }),
-        shell: {}, dialog: { showMessageBox: async () => assert.fail("An update restart never shows the close warning") },
+        shell: {}, dialog: { showMessageBox: async () => assert.fail("An update restart never shows the close warning") }, session: electronSession,
       };
       if (name === "./api-config") return require("../api-config");
       if (name === "./timer-lock") return require("../timer-lock");
@@ -168,7 +181,7 @@ async function bootMainWithAutoRestart({ url = "file:///C:/CRM/resources/app.asa
     timer.callback();
     return true;
   };
-  return { app, ipcMain, window, updater, installs, sent, report, tick, quits: () => quits };
+  return { app, ipcMain, window, updater, installs, sent, report, tick, quits: () => quits, permissions: electronSession.handlers };
 }
 
 test("an update restarts CRM by itself while the screen is locked, after the timer-close handshake", async () => {
@@ -222,4 +235,14 @@ test("someone using the PC postpones the restart", async () => {
     m.tick(60);
   }
   assert.deepEqual(m.sent, []);
+});
+
+test("the desktop app refuses every browser permission request", async () => {
+  const m = await bootMainWithAutoRestart();
+  for (const permission of ["media", "geolocation", "notifications", "clipboard-read"]) {
+    let granted;
+    m.permissions.request({}, permission, (answer) => { granted = answer; });
+    assert.equal(granted, false, permission);
+    assert.equal(m.permissions.check({}, permission), false, permission);
+  }
 });

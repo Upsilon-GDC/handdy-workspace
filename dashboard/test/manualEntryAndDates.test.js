@@ -79,6 +79,12 @@ test("manual-entry UI: manager and HR act on every employee, leads only on their
   assert.equal(canManageManualEntries(lead, { ...employee, role: "team_lead" }), false);
   assert.equal(canManageManualEntries(lead, { ...employee, team: "other" }), false);
   assert.equal(canManageManualEntries(employee, employee), false);
+  // An employee given the duty: teammates only, never their lead or another team.
+  const mate = { _id: "mate", role: "employee", team: "team" };
+  assert.equal(canManageManualEntries(employee, mate), true);
+  assert.equal(canManageManualEntries(employee, { ...mate, team: "other" }), false);
+  assert.equal(canManageManualEntries(employee, { ...lead, _id: "lead-2" }), false);
+  assert.equal(canManageManualEntries({ ...employee, team: null }, { ...mate, team: null }), false);
 });
 
 test("populated project identifiers still match and projects without linked tasks are not offered", () => {
