@@ -1,6 +1,6 @@
 # Security review (26 October 2026)
 
-Scope: backend API, dashboard and desktop app as in this repository (desktop 1.2.33). Method: code
+Scope: backend API, dashboard and desktop app as in this repository (desktop 2.0.1). Method: code
 review of every route's access rule, authentication, session handling, input handling, the desktop
 app's Electron settings, and `npm audit` of production dependencies. No penetration test of the live
 service was done.

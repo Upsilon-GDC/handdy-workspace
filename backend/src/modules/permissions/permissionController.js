@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Employee = require("../../models/Employee");
 const RolePermission = require("../../models/RolePermission");
 const {
+  ALL_PERMISSION_KEYS,
   CONFIGURABLE_ROLES,
   DEFAULT_ROLE_PERMISSIONS,
   PERMISSION_CATEGORIES,
@@ -97,6 +98,10 @@ const updateRolePermissions = async (req, res) => {
 const PERSON_FIELDS = "employeeId fullName email role team isActive permissions"
   + " +permissionOverrides.granted +permissionOverrides.revoked";
 
+// Keys no longer in the catalog (e.g. "assign_tasks", folded into
+// "create_tasks") are left out, so the page never sends them back.
+const currentKeys = (keys) => (keys || []).filter((key) => ALL_PERMISSION_KEYS.includes(key));
+
 const describePerson = (employee) => ({
   id: String(employee._id),
   employeeId: employee.employeeId || "",
@@ -104,8 +109,8 @@ const describePerson = (employee) => ({
   email: employee.email || "",
   role: employee.role,
   team: employee.team?.name || "",
-  granted: [...(employee.permissionOverrides?.granted || [])],
-  revoked: [...(employee.permissionOverrides?.revoked || [])],
+  granted: currentKeys(employee.permissionOverrides?.granted),
+  revoked: currentKeys(employee.permissionOverrides?.revoked),
   permissions: getEffectivePermissionsSync(employee),
 });
 

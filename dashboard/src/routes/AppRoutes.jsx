@@ -107,9 +107,9 @@ const ALL_REPORTS = ["view_all_reports"];
 const TEAM_REPORTS = ["view_team_timesheets"];
 const BILLING = ["view_billing_amounts"];
 // The task form always assigns new tasks to the whole team.
-const CREATE_TASKS = ["create_tasks", "assign_tasks"];
+const CREATE_TASKS = ["create_tasks"];
 // Duties that open a page to any role (role or personal permissions).
-const TASK_DUTIES = ["create_tasks", "edit_tasks", "assign_tasks", "reassign_tasks", "archive_tasks"];
+const TASK_DUTIES = ["create_tasks", "edit_tasks", "reassign_tasks", "archive_tasks"];
 const CLIENT_DUTIES = ["manage_clients"];
 const PROJECT_DUTIES = ["manage_projects"];
 const TEAM_ADMIN_DUTIES = ["create_teams", "edit_teams", "assign_team_leads"];

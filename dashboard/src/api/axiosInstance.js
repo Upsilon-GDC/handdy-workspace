@@ -1,5 +1,6 @@
 import axios from "axios";
 import { API_BASE_URL } from "./apiConfig";
+import { notePermissionVersion } from "./permissionVersion";
 
 export { API_BASE_URL } from "./apiConfig";
 
@@ -26,8 +27,12 @@ axiosInstance.interceptors.request.use(
 );
 
 axiosInstance.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    notePermissionVersion(response.headers);
+    return response;
+  },
   (error) => {
+    notePermissionVersion(error.response?.headers);
     if (error.response?.status === 401 || error.response?.data?.code === "ACCOUNT_INACTIVE") {
       if (error.response?.data?.code === "SESSION_REVOKED") {
         sessionStorage.setItem("sessionEndedMessage", error.response.data.message || "This account is now active on another device.");

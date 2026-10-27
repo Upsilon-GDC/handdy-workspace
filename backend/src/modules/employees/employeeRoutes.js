@@ -39,7 +39,7 @@ router.get(
 
 // Own team (task assignment, team reports): team leads, or anyone given a
 // team duty. Non-leads get names only (see getMyTeam).
-const TEAM_MEMBERS = authorizeRolesOrPermissions({ roles: ["team_lead"], permissions: ["view_team_timesheets", "create_tasks", "edit_tasks", "assign_tasks", "reassign_tasks", "add_manual_entries"] });
+const TEAM_MEMBERS = authorizeRolesOrPermissions({ roles: ["team_lead"], permissions: ["view_team_timesheets", "create_tasks", "edit_tasks", "reassign_tasks", "add_manual_entries"] });
 
 router.get(
   "/my-team",

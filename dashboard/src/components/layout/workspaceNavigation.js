@@ -87,7 +87,7 @@ export const navigationForRole = (role, hasPermission) => {
 // person holds any of `anyOf`; `roles` limits team pages to employees (team
 // leads already have them). Company pages say "Company" for team leads and
 // employees, so they are not mistaken for their own team's pages.
-const TASK_DUTIES = ["create_tasks", "edit_tasks", "assign_tasks", "reassign_tasks", "archive_tasks"];
+const TASK_DUTIES = ["create_tasks", "edit_tasks", "reassign_tasks", "archive_tasks"];
 const TEAM_ADMIN = ["create_teams", "edit_teams", "assign_team_leads"];
 const EMPLOYEES = ["employee"];
 

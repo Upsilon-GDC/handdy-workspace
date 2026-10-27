@@ -19,6 +19,7 @@ list is in `CODEBASE_GUIDE.md` (section 6.4); the server code is in `backend/src
 | Item | Contract |
 |---|---|
 | Header | `Authorization: Bearer <token>` (from `/auth/login` or `/auth/quick-login`) |
+| Response header | `X-Permissions-Version`: 12-character fingerprint of the caller's effective permissions. It changes when an administrator or manager changes them; the dashboard then reloads `/permissions/me`. Other clients may ignore it. |
 | 401 `SESSION_REVOKED` | Session ended (sign-out, another device approved, expired). Clients return to login. |
 | 403 `ACCOUNT_INACTIVE` | Account deactivated. Clients return to login with the message. |
 | 409 `DEVICE_APPROVAL_REQUIRED` | (login only) Another PC holds the desktop session; wait with `/auth/login-requests/:id/wait`. |
@@ -26,7 +27,7 @@ list is in `CODEBASE_GUIDE.md` (section 6.4); the server code is in `backend/src
 ## Timer (desktop)
 
 ### `POST /time-logs/start`
-Body: `project`, `task`, optional `client`, `note`, `clientType: "desktop"`, **`operationId`** (8–100 chars `A-Z a-z 0-9 _ -`, desktop 1.2.33+).
+Body: `project`, `task`, optional `client`, `note`, `clientType: "desktop"`, **`operationId`** (8–100 chars `A-Z a-z 0-9 _ -`, desktop 2.0.1+).
 
 | Answer | Meaning |
 |---|---|
@@ -39,7 +40,7 @@ Body: `project`, `task`, optional `client`, `note`, `clientType: "desktop"`, **`
 Desktop rule: reuse an `operationId` only to retry the **same selection** after a lost or 5xx response; make a new one after any other answer.
 
 ### `POST /time-logs/stop`
-Body: optional `idleSeconds` (whole seconds, max 12 h), `logoutReason: "inactivity" | "manual"`, **`operationId`**, **`timeLogId`** (desktop 1.2.33+).
+Body: optional `idleSeconds` (whole seconds, max 12 h), `logoutReason: "inactivity" | "manual"`, **`operationId`**, **`timeLogId`** (desktop 2.0.1+).
 
 | Answer | Meaning |
 |---|---|

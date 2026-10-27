@@ -18,6 +18,7 @@ const { authorizeRoles } = require("../src/middleware/authorizeRoles");
 const query = (value) => ({ select() { return this; }, sort() { return this; },
   then(resolve, reject) { return Promise.resolve(value).then(resolve, reject); } });
 const response = () => ({ statusCode: 200, status(code) { this.statusCode = code; return this; },
+  setHeader(name, value) { this.headers = { ...this.headers, [name]: value }; },
   json(body) { this.body = body; return this; } });
 const user = { _id: "legacy-employee", team: "team", role: "employee", isActive: true, tokenVersion: 0 };
 async function call(handler, body = {}) {

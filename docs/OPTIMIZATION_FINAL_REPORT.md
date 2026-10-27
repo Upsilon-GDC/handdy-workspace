@@ -2,7 +2,7 @@
 
 Plan: `docs/CRM_OPTIMIZATION_PHASE_PLAN.md`. Source: `docs/Handdy_CRM_Updated_Architecture_and_Render_Data_Optimization_Report.pdf`.
 State on 26 October 2026: **all phases built and tested, not yet deployed.** Server and dashboard go
-live with the next push to `main`; the desktop part ships as **1.2.33**.
+live with the next push to `main`; the desktop part ships as **2.0.1**.
 
 ## Starting point
 
@@ -21,7 +21,7 @@ changed to reduce it.
 | 1.5 | Reports rely on the 30 s background sweep (decision D1) | One query less per report request | `OPT_REPORTS_SKIP_SWEEP` |
 | 1.6 | Dashboard files cached a year (hashed names), `index.html` always re-checked | Fewer HTTP responses | `OPT_STATIC_ASSET_CACHE` |
 | 1.7 | MongoDB pool limited to 10 connections | Fewer idle connections and checks | `MONGODB_MAX_POOL_SIZE` |
-| 2.1 | Desktop project/task lists revalidate (304) instead of re-downloading every 30 s (desktop 1.2.33) | Fewer HTTP responses from idle desktops | — (desktop) |
+| 2.1 | Desktop project/task lists revalidate (304) instead of re-downloading every 30 s (desktop 2.0.1) | Fewer HTTP responses from idle desktops | — (desktop) |
 | 2.2 | Open reports check a fingerprint instead of re-downloading the whole range every 5 min | Large reports: hourly instead of 12× per hour | `OPT_REPORT_CHECKSUM` |
 | 3 | Timer safety: operation IDs on start/stop, atomic stop (fixes a stop-vs-sweep race that could count unconfirmed time), clean shutdown on deploys | Correctness, no traffic change | — (revert) |
 | 4 | Backend grouped by business area; API contracts written down | Maintenance only | — |
@@ -51,11 +51,11 @@ should fall by well over half. Only the measurements below can confirm it.
 
 | Area | Result |
 |---|---|
-| Backend | 221 / 221 tests pass (`npm test`) |
-| Dashboard | 56 / 56 tests pass, lint clean, route audit passed (41 navigation targets, 63 routes), production build OK |
+| Backend | 223 / 223 tests pass (`npm test`) |
+| Dashboard | 60 / 60 tests pass, lint clean, route audit passed (41 navigation targets, 63 routes), production build OK |
 | Desktop | 119 / 119 unit tests pass; Electron smoke tests pass (inactivity popup and logout, dashboard lifecycle with 125 employees) |
 | Dependencies | `npm audit --omit=dev`: 0 vulnerabilities in backend, dashboard and desktop |
-| Installer | `CRM-1.2.33-Windows-x64.exe` built; `latest.yml` version 1.2.33; updater points at `Upsilon-GDC/handdy-workspace` |
+| Installer | `CRM-2.0.1-Windows-x64.exe` built; `latest.yml` version 2.0.1; updater points at `Upsilon-GDC/handdy-workspace` |
 
 New tests cover: metrics and alerts, each Phase 1 switch, cache headers, report fingerprint (server
 and dashboard), 10 timer race/retry/restart cases, desktop retry behaviour, graceful shutdown, health
@@ -86,7 +86,7 @@ switched off on its own (`docs/DEPLOY_AND_ROLLBACK.md`).
 ## Still open (needs you)
 
 1. Push all changes; Render deploys; run the checks in `docs/DEPLOY_AND_ROLLBACK.md`.
-2. Publish desktop release **v1.2.33** (3 files from `desktop-app/dist`); try it on 2–3 PCs first.
+2. Publish desktop release **v2.0.1** (3 files from `desktop-app/dist`); try it on 2–3 PCs first.
 3. After 2–3 working days, fill in the table above (plan tasks 0.1, 0.2, 0.7).
 4. Atlas Backup tab: decide on backups (D3) and run the first restore drill (`docs/BACKUP_AND_RESTORE.md`).
 5. Code-signing certificate (D4), recommended in `docs/SECURITY_REVIEW.md`.

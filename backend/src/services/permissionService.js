@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const mongoose = require("mongoose");
 const RolePermission = require("../models/RolePermission");
 const { isAdminRole } = require("../utils/roles");
@@ -75,6 +76,17 @@ function getEffectivePermissionsSync(user) {
   return [...effective];
 }
 
+// Short fingerprint of a person's effective permissions. `protect` sends it
+// with every response (PERMISSION_VERSION_HEADER) so an open dashboard
+// notices when an administrator or manager changes them and reloads its menus
+// and buttons, without polling for it.
+const PERMISSION_VERSION_HEADER = "X-Permissions-Version";
+
+function getPermissionVersion(user) {
+  const keys = getEffectivePermissionsSync(user).sort().join(",");
+  return crypto.createHash("sha1").update(`${user?.role}|${keys}`).digest("base64url").slice(0, 12);
+}
+
 function userHasPermission(user, ...keys) {
   if (!user) return false;
   if (isAdminRole(user.role)) return true;
@@ -83,8 +95,10 @@ function userHasPermission(user, ...keys) {
 }
 
 module.exports = {
+  PERMISSION_VERSION_HEADER,
   clearPermissionCache,
   getEffectivePermissionsSync,
+  getPermissionVersion,
   getRolePermissionsSync,
   refreshPermissionOverrides,
   setRoleOverride,

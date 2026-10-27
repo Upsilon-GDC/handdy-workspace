@@ -41,12 +41,12 @@ they are, so a rollback needs no data change.
 
 ## Desktop app (GitHub Releases)
 
-1. In `desktop-app/package.json` raise `version` (e.g. `1.2.33` → `1.2.34`); it must be higher than
+1. In `desktop-app/package.json` raise `version` (e.g. `2.0.1` → `2.0.2`); it must be higher than
    the last release.
 2. `cd desktop-app`, then `npm test`, then `npm run build`.
-3. GitHub → **Releases** → **Draft a new release** → tag `v1.2.34` on `main` → title `CRM 1.2.34` →
-   attach the 3 files from `desktop-app/dist`: `CRM-1.2.34-Windows-x64.exe`,
-   `CRM-1.2.34-Windows-x64.exe.blockmap`, `latest.yml` → **Publish release** (not draft).
+3. GitHub → **Releases** → **Draft a new release** → tag `v2.0.2` on `main` → title `CRM 2.0.2` →
+   attach the 3 files from `desktop-app/dist`: `CRM-2.0.2-Windows-x64.exe`,
+   `CRM-2.0.2-Windows-x64.exe.blockmap`, `latest.yml` → **Publish release** (not draft).
 4. Apps check 15 s after start and every 6 hours, download quietly, and install when no timer runs
    and the PC has been idle for a minute (or when CRM closes).
 
@@ -56,7 +56,7 @@ Never replace or delete the files of a published release: `latest.yml` holds the
 ### Rolling back the desktop app
 
 Apps never update to a *lower* version. To undo a desktop release, revert the desktop change, raise
-the version again (e.g. `1.2.35`) and publish that release; it replaces the bad one through the
+the version again (e.g. `2.0.3`) and publish that release; it replaces the bad one through the
 normal auto-update.
 
 ### Code signing (decision D4)
@@ -73,7 +73,7 @@ With a Windows code-signing certificate (OV or EV, from a certificate authority)
 
 1. Push all code → Render deploys → run the checks above.
 2. Let it run a working day; look at the `[metrics]` lines and `/health`.
-3. Build and publish desktop **1.2.33** (operation IDs, list caching, permission refusal, screen lock lifts as soon as Start is pressed). Installed
+3. Build and publish desktop **2.0.1** (operation IDs, list caching, permission refusal, screen lock lifts as soon as Start is pressed). Installed
    1.2.32 apps update themselves automatically.
 4. After 2–3 working days, compare Render's daily bandwidth with the October numbers
    (`docs/OPTIMIZATION_FINAL_REPORT.md`).

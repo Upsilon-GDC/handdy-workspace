@@ -11,6 +11,7 @@ const { DEFAULT_ROLE_PERMISSIONS, ALL_PERMISSION_KEYS } = require("../src/utils/
 const permissionRoutes = require("../src/modules/permissions/permissionRoutes");
 const taskTimeLogRoutes = require("../src/modules/timers/taskTimeLogRoutes");
 const billingRoutes = require("../src/modules/billing/billingRoutes");
+const taskRoutes = require("../src/modules/tasks/taskRoutes");
 
 const response = () => ({
   statusCode: 200,
@@ -155,11 +156,27 @@ test("every catalog entry documents its effect and the roles it applies to", () 
   }
 });
 
-test("task assignment needs assign_tasks and a changed assignment needs reassign_tasks", async (t) => {
-  const withAssignees = await run(guardTaskAssignmentOnCreate, { role: "employee" }, { body: { assignedTo: ["emp-1"] } });
+test("Create tasks alone adds team-wide tasks; picking or changing employees needs reassign_tasks", async (t) => {
+  // An employee given only "Create tasks" (e.g. on the Permissions page).
+  const creator = { role: "employee", permissionOverrides: { granted: ["create_tasks"] } };
+  const teamWide = { taskNames: ["a", "b"], teams: [], assignToAllEmployees: true, assignedTo: [], autoProjects: true };
+  assert.equal((await run(guardTaskAssignmentOnCreate, creator, { body: teamWide })).allowed, true);
+  const withAssignees = await run(guardTaskAssignmentOnCreate, creator, { body: { assignedTo: ["emp-1"] } });
   assert.equal(withAssignees.res.statusCode, 403);
   assert.equal((await run(guardTaskAssignmentOnCreate, { role: "employee" }, { body: { taskName: "x" } })).allowed, true);
   assert.equal((await run(guardTaskAssignmentOnCreate, { role: "team_lead" }, { body: { assignedTo: ["emp-1"] } })).allowed, true);
+  const createRoute = taskRoutes.stack.find((layer) => layer.route?.path === "/bulk" && layer.route.methods.post).route.stack;
+  const reachesController = async (user) => {
+    const res = response();
+    for (const layer of createRoute.slice(1, -1)) {
+      let advanced = false;
+      await layer.handle({ user, body: teamWide, params: {}, query: {} }, res, () => { advanced = true; });
+      if (!advanced) return false;
+    }
+    return true;
+  };
+  assert.equal(await reachesController(creator), true, "Create tasks is enough for the Add task form");
+  assert.equal(await reachesController({ role: "employee" }), false, "without it the API refuses");
 
   t.mock.method(Task, "findById", () => ({
     select() { return this; },

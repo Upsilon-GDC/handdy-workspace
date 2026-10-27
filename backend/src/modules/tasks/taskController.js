@@ -11,7 +11,7 @@ const { ownTeamIds, teamTaskMatch } = require("../../services/teamScope");
 // Admin-level roles and HR work with every team's tasks; team leads and
 // employees given task duties work with their own team (services/teamScope.js).
 const worksWithAllTeams = (user) => isAdminRole(user.role) || ["manager", "hr"].includes(user.role);
-const TASK_DUTIES = ["create_tasks", "edit_tasks", "assign_tasks", "reassign_tasks", "archive_tasks"];
+const TASK_DUTIES = ["create_tasks", "edit_tasks", "reassign_tasks", "archive_tasks"];
 const canManageTasks = (user) => userHasPermission(user, ...TASK_DUTIES);
 
 const normalizeAssignments = (assignedTo) => {

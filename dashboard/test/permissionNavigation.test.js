@@ -48,10 +48,11 @@ test("Shifts and Schedule stay out of every menu", () => {
   }
 });
 
-test("task permissions: creating needs both Create and Assign, and hints name what is missing", () => {
-  assert.deepEqual(missingTaskPermissions(grants("team_lead", ["create_tasks", "edit_tasks", "archive_tasks"])), ["assign_tasks"]);
+test("task permissions: Create tasks alone allows adding tasks, and hints name what is missing", () => {
+  assert.deepEqual(missingTaskPermissions(grants("team_lead", ["create_tasks", "edit_tasks", "archive_tasks"])), []);
+  assert.deepEqual(missingTaskPermissions(grants("employee", ["create_tasks"])), ["edit_tasks", "archive_tasks"]);
   assert.deepEqual(missingTaskPermissions(grants("manager", [])), []);
-  assert.match(missingPermissionHint(["assign_tasks"]), /“Assign tasks” permission\./);
+  assert.match(missingPermissionHint(["create_tasks"]), /“Create tasks” permission\./);
   assert.match(missingPermissionHint(["create_teams", "edit_teams"]), /“Create teams” and “Edit teams” permissions/);
 });
 

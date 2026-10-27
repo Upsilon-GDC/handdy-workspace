@@ -74,8 +74,10 @@ function TeamLeadTasks() {
       <main className="tl-main">
         <div className="tl-tasks-header">
           <div><p>TEAM TASK MANAGEMENT</p><h1>Tasks</h1><span>Create and manage work for your team.</span></div>
-          <button type="button" onClick={() => void loadTasks()} disabled={loading}>Refresh</button>
-          {canCreate && <button type="button" onClick={() => navigate("/team-lead/tasks/add")}>+ Add task</button>}
+          <div className="tl-tasks-actions">
+            <button type="button" onClick={() => void loadTasks()} disabled={loading}>Refresh</button>
+            {canCreate && <button type="button" onClick={() => navigate("/team-lead/tasks/add")}>+ Add task</button>}
+          </div>
         </div>
         {missingPermissions.length > 0 && <PermissionNote permissions={missingPermissions}>
           {canCreate || canArchive ? "Some task actions are hidden." : "View only."}

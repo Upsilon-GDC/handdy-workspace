@@ -68,7 +68,7 @@ test("the employee list shows active people in configurable roles with their exc
     calls.filter = filter;
     return query([
       { _id: LEAD_ID, employeeId: "E7", fullName: "Asha Rao", email: "asha@example.com", role: "team_lead",
-        team: { name: "Design" }, permissionOverrides: { granted: ["add_manual_entries"], revoked: ["create_tasks"] } },
+        team: { name: "Design" }, permissionOverrides: { granted: ["add_manual_entries", "assign_tasks"], revoked: ["create_tasks"] } },
       { _id: "64b000000000000000000a08", fullName: "", email: "new@example.com", role: "employee", team: null },
     ], calls);
   });
@@ -80,7 +80,7 @@ test("the employee list shows active people in configurable roles with their exc
   assert.doesNotMatch(calls.select, /password|rate/i, "only what the page shows");
   const [lead, newcomer] = res.body.employees;
   assert.equal(lead.team, "Design");
-  assert.deepEqual([lead.granted, lead.revoked], [["add_manual_entries"], ["create_tasks"]]);
+  assert.deepEqual([lead.granted, lead.revoked], [["add_manual_entries"], ["create_tasks"]], "retired keys are not sent to the page");
   assert.ok(lead.permissions.includes("add_manual_entries") && !lead.permissions.includes("create_tasks"));
   assert.equal(newcomer.fullName, "new@example.com");
   assert.deepEqual([newcomer.granted, newcomer.revoked], [[], []]);

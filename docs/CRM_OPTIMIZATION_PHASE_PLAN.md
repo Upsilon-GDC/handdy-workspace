@@ -99,7 +99,7 @@ Order follows the Phase 0 ranking; the list below is the expected order.
 - [ ] ~~**1.2**~~ **Skipped (D2 = no):** dashboard tabs keep their "another device" long-poll; 1.1 already makes it cheap.
   Was: dashboard tabs stop the nonstop "another device" long-poll. Browsers never get approval requests; sign-out is still detected by normal requests (401). *(S1)*
 - [ ] **1.3 Deferred:** after 1.1 each idle long-poll costs one database read per 20 s, so this would save little; revisit if the metrics disagree.
-  Was: desktop waits longer between long-polls while minimized (needs desktop 1.2.33; older versions keep working). *(S1)*
+  Was: desktop waits longer between long-polls while minimized (needs desktop 2.0.1; older versions keep working). *(S1)*
 - [x] **1.4 Me:** heartbeat combines "close stale timer" and "extend lease" into one conditional database update instead of a query + update. Same 20 s interval, same 90 s rule. *(S3)*
 - [x] **1.5 Me (D1 = yes):** report/history requests rely on the 30 s background sweep instead of running their own stale-timer query. Timer start/stop/active keep their own check. *(S2)*
 - [x] **1.6 Me:** hashed dashboard files (`/assets/*`) cached for a year (`immutable`); `index.html` always re-checked. *(S5)*
@@ -145,14 +145,14 @@ Code: `backend/src/config/optimizations.js`. Tests: `backend/test/phase1Optimiza
 
 **Goal:** stop re-sending unchanged data. Built **beside** the current endpoints; old clients keep working.
 
-- [x] **2.1 Me:** desktop project and task lists revalidate instead of re-downloading. Finding: the desktop loaded them with `cache: "no-store"`, so the server's ETag/304 never applied and the full lists came down every 30 s whenever no timer ran (also the whole time the screen is locked). Now `cache: "no-cache"`: Chromium sends the ETag, an unchanged list costs a body-less 304, and edits still arrive at once because the ETag changes with every edit. Chromium's HTTP cache persists across app restarts. The clients list already worked this way. **Ships with desktop 1.2.33.**
+- [x] **2.1 Me:** desktop project and task lists revalidate instead of re-downloading. Finding: the desktop loaded them with `cache: "no-store"`, so the server's ETag/304 never applied and the full lists came down every 30 s whenever no timer ran (also the whole time the screen is locked). Now `cache: "no-cache"`: Chromium sends the ETag, an unchanged list costs a body-less 304, and edits still arrive at once because the ETag changes with every edit. Chromium's HTTP cache persists across app restarts. The clients list already worked this way. **Ships with desktop 2.0.1.**
 - [x] **2.2 Me:** open dashboard reports no longer re-download their whole range every 5 minutes. With each delta the server sends a **fingerprint** of the complete report (row count + sum of last-change seconds; active timers listed by ID and left out) when the dashboard asks (`checksum=true`). The dashboard computes the same fingerprint over its merged copy:
   - match → the copy is proven complete and keeps using deltas; a full reload still happens at least once an hour;
   - mismatch (a missed change, a deletion, any surprise) → the previous rule applies: full reload after 5 minutes. So it can never do worse than before.
   - Desktops and older dashboards don't ask, so they cause no extra database work. The desktop's own "today" timesheet (~20 rows) keeps the 5-minute rule.
   - Switch: `OPT_REPORT_CHECKSUM=false`. Code: `backend/src/services/reportSync.js` (`reportChecksum`), `dashboard/src/utils/reportLoader.js`.
 - [x] **2.3 Me:** shadow-compare: covered by design. Every delta is checked against the server's fingerprint of the full result, and any difference falls back to a full reload.
-- [ ] **2.4 You (after the final push):** install desktop 1.2.33 on 2-3 PCs first, then everyone through auto-update.
+- [ ] **2.4 You (after the final push):** install desktop 2.0.1 on 2-3 PCs first, then everyone through auto-update.
 
 **Exit:** zero differences in the shadow compare; measured byte reduction.
 **Rollback:** clients fall back to the current endpoints automatically.
@@ -169,7 +169,7 @@ Expected effect (estimate): a dashboard report left open re-downloads its full r
   - Server: `startOperationId` / `stopOperationId` on the time log (unique per employee for starts, so two identical starts at the same moment still create one timer). Reusing an ID for a different task is refused (409 `OPERATION_ID_REUSED`).
   - A stop may name its timer (`timeLogId`): a late or repeated click can never stop a timer started afterwards (409 `TIMER_CHANGED`).
   - "Already have an active timer" now carries the code `ACTIVE_TIMER_EXISTS`.
-  - Desktop (**1.2.33**): sends the IDs and reuses them when retrying after a lost response; on `ACTIVE_TIMER_EXISTS` it shows the running timer instead of an error; on `TIMER_CHANGED` it refreshes like it already did for "already stopped".
+  - Desktop (**2.0.1**): sends the IDs and reuses them when retrying after a lost response; on `ACTIVE_TIMER_EXISTS` it shows the running timer instead of an error; on `TIMER_CHANGED` it refreshes like it already did for "already stopped".
 - [x] **3.2 Me:** state checks on every timer change: a late heartbeat can never reopen a stopped timer; recovery and stop cannot both "win".
   - **Bug fixed:** stop used to read the timer, compute and then save the whole document. If the 30 s sweep closed the timer at its last heartbeat in between, the save overwrote that with a later stop time and counted time the desktop never confirmed. Stop is now one conditional update (only while the timer is still active in the status that was read); otherwise the sweep's result stands and the desktop is told the timer was already stopped.
   - Pause, resume, note, heartbeat and the sweep were already conditional updates; tests now cover them.
@@ -189,7 +189,7 @@ Expected effect (estimate): a dashboard report left open re-downloads its full r
 
 **Exit:** all race/retry/restart tests pass; no change in totals for the sample week.
 
-**Status (2026-10-26):** built and tested (backend 197, desktop 116 tests pass). Not yet deployed. These are correctness fixes, so they have no off-switches (switching them off would bring the races back); rollback is reverting the commit. Server changes are compatible with every desktop version; the desktop part ships in **1.2.33**.
+**Status (2026-10-26):** built and tested (backend 197, desktop 116 tests pass). Not yet deployed. These are correctness fixes, so they have no off-switches (switching them off would bring the races back); rollback is reverting the commit. Server changes are compatible with every desktop version; the desktop part ships in **2.0.1**.
 
 ## Phase 4: Cleaner code structure (optional, no user-visible change)
 
@@ -230,7 +230,7 @@ Expected effect (estimate): a dashboard report left open re-downloads its full r
 - [x] **5.7 Me:** `docs/OPTIMIZATION_FINAL_REPORT.md`: changes by phase, estimates, test evidence, how to measure.
   - **You (after deploy):** fill in its before/after table from Render and the `[metrics]` lines.
 
-**Status (2026-10-26):** done; backend 221, dashboard 56 (plus lint, route audit, build), desktop 119 unit tests and both Electron smoke tests pass; `npm audit` 0 in all three apps. Desktop **1.2.33** built (`desktop-app/dist`). Nothing deployed yet.
+**Status (2026-10-26):** done; backend 223, dashboard 60 (plus lint, route audit, build), desktop 119 unit tests and both Electron smoke tests pass; `npm audit` 0 in all three apps. Desktop **2.0.1** built (`desktop-app/dist`). Nothing deployed yet.
 
 ---
 

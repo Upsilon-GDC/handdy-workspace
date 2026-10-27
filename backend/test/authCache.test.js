@@ -5,10 +5,13 @@ const Employee = require("../src/models/Employee");
 const AuthSession = require("../src/models/AuthSession");
 const { protect } = require("../src/middleware/authMiddleware");
 const { clearAuthCache } = require("../src/services/authCache");
+const { PERMISSION_VERSION_HEADER, setRoleOverride } = require("../src/services/permissionService");
 
 const response = () => ({
   statusCode: 200,
+  headers: {},
   status(code) { this.statusCode = code; return this; },
+  setHeader(name, value) { this.headers[name] = value; },
   json(body) { this.body = body; return this; },
 });
 const query = (value) => ({ select: async () => value });
@@ -39,6 +42,31 @@ test("repeated requests reuse the cached employee and session instead of re-read
   }
   assert.equal(employeeReads, 1);
   assert.equal(sessionReads, 1);
+});
+
+test("every response carries a fingerprint of the person's permissions, which changes with them", async (t) => {
+  const req = setup(t);
+  let person = { ...baseUser };
+  t.mock.method(Employee, "findById", () => query(person));
+  t.mock.method(AuthSession, "findOne", async () => ({ _id: "s", lastActivity: new Date(), expiresAt: new Date(Date.now() + 60_000) }));
+  const versionNow = async () => {
+    clearAuthCache();
+    const res = response();
+    await protect({ headers: req.headers }, res, () => {});
+    return res.headers[PERMISSION_VERSION_HEADER];
+  };
+
+  const first = await versionNow();
+  assert.match(first, /^[\w-]{12}$/);
+  assert.equal(await versionNow(), first, "unchanged permissions keep the fingerprint");
+
+  person = { ...baseUser, permissionOverrides: { granted: ["create_tasks"] } };
+  const personal = await versionNow();
+  assert.notEqual(personal, first, "a personal exception changes it");
+
+  t.after(() => setRoleOverride("employee", require("../src/utils/permissions").DEFAULT_ROLE_PERMISSIONS.employee));
+  setRoleOverride("employee", ["view_tasks"]);
+  assert.notEqual(await versionNow(), personal, "a role change changes it");
 });
 
 test("clearing the cache (what any Employee/AuthSession write does) forces a fresh check", async (t) => {

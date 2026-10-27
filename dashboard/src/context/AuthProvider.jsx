@@ -14,41 +14,11 @@ import {
   waitForLoginApproval,
 } from "../api/authApi";
 import { getMyPermissions } from "../api/permissionApi";
+import { createPermissionVersionTracker, onPermissionVersion } from "../api/permissionVersion";
 import { isAdminRole } from "../utils/permissions";
+import { normalizeUser, permissionOwnerFor } from "../utils/authUser";
 
 const NO_PERMISSIONS = [];
-
-function normalizeRole(role = "") {
-  const normalized = String(role)
-    .trim()
-    .toLowerCase()
-    .replace(/[\s-]+/g, "_");
-
-  if (
-    normalized === "tl" ||
-    normalized === "teamlead" ||
-    normalized === "team_lead"
-  ) {
-    return "team_lead";
-  }
-
-  if (normalized === "administrator") {
-    return "admin";
-  }
-
-  return normalized;
-}
-
-function normalizeUser(user) {
-  if (!user) {
-    return null;
-  }
-
-  return {
-    ...user,
-    role: normalizeRole(user.role),
-  };
-}
 
 function AuthProvider({ children }) {
   const [token, setToken] = useState(() =>
@@ -176,14 +146,18 @@ function AuthProvider({ children }) {
   // menus, pages and buttons the dashboard offers; the API still enforces
   // every action on its own. Results are tied to the session that requested
   // them, so a different sign-in never sees another account's grants.
-  const permissionOwner = token && user?._id ? `${user._id}:${token}` : "";
+  const permissionOwner = permissionOwnerFor(user, token);
   const [permissionResult, setPermissionResult] = useState({ owner: "", keys: [], failed: false });
 
   useEffect(() => {
     if (!permissionOwner) return undefined;
     let active = true;
     const load = () => getMyPermissions()
-      .then((keys) => { if (active) setPermissionResult({ owner: permissionOwner, keys, failed: false }); })
+      .then(({ keys, version }) => {
+        if (!active) return;
+        tracker.loaded(version);
+        setPermissionResult({ owner: permissionOwner, keys, failed: false });
+      })
       .catch(() => {
         if (!active) return;
         // Keep grants that already loaded; otherwise offer nothing extra
@@ -192,13 +166,18 @@ function AuthProvider({ children }) {
           ? current
           : { owner: permissionOwner, keys: [], failed: true }));
       });
+    // An administrator or manager may change this person's permissions while
+    // the tab is open: every API response carries their fingerprint, so pick
+    // a change up as soon as it differs, and also when the person returns to
+    // the tab.
+    const tracker = createPermissionVersionTracker(() => { void load(); });
+    const stopWatching = onPermissionVersion((version) => tracker.seen(version));
     void load();
-    // An administrator may change a role while this tab is open; pick the
-    // change up when the person returns to the tab.
     const onVisible = () => { if (document.visibilityState === "visible") void load(); };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       active = false;
+      stopWatching();
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [permissionOwner]);

@@ -2,7 +2,7 @@
 
 This guide explains how the whole system is built and how it works, from the
 database up to the desktop app. It describes the code as it is in this
-repository (desktop version 1.2.33). Older notes such as `README_MERGED.md`
+repository (desktop version 2.0.1). Older notes such as `README_MERGED.md`
 describe earlier versions and list files that no longer exist.
 
 **Contents**
@@ -214,10 +214,9 @@ manager can hand out different duties. What a duty covers:
 
 | Permission key | Enforced by | Default for |
 |---|---|---|
-| `create_tasks` | POST `/tasks`, `/tasks/bulk`, GET `/tasks/resolve-project`; "Add task" also needs `assign_tasks` | hr, team_lead |
+| `create_tasks` | POST `/tasks`, `/tasks/bulk`, GET `/tasks/resolve-project`; on its own enough for "Add task" (whole-team tasks) | hr, team_lead |
 | `edit_tasks` | PUT `/tasks/:id` | hr, team_lead |
-| `assign_tasks` | creating a task with assignees, or for the whole team (`taskPermissions.js`) | hr, team_lead |
-| `reassign_tasks` | changing assignees on edit | hr, team_lead |
+| `reassign_tasks` | picking particular employees: on create (`taskPermissions.js`) and when editing | hr, team_lead |
 | `archive_tasks` | toggle-status, DELETE `/tasks/:id` | hr, team_lead |
 | `add_manual_entries` | `/time-logs/manual*` (+ "Add entry" buttons) | hr |
 | `create_teams`, `edit_teams`, `assign_team_leads` | POST/PUT/DELETE `/teams` | hr (not `assign_team_leads`) |
@@ -400,7 +399,7 @@ All paths are under `/api`. "Auth" means a valid session (`protect`).
 | GET | `/projects`, `/projects/:id` | auth | Employees and team leads see projects of their team, or unrestricted ones |
 | POST / PUT / DELETE | `/projects[/:id]` | `manage_projects` | Manage projects (DELETE is a soft delete) |
 | GET | `/tasks`, `/tasks/:id` | auth | Visibility by role (see [6.6](#66-tasks)) |
-| POST | `/tasks`, `/tasks/bulk` | `create_tasks` (+ `assign_tasks`) | Create one / many tasks |
+| POST | `/tasks`, `/tasks/bulk` | `create_tasks` (+ `reassign_tasks` to pick employees) | Create one / many tasks |
 | PUT | `/tasks/:id` | `edit_tasks` (+ `reassign_tasks` if assignees change) | Edit |
 | PATCH | `/tasks/:id/toggle-status`; DELETE `/tasks/:id` | `archive_tasks` | Activate/deactivate; soft delete |
 | GET | `/tasks/resolve-project` | `create_tasks` or `edit_tasks` | Which project a team set maps to |
@@ -447,7 +446,7 @@ All paths are under `/api`. "Auth" means a valid session (`protect`).
 0. With an `operationId` the server first looks for a start already made with
    it and returns that timer (`replayed: true`), so a retry after a lost
    response never starts twice (unique per employee; reusing the ID for other
-   work is refused). Desktop 1.2.33+ sends one.
+   work is refused). Desktop 2.0.1+ sends one.
 1. Close this employee's stale desktop timers first.
 2. Project must exist, be Active and not deleted. Client, if given, must be active.
 3. Non-elevated users: a project restricted to teams must include their team.
@@ -537,7 +536,7 @@ layers keep load down:
 Clients that support sync: the desktop timesheet (`loadAllPages` in
 `renderer.js`) and dashboard reports (`utils/reportLoader.js`, which also uses
 the fingerprint). Desktop project and task lists revalidate with the catalog
-ETag (`cache: "no-cache"`, desktop 1.2.33+), so an unchanged list is a 304.
+ETag (`cache: "no-cache"`, desktop 2.0.1+), so an unchanged list is a 304.
 
 ### 6.8 Billing
 
@@ -658,8 +657,11 @@ App.jsx → <ThemeProvider> → <ErrorBoundary> → <AppShell><AppRoutes/></AppS
   `rememberedUser`, `crmDeviceId` (per-browser device id from
   `utils/deviceIdentity.js`, sent as `clientType: "web"`).
 - **On load**: the stored token is validated with `/auth/me`.
-- **Permissions**: `/permissions/me` is loaded for each session (and again
-  when the tab becomes visible). `useAuth()` exposes `hasPermission(...keys)`
+- **Permissions**: `/permissions/me` is loaded for each session, again when
+  the tab becomes visible, and whenever an API response's
+  `X-Permissions-Version` fingerprint changes (set by `protect`;
+  `api/permissionVersion.js`), so a change an administrator or manager makes
+  reaches open pages within one request. `useAuth()` exposes `hasPermission(...keys)`
   (true when the user holds all of them; admin-level roles always do),
   `permissionsReady` and `permissionsFailed`. Pages use it to hide menus and
   buttons; `PermissionNote` explains hidden actions ("View only. Your role
@@ -694,7 +696,7 @@ instead of failing with API errors.
 | `/admin/timesheets/attendance` | AdminStaffOnly | `AdminReportPage` (company attendance, in the menu as "Attendance") |
 | `/attendance` | AttendanceStaffOnly | `AdminReportPage` (attendance) |
 | `/admin/clients`, `/admin/projects`, `/admin/tasks`, `/admin/team` | AdminStaffOnly | catalog pages; add/edit/delete controls follow `manage_clients`, `manage_projects`, task and team permissions |
-| `/admin/tasks/new` | AdminStaffOnly + `create_tasks` and `assign_tasks` | `AdminAddTask` |
+| `/admin/tasks/new` | AdminStaffOnly + `create_tasks` | `AdminAddTask` |
 | `/admin/employees` | admin/alpha/manager **or** delegated `create/edit_employees` | `AdminEmployees` |
 | `/admin/scheduler/shift`, `/shift/add`, `/schedule` | AdminStaffOnly | shifts and schedules (not in the sidebar menu) |
 | `/admin/billing` | AdminStaffOnly + `view_billing_amounts` | `BillingPage` |
@@ -702,7 +704,7 @@ instead of failing with API errors.
 | `/team-lead/dashboard`, `/employee-insights`, `/timesheets/*` (except attendance) | TeamLeadOnly + `view_team_timesheets` | `RoleReportPage` (team) |
 | `/team-lead/timesheet[/details]`, `/team-lead/timesheets/attendance` | TeamLeadOnly | `RoleReportPage` (personal; team attendance) |
 | `/team-lead/tasks` | TeamLeadOnly | team task management |
-| `/team-lead/tasks/add` | TeamLeadOnly + `create_tasks` and `assign_tasks` | `TeamLeadAddTask` |
+| `/team-lead/tasks/add` | TeamLeadOnly + `create_tasks` | `TeamLeadAddTask` |
 | `/employee/dashboard`, `/employee/timesheet[/details]` | EmployeeOnly | `RoleReportPage` (personal) |
 | `/profile` | any signed-in role | `ProfilePage` |
 | `/employees`, `/employees/:employeeId` | admin roles, team_lead (and delegates) | employee list / details |
@@ -836,7 +838,7 @@ an app restart), the screen is locked:
   closed, and focus is pulled back to it when another app is activated.
 - **Unlocking.** Starting a timer (including a break task) removes the lock
   as soon as the start request is sent, not when the server answers (since
-  1.2.33). If the server refuses the start, the lock returns with its
+  2.0.1). If the server refuses the start, the lock returns with its
   message. If CRM was minimized before, it is minimized again. Signing out
   also releases the lock.
 - **What locks.** The renderer reports `locked` / `running` / `inactive` on
@@ -931,7 +933,7 @@ Web browsers are not part of this rule (several browser sessions may coexist).
 
 ```text
 TaskForm ─► POST /tasks/bulk {taskNames[], teams[], taskType, autoProjects:true}
-  ├─ requirePermission(create_tasks) + guard: assign_tasks (team-wide assignment)
+  ├─ requirePermission(create_tasks) + guard: reassign_tasks (only when picking employees)
   ├─ validate teams (team lead: only own team) and that each team has an active project
   ├─ duplicate check vs. existing tasks (409 DUPLICATE_TASK with a readable message)
   └─ insert one team-wide task per name (project:null) ─► visible in the desktop
@@ -1035,8 +1037,8 @@ All suites use Node's built-in `node:test`.
 
 | Suite | Command | What it covers |
 |---|---|---|
-| Backend (221 tests) | `cd backend && npm test` | Auth sessions, remembered login, permissions (any duty for any role, own-team scope, descriptions), billing math, idle policy, timer lease/idle stop, timer safety (retries, races, restarts), automatic attendance, manual entries, password-reset email over SMTP, task bulk create and duplicates, report ranges, caching, report fingerprint, traffic metrics, alerts, health, graceful shutdown, backups, module loading |
-| Dashboard (56 tests) | `cd dashboard && npm test` | Report helpers, timelines, pagination, report loading and fingerprint, manual-entry and client-timesheet utils, form validation, permission-driven navigation and duty pages, personal permission rules |
+| Backend (223 tests) | `cd backend && npm test` | Auth sessions, remembered login, permissions (any duty for any role, own-team scope, descriptions), billing math, idle policy, timer lease/idle stop, timer safety (retries, races, restarts), automatic attendance, manual entries, password-reset email over SMTP, task bulk create and duplicates, report ranges, caching, report fingerprint, traffic metrics, alerts, health, graceful shutdown, backups, module loading |
+| Dashboard (60 tests) | `cd dashboard && npm test` | Report helpers, timelines, pagination, report loading and fingerprint, manual-entry and client-timesheet utils, form validation, permission-driven navigation and duty pages, personal permission rules, permission-change pickup |
 | Dashboard lint / routes | `npm run lint`, `npm run test:routes` | ESLint; every nav link has a route |
 | Desktop unit (119 tests) | `cd desktop-app && node --test --test-isolation=none test/*.test.js` | Runs the real `renderer.js` in a VM with a fake DOM/API (idle, logout, close, timesheet, lock states (lifted when Start is sent), start/stop retries, list caching), `timer-lock.js` with fake windows, updater and automatic restart, permission refusal, release config, packaged runtime files |
 | Desktop full | `cd desktop-app && npm test` | Unit tests plus real-Electron smokes (`electron-inactivity-smoke.cjs`, `dashboard-lifecycle-smoke.cjs`, which builds the dashboard first). The lifecycle smoke checks the 30-second polling cadence from call times, and permission-driven menus and actions. The smokes rewrite screenshots in `dashboard/ui-review/`. |
@@ -1049,10 +1051,9 @@ Found while reviewing the code for this guide. None of them are bugs in time
 recording itself; they are places where behaviour may surprise a developer or
 an admin.
 
-1. **"Create tasks" also needs "Assign tasks".** The form always creates
-   whole-team tasks, which `guardTaskAssignmentOnCreate` treats as assigning.
-   The permission descriptions say so, and "Add task" is hidden unless the
-   role has both.
+1. **"Create tasks" works on its own** (since 2026-10-27). The form creates
+   whole-team tasks; `assign_tasks`, which used to be required as well, was
+   folded into `create_tasks`. Stored grants of it are ignored.
 2. **Some permissions are catalogued but not used yet** (`enforcement:
    "none"`, for example `view_tasks` and `view_clients`); the Permissions page
    labels them "Not used yet". Management permissions apply only to the

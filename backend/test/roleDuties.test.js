@@ -4,6 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const Employee = require("../src/models/Employee");
+const Project = require("../src/models/Project");
 const Task = require("../src/models/Task");
 const Team = require("../src/models/Team");
 const { ownTeamIds, teamMemberFilter } = require("../src/services/teamScope");
@@ -14,6 +15,7 @@ const { getBillingEmployeeAccess } = require("../src/utils/billingUtils");
 const attendanceRoutes = require("../src/modules/attendance/attendanceRoutes");
 const employeeRoutes = require("../src/modules/employees/employeeRoutes");
 const teamRoutes = require("../src/modules/teams/teamRoutes");
+const taskRoutes = require("../src/modules/tasks/taskRoutes");
 const taskTimeLogRoutes = require("../src/modules/timers/taskTimeLogRoutes");
 
 const TEAM = "64b000000000000000000b01";
@@ -58,7 +60,7 @@ test("an employee with task duties manages only their own team's tasks", async (
   t.mock.method(Team, "find", async (filter) => (filter._id.$in.map(String).includes(TEAM) ? [{ _id: TEAM }] : []));
   // New tasks go to the own team; another team is refused.
   const res = response();
-  await resolveProjectForTeams({ user: senior(["create_tasks", "assign_tasks"]), query: { teams: OTHER_TEAM } }, res);
+  await resolveProjectForTeams({ user: senior(["create_tasks"]), query: { teams: OTHER_TEAM } }, res);
   assert.equal(res.statusCode, 400);
   assert.match(res.body.message, /another team/);
   const noTeam = response();
@@ -75,6 +77,38 @@ test("an employee with task duties manages only their own team's tasks", async (
   t.mock.method(Task, "findOne", async (filter) => { hrFilter = filter; return null; });
   await deleteTask({ user: { _id: "hr-1", role: "hr" }, params: { id: "task-1" } }, response());
   assert.equal(hrFilter.$or, undefined, "HR still works with every team");
+});
+
+test("an employee given only Create tasks adds tasks for their own team, as the Add task form sends them", async (t) => {
+  activeTeam(t);
+  t.mock.method(Team, "find", async (filter) => (filter._id.$in.map(String).includes(TEAM) ? [{ _id: TEAM }] : []));
+  t.mock.method(Project, "find", () => ({ select() { return this; }, lean: async () => [{ _id: "p1", teams: [TEAM] }] }));
+  t.mock.method(Task, "exists", async () => null);
+  t.mock.method(Task, "find", () => ({ select() { return this; }, lean: async () => [] }));
+  t.mock.method(Task, "insertMany", async (tasks) => tasks);
+  const route = taskRoutes.stack.find((layer) => layer.route?.path === "/bulk" && layer.route.methods.post).route.stack;
+  const send = async (teams) => {
+    const res = response();
+    const req = {
+      user: senior(["create_tasks"]), params: {}, query: {},
+      body: { taskName: "Debugging", taskType: "work", teams, project: null, assignToAllEmployees: true,
+        assignedTo: [], idleLogout: false, taskNames: ["Debugging"], autoProjects: true },
+    };
+    for (const layer of route.slice(1)) { // everything after sign-in
+      let advanced = false;
+      await layer.handle(req, res, () => { advanced = true; });
+      if (!advanced) break;
+    }
+    return res;
+  };
+
+  const created = await send([TEAM]);
+  assert.equal(created.statusCode, 201, created.body?.message);
+  assert.deepEqual(created.body.tasks.map((task) => [task.taskName, task.teams.map(String), task.assignToAllEmployees]),
+    [["Debugging", [TEAM], true]]);
+  const elsewhere = await send([OTHER_TEAM]);
+  assert.equal(elsewhere.statusCode, 400);
+  assert.match(elsewhere.body.message, /another team/);
 });
 
 test("the task list adds the own team's tasks only for task management, never for the desktop list", async (t) => {

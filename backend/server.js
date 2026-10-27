@@ -15,7 +15,7 @@ const { validateProductionConfig } = require("./src/config/productionConfig");
 const { verifyEmailTransport } = require("./src/utils/mailer");
 const { ensureAuthSessionIndexes } = require("./src/services/authSessionService");
 const { startTimerSweep } = require("./src/jobs/timerSweep");
-const { refreshPermissionOverrides } = require("./src/services/permissionService");
+const { PERMISSION_VERSION_HEADER, refreshPermissionOverrides } = require("./src/services/permissionService");
 const trafficMetrics = require("./src/monitoring/trafficMetrics");
 const { dashboardCacheHeaders } = require("./src/utils/dashboardCache");
 const { isOn } = require("./src/config/optimizations");
@@ -142,6 +142,9 @@ app.use(
       "Content-Type",
       "Authorization",
     ],
+
+    // Read by the dashboard when it runs on another origin (local development).
+    exposedHeaders: [PERMISSION_VERSION_HEADER],
   })
 );
 

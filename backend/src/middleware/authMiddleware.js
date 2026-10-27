@@ -2,6 +2,7 @@ const jwt = require("jsonwebtoken");
 const Employee = require("../models/Employee");
 const AuthSession = require("../models/AuthSession");
 const { getAuthEntry, setAuthEntry } = require("../services/authCache");
+const { PERMISSION_VERSION_HEADER, getPermissionVersion } = require("../services/permissionService");
 
 const protect = async (req, res, next) => {
   try {
@@ -88,6 +89,8 @@ const protect = async (req, res, next) => {
 
     req.user = employee;
     req.authSession = authSession;
+    // Lets an open dashboard pick up permission changes (AuthProvider).
+    res.setHeader(PERMISSION_VERSION_HEADER, getPermissionVersion(employee));
 
     if (Date.now() - entry.touchedAt > 60_000) {
       entry.touchedAt = Date.now();

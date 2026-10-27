@@ -1,4 +1,5 @@
 import axiosInstance from "./axiosInstance";
+import { PERMISSION_VERSION_HEADER } from "./permissionVersion";
 
 export const getPermissionConfig = async () => (await axiosInstance.get("/permissions")).data;
 
@@ -13,6 +14,13 @@ export const getEmployeePermissions = async () =>
 export const saveEmployeePermissions = async (employeeId, { granted, revoked }) =>
   (await axiosInstance.put(`/permissions/employees/${employeeId}`, { granted, revoked })).data;
 
-// Effective permission keys for the signed-in user. Used only to show or hide
-// controls; the API enforces every action regardless.
-export const getMyPermissions = async () => (await axiosInstance.get("/permissions/me")).data.permissions || [];
+// Effective permission keys for the signed-in user, with their fingerprint
+// (see permissionVersion.js). Used only to show or hide controls; the API
+// enforces every action regardless.
+export const getMyPermissions = async () => {
+  const response = await axiosInstance.get("/permissions/me");
+  return {
+    keys: response.data.permissions || [],
+    version: response.headers?.[PERMISSION_VERSION_HEADER] || "",
+  };
+};

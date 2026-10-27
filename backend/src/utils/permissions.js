@@ -32,13 +32,11 @@ const PERMISSION_CATEGORIES = [
       { key: "view_tasks", label: "View tasks", enforcement: "none",
         description: "Not used yet. Everyone already sees the tasks assigned to them." },
       { key: "create_tasks", label: "Create tasks", enforcement: "backend",
-        description: "Shows “Add task”. New tasks are assigned to the whole team, so “Assign tasks” is also required. HR works with every team; team leads and employees only with their own team." },
+        description: "Shows “Add task”: add tasks for the team, assigned to the whole team. HR works with every team; team leads and employees only with their own team." },
       { key: "edit_tasks", label: "Edit tasks", enforcement: "backend",
         description: "Edit task names, type and teams. HR edits every team's tasks; team leads and employees only their own team's." },
-      { key: "assign_tasks", label: "Assign tasks", enforcement: "backend",
-        description: "Assign tasks to employees. Required together with “Create tasks”." },
       { key: "reassign_tasks", label: "Reassign tasks", enforcement: "backend",
-        description: "Change who an existing task is assigned to." },
+        description: "Choose which employees of the team a task is assigned to, instead of the whole team." },
       { key: "complete_tasks", label: "Complete tasks", enforcement: "none",
         description: "Not used yet. There is no task completion feature." },
       { key: "archive_tasks", label: "Archive tasks", enforcement: "backend",
@@ -118,14 +116,14 @@ const PERMISSION_ROLES = new Map(ALL_PERMISSIONS.map((permission) => [permission
 // manual entries (product decision, 2026-10-23).
 const DEFAULT_ROLE_PERMISSIONS = {
   hr: [
-    "view_tasks", "create_tasks", "edit_tasks", "assign_tasks", "reassign_tasks", "archive_tasks",
+    "view_tasks", "create_tasks", "edit_tasks", "reassign_tasks", "archive_tasks",
     "add_manual_entries",
     "view_teams", "create_teams", "edit_teams",
     "view_clients", "manage_clients", "view_projects", "manage_projects",
     "view_personal_reports", "view_all_reports", "export_reports", "view_billing_amounts",
   ],
   team_lead: [
-    "view_tasks", "create_tasks", "edit_tasks", "assign_tasks", "reassign_tasks", "archive_tasks",
+    "view_tasks", "create_tasks", "edit_tasks", "reassign_tasks", "archive_tasks",
     "view_teams", "view_team_timesheets", "view_team_reports",
     "view_clients", "view_projects", "view_personal_reports", "export_reports",
   ],

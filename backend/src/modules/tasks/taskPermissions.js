@@ -9,13 +9,14 @@ const deny = (res) => res.status(403).json({
   message: "You do not have permission to assign tasks.",
 });
 
-// Creating a task with assignees needs "assign_tasks".
+// "Create tasks" alone adds tasks for the whole team (what the Add task form
+// does). Picking particular employees instead needs "reassign_tasks", the
+// same permission that changes the assignment later. ("assign_tasks" used to
+// be required as well; it was folded into "create_tasks" on 2026-10-27.)
 const guardTaskAssignmentOnCreate = async (req, res, next) => {
   try {
-    const assigns = idList(req.body?.assignedTo).length > 0
-      || req.body?.assignToAllEmployees === true
-      || req.body?.autoProjects === true;
-    if (assigns && !userHasPermission(req.user, "assign_tasks")) return deny(res);
+    const picksEmployees = idList(req.body?.assignedTo).length > 0;
+    if (picksEmployees && !userHasPermission(req.user, "reassign_tasks")) return deny(res);
     return next();
   } catch (error) {
     return next(error);
