@@ -103,7 +103,7 @@ const getTeamsForTask = async (user, requestedTeams) => {
   }
   const requestedIds = normalizeTeamIds(requestedTeams);
   if (requestedIds.length && (requestedIds.length !== 1 || requestedIds[0] !== String(teams[0]._id))) {
-    return { error: "You cannot create tasks for another team." };
+    return { error: "You cannot add or change tasks for another team." };
   }
   return { teams, teamIds: [String(teams[0]._id)] };
 };
@@ -643,6 +643,13 @@ const updateTask = async (req, res) => {
       isActive,
       idleLogout,
     } = req.body;
+
+    // Switching a task on or off is the "Archive tasks" duty, also when it
+    // arrives through the edit form.
+    if (isActive !== undefined && Boolean(isActive) !== (task.isActive !== false)
+      && !userHasPermission(req.user, "archive_tasks")) {
+      return res.status(403).json({ success: false, message: "You do not have permission to activate or deactivate tasks." });
+    }
 
     if (
       taskCode !== undefined &&

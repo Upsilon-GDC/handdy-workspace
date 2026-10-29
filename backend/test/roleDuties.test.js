@@ -8,7 +8,7 @@ const Project = require("../src/models/Project");
 const Task = require("../src/models/Task");
 const Team = require("../src/models/Team");
 const { ownTeamIds, teamMemberFilter } = require("../src/services/teamScope");
-const { deleteTask, getAllTasks, resolveProjectForTeams } = require("../src/modules/tasks/taskController");
+const { deleteTask, getAllTasks, resolveProjectForTeams, updateTask } = require("../src/modules/tasks/taskController");
 const { canActOnEmployee } = require("../src/modules/timers/manualTimeEntryController");
 const { getMyTeam } = require("../src/modules/employees/employeeController");
 const { getBillingEmployeeAccess } = require("../src/utils/billingUtils");
@@ -109,6 +109,49 @@ test("an employee given only Create tasks adds tasks for their own team, as the 
   const elsewhere = await send([OTHER_TEAM]);
   assert.equal(elsewhere.statusCode, 400);
   assert.match(elsewhere.body.message, /another team/);
+});
+
+test("someone given Edit tasks edits their own team's tasks; switching one off still needs Archive tasks", async (t) => {
+  activeTeam(t);
+  t.mock.method(Team, "find", async (filter) => (filter._id.$in.map(String).includes(TEAM) ? [{ _id: TEAM }] : []));
+  t.mock.method(Task, "find", () => ({ select() { return this; }, lean: async () => [] }));
+  let task;
+  let scope;
+  const makeTask = (teams = [TEAM]) => ({
+    _id: "t1", taskCode: "TSK-1", taskName: "Debuging", taskType: "work", project: null, team: teams[0], teams,
+    assignedTo: [], assignToAllEmployees: true, isActive: true, idleLogout: false, saved: 0, save() { this.saved += 1; },
+  });
+  t.mock.method(Task, "findOne", async (filter) => { scope = filter; return task; });
+  t.mock.method(Task, "findById", () => ({ populate() { return this; }, then: (resolve) => Promise.resolve(task).then(resolve) }));
+  const edit = async (body, granted = ["edit_tasks"]) => {
+    const res = response();
+    await updateTask({ user: senior(granted), params: { id: "t1" }, body }, res);
+    return res;
+  };
+  // What the Tasks page's edit form sends for a team lead or employee: no teams.
+  const form = { taskName: "Debugging", taskType: "work", project: null, assignToAllEmployees: true, assignedTo: [], idleLogout: true };
+
+  task = makeTask();
+  const saved = await edit(form);
+  assert.equal(saved.statusCode, 200, saved.body?.message);
+  assert.deepEqual([task.taskName, task.idleLogout, task.teams.map(String), task.saved], ["Debugging", true, [TEAM], 1]);
+  assert.deepEqual(JSON.parse(JSON.stringify(scope.$or)), [{ team: { $in: [TEAM] } }, { teams: { $in: [TEAM] } }], "own team only");
+
+  task = makeTask();
+  assert.equal((await edit({ ...form, isActive: true })).statusCode, 200, "an unchanged status is fine");
+  task = makeTask();
+  const off = await edit({ ...form, isActive: false });
+  assert.equal(off.statusCode, 403);
+  assert.equal(task.saved, 0);
+  task = makeTask();
+  assert.equal((await edit({ ...form, isActive: false }, ["edit_tasks", "archive_tasks"])).statusCode, 200);
+
+  // A task HR shared with another team is not narrowed to this person's team.
+  task = makeTask([TEAM, OTHER_TEAM]);
+  const shared = await edit(form);
+  assert.equal(shared.statusCode, 400);
+  assert.match(shared.body.message, /another team/);
+  assert.equal(task.saved, 0);
 });
 
 test("the task list adds the own team's tasks only for task management, never for the desktop list", async (t) => {

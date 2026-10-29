@@ -230,7 +230,7 @@ Expected effect (estimate): a dashboard report left open re-downloads its full r
 - [x] **5.7 Me:** `docs/OPTIMIZATION_FINAL_REPORT.md`: changes by phase, estimates, test evidence, how to measure.
   - **You (after deploy):** fill in its before/after table from Render and the `[metrics]` lines.
 
-**Status (2026-10-26):** done; backend 223, dashboard 60 (plus lint, route audit, build), desktop 119 unit tests and both Electron smoke tests pass; `npm audit` 0 in all three apps. Desktop **2.0.1** built (`desktop-app/dist`). Nothing deployed yet.
+**Status (2026-10-26):** done; backend 224, dashboard 60 (plus lint, route audit, build), desktop 119 unit tests and both Electron smoke tests pass; `npm audit` 0 in all three apps. Desktop **2.0.1** built (`desktop-app/dist`). Nothing deployed yet.
 
 ---
 

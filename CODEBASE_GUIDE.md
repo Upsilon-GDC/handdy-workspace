@@ -215,7 +215,7 @@ manager can hand out different duties. What a duty covers:
 | Permission key | Enforced by | Default for |
 |---|---|---|
 | `create_tasks` | POST `/tasks`, `/tasks/bulk`, GET `/tasks/resolve-project`; on its own enough for "Add task" (whole-team tasks) | hr, team_lead |
-| `edit_tasks` | PUT `/tasks/:id` | hr, team_lead |
+| `edit_tasks` | PUT `/tasks/:id` (Edit button on both Tasks pages; switching a task on/off there also needs `archive_tasks`) | hr, team_lead |
 | `reassign_tasks` | picking particular employees: on create (`taskPermissions.js`) and when editing | hr, team_lead |
 | `archive_tasks` | toggle-status, DELETE `/tasks/:id` | hr, team_lead |
 | `add_manual_entries` | `/time-logs/manual*` (+ "Add entry" buttons) | hr |
@@ -1037,7 +1037,7 @@ All suites use Node's built-in `node:test`.
 
 | Suite | Command | What it covers |
 |---|---|---|
-| Backend (223 tests) | `cd backend && npm test` | Auth sessions, remembered login, permissions (any duty for any role, own-team scope, descriptions), billing math, idle policy, timer lease/idle stop, timer safety (retries, races, restarts), automatic attendance, manual entries, password-reset email over SMTP, task bulk create and duplicates, report ranges, caching, report fingerprint, traffic metrics, alerts, health, graceful shutdown, backups, module loading |
+| Backend (224 tests) | `cd backend && npm test` | Auth sessions, remembered login, permissions (any duty for any role, own-team scope, descriptions), billing math, idle policy, timer lease/idle stop, timer safety (retries, races, restarts), automatic attendance, manual entries, password-reset email over SMTP, task bulk create and duplicates, report ranges, caching, report fingerprint, traffic metrics, alerts, health, graceful shutdown, backups, module loading |
 | Dashboard (60 tests) | `cd dashboard && npm test` | Report helpers, timelines, pagination, report loading and fingerprint, manual-entry and client-timesheet utils, form validation, permission-driven navigation and duty pages, personal permission rules, permission-change pickup |
 | Dashboard lint / routes | `npm run lint`, `npm run test:routes` | ESLint; every nav link has a route |
 | Desktop unit (119 tests) | `cd desktop-app && node --test --test-isolation=none test/*.test.js` | Runs the real `renderer.js` in a VM with a fake DOM/API (idle, logout, close, timesheet, lock states (lifted when Start is sent), start/stop retries, list caching), `timer-lock.js` with fake windows, updater and automatic restart, permission refusal, release config, packaged runtime files |

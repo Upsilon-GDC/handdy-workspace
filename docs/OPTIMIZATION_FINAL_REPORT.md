@@ -51,7 +51,7 @@ should fall by well over half. Only the measurements below can confirm it.
 
 | Area | Result |
 |---|---|
-| Backend | 223 / 223 tests pass (`npm test`) |
+| Backend | 224 / 224 tests pass (`npm test`) |
 | Dashboard | 60 / 60 tests pass, lint clean, route audit passed (41 navigation targets, 63 routes), production build OK |
 | Desktop | 119 / 119 unit tests pass; Electron smoke tests pass (inactivity popup and logout, dashboard lifecycle with 125 employees) |
 | Dependencies | `npm audit --omit=dev`: 0 vulnerabilities in backend, dashboard and desktop |

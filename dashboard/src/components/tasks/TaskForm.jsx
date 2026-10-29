@@ -27,6 +27,8 @@ function TaskForm({
   // Without it the form keeps the current assignment; the API accepts an
   // edit that re-submits unchanged assignees (middleware/taskPermissions.js).
   const canReassign = hasPermission("reassign_tasks");
+  // Switching a task on or off is the "Archive tasks" duty (the API checks).
+  const canArchive = hasPermission("archive_tasks");
 
   const [taskName, setTaskName] = useState(initialTask?.taskName || "");
   const [additionalTaskNames, setAdditionalTaskNames] = useState([]);
@@ -148,12 +150,14 @@ function TaskForm({
     const payload = {
       taskName: taskName.trim(),
       taskType,
-      teams,
+      // A team lead's or employee's edit keeps the task's teams; the API
+      // allows only their own team.
+      ...(scope === "teamLead" && mode === "edit" ? {} : { teams }),
       project: null,
       assignToAllEmployees: mode === "create" || assignType === "team",
       assignedTo: mode === "create" || assignType === "team" ? [] : assignedTo,
       idleLogout,
-      ...(mode === "edit" ? { isActive } : {}),
+      ...(mode === "edit" && canArchive ? { isActive } : {}),
     };
 
     try {
@@ -222,7 +226,7 @@ function TaskForm({
           </button>
         )}
 
-        {mode === "edit" && (
+        {mode === "edit" && canArchive && (
           <label>
             Status
             <select value={isActive ? "true" : "false"} onChange={(event) => setIsActive(event.target.value === "true")}>
