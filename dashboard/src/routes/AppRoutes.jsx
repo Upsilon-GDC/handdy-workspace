@@ -5,6 +5,8 @@ import {
 } from "react-router-dom";
 
 import LoginPage from "../pages/auth/LoginPage";
+import AdminAddEntryPage from '../pages/admin/AdminAddEntryPage';
+import AdminOverviewPage from '../pages/admin/AdminOverviewPage';
 import ForgotPasswordPage from "../pages/auth/ForgotPasswordPage";
 import ResetPasswordPage from "../pages/auth/ResetPasswordPage";
 
@@ -229,7 +231,7 @@ function AppRoutes() {
         path="/admin/dashboard"
         element={
           <AdminStaffOnly needs={ALL_REPORTS} grants={ALL_REPORTS}>
-            <AdminReportPage title="Employee insights" description="Company project and task timer activity by employee." />
+            <AdminOverviewPage />
           </AdminStaffOnly>
         }
       />
@@ -325,6 +327,20 @@ function AppRoutes() {
           <AdminStaffOnly needs={ALL_REPORTS} grants={ALL_REPORTS}>
             <AdminReportPage title="Team timesheet" description="Employee totals across company project and task timer activity." variant="team" />
           </AdminStaffOnly>
+        }
+      />
+
+      <Route
+        path="/admin/time-entry-add"
+        element={<AdminOnly><AdminAddEntryPage /></AdminOnly>}
+      />
+
+      <Route
+        path="/admin/time-entry-edits"
+        element={
+          <AdminOnly>
+            <AdminReportPage title="Edit Entries" description="Select a team and click an employee to load their entries automatically. Adjust the dates or project and use Load entries to refresh the results." entryManagement />
+          </AdminOnly>
         }
       />
 

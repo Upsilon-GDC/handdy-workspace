@@ -15,6 +15,7 @@ const { validateProductionConfig } = require("./src/config/productionConfig");
 const { verifyEmailTransport } = require("./src/utils/mailer");
 const { ensureAuthSessionIndexes } = require("./src/services/authSessionService");
 const { ensureActivityMappingIndexes } = require('./src/services/activityMappings');
+const { ensureTimeEntryEditIndexes } = require('./src/modules/timers/timeEntryEditController');
 const { startTimerSweep } = require("./src/jobs/timerSweep");
 const { PERMISSION_VERSION_HEADER, refreshPermissionOverrides } = require("./src/services/permissionService");
 const trafficMetrics = require("./src/monitoring/trafficMetrics");
@@ -218,6 +219,7 @@ const startServer = async () => {
     if (trafficMetrics.enabled) trafficMetrics.attachMongo(mongoose.connection.getClient());
     await ensureAuthSessionIndexes();
     await ensureActivityMappingIndexes();
+    await ensureTimeEntryEditIndexes();
     await refreshPermissionOverrides();
     const timerSweep = await startTimerSweep();
 

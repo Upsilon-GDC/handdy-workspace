@@ -19,6 +19,10 @@ const { authorizeRoles, requirePermission } = require("../../middleware/authoriz
 const { createManualEntry, deleteManualEntry, getManualEntryOptions } = require("./manualTimeEntryController");
 
 const router = express.Router();
+const { getTimeEntryForEdit, editTimeEntry } = require('./timeEntryEditController');
+// Controller checks exact admin-level roles as well as route authentication.
+router.get('/entries/:id/edit', protect, getTimeEntryForEdit);
+router.patch('/entries/:id', protect, editTimeEntry);
 
 router.get(
   "/live",

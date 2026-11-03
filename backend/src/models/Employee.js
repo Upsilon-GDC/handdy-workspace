@@ -303,6 +303,8 @@ employeeSchema.index(
 // Speed up the common employee list/report filters (getAllEmployees,
 // getMyTeam, task/schedule relation checks, etc.).
 employeeSchema.index({ team: 1 });
+// Serialize concurrent administrative corrections for this employee.
+employeeSchema.add({ timeEntryEditVersion: { type: Number, default: 0 } });
 employeeSchema.index({ teamLead: 1 });
 employeeSchema.index({ role: 1 });
 

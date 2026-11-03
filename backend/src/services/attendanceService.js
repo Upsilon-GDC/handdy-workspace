@@ -25,12 +25,14 @@ function deriveAttendance(logs) {
   return { checkIn, checkOut, totalHours: checkOut ? roundHours(checkOut - checkIn) : 0, status: "Present" };
 }
 
-async function syncAttendanceForDay(employeeId, dateKey, timezone = APP_TIMEZONE) {
-  const logs = await TaskTimeLog.find({
+async function syncAttendanceForDay(employeeId, dateKey, timezone = APP_TIMEZONE, session = null) {
+  const query = TaskTimeLog.find({
     employee: employeeId,
     startedAt: { $gte: dateKeyToUtc(dateKey, timezone), $lt: dateKeyToUtc(addDateKeyDays(dateKey, 1), timezone) },
     "manualEntry.deletedAt": null,
-  }).select("startedAt stoppedAt status").lean();
+  }).select("startedAt stoppedAt status");
+  if (session) query.session(session);
+  const logs = await query.lean();
 
   const values = deriveAttendance(logs);
   if (!values) {
@@ -40,13 +42,13 @@ async function syncAttendanceForDay(employeeId, dateKey, timezone = APP_TIMEZONE
     return Attendance.findOneAndUpdate(
       { employee: employeeId, date: dateKey, source: "timer" },
       { $set: { status: "Absent", checkIn: null, checkOut: null, totalHours: 0 } },
-      { returnDocument: "after" },
+      { returnDocument: "after", ...(session ? { session } : {}) },
     );
   }
   return Attendance.findOneAndUpdate(
     { employee: employeeId, date: dateKey },
     { $set: { ...values, source: "timer" } },
-    { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
+    { upsert: true, returnDocument: "after", setDefaultsOnInsert: true, ...(session ? { session } : {}) },
   );
 }
 

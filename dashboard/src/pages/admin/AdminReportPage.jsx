@@ -25,6 +25,10 @@ import { buildClientTimesheet, flattenClientTimesheet } from "../../utils/client
 import ClientTimesheet from "../../components/reports/ClientTimesheet";
 import AddEntryModal from "../../components/reports/AddEntryModal";
 import ManualEntriesModal from "../../components/reports/ManualEntriesModal";
+import EditEntryModal from '../../components/reports/EditEntryModal';
+import EntryEmployeePicker from '../../components/reports/EntryEmployeePicker';
+import { entryEmployeesForTeam, UNASSIGNED_ENTRY_TEAM } from '../../utils/entryEmployeeScope';
+import { canEditTimeEntries } from '../../utils/timeEntryEditing';
 import { canManageManualEntries } from "../../utils/manualEntry";
 import { readReportState, writeReportState } from "../../utils/reportPersistence";
 import useAuth from "../../context/useAuth";
@@ -85,6 +89,7 @@ function AdminReportContent({
   scope = "company",
   variant = "detailed",
   trackingLabel = "tracking activity",
+  entryManagement = false,
   allowEmployeeFilter = scope === "company",
 }) {
   const { pathname } = useLocation();
@@ -92,10 +97,12 @@ function AdminReportContent({
   const canExport = hasPermission("export_reports");
   const reportStorageKey = `crm-report:${user?._id || user?.email || "user"}:${pathname}`;
   // The team timesheet filters by team instead of by employee.
-  const hasTeamFilter = variant === "project" || variant === "team";
+  const hasTeamFilter = entryManagement || variant === "project" || variant === "team";
   const showEmployeeFilter = allowEmployeeFilter && variant !== "team";
   const [savedReportState] = useState(() => {
     const saved = readReportState(reportStorageKey);
+    // Entry management starts with an explicit employee scope, never company-wide results.
+    if (entryManagement) return { ...saved, team: '', employee: '', hasRun: false };
     // Older navigations could copy the Project Hours team into this route's
     // storage. Reports without a team control discard that filter, and a
     // report without an employee control must not apply a hidden saved one.
@@ -137,6 +144,7 @@ function AdminReportContent({
   const [projects, setProjects] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [tasksLoading, setTasksLoading] = useState(false);
+  const [entryOptionsLoading, setEntryOptionsLoading] = useState(entryManagement);
   const [records, setRecords] = useState([]);
   const [allTimeRecords, setAllTimeRecords] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -149,6 +157,8 @@ function AdminReportContent({
   // permission. The API enforces it independently of this flag.
   const [entryEmployee, setEntryEmployee] = useState(null);
   const [manualEntryEmployee, setManualEntryEmployee] = useState(null);
+  const [editingEntry, setEditingEntry] = useState(null);
+  const canEditEntries = canEditTimeEntries(user);
   const [entryNotice, setEntryNotice] = useState("");
   // Managers and HR may also correct their own time from "My timesheet".
   const canAddOwnEntry = ["manager", "hr"].includes(user?.role);
@@ -180,6 +190,8 @@ function AdminReportContent({
         setError(
           getApiErrorMessage(requestError, "Unable to load report filters.")
         );
+      } finally {
+        setEntryOptionsLoading(false);
       }
     };
 
@@ -189,6 +201,7 @@ function AdminReportContent({
   const availableEmployees = useMemo(() => team
     ? employees.filter((item) => String(item.team?._id || item.team || "") === team)
     : employees, [employees, team]);
+  const entryScopeValid = Boolean(team && entryEmployeesForTeam(employees, team).some(item => item._id === employee));
   const availableProjects = useMemo(() => variant === "team"
     ? projects.filter((item) => projectServesTeam(item, team))
     : projects, [projects, team, variant]);
@@ -284,7 +297,7 @@ function AdminReportContent({
       ? "employees"
       : variant === "detailed" && mode === "time" ? "timeline entries" : "records";
 
-  const loadReport = useCallback(async ({ silent = false, force = false } = {}) => {
+  const loadReport = useCallback(async ({ silent = false, force = false, filters } = {}) => {
     if (silent && !force && pendingReportRequestsRef.current > 0) return;
     const requestId = ++latestReportRequestRef.current;
     const isCurrent = () => latestReportRequestRef.current === requestId;
@@ -292,9 +305,10 @@ function AdminReportContent({
     // Silent (background) refreshes must replay the filters captured the
     // last time "Generate" succeeded, never the live (possibly half-edited)
     // filter inputs, so in-progress edits never silently change the table.
-    const activeFilters = silent
+    const activeFilters = filters || (silent
       ? appliedFiltersRef.current
-      : { fromDate, toDate, employee, team, project, task };
+      : { fromDate, toDate, employee, team, project, task });
+    if (entryManagement && (!activeFilters.team || !entryEmployeesForTeam(employees, activeFilters.team).some(employee => employee._id === activeFilters.employee))) return;
 
     if (!silent) {
       setHasRun(true);
@@ -322,7 +336,7 @@ function AdminReportContent({
         startDate: activeFilters.fromDate,
         endDate: activeFilters.toDate,
         employee: activeFilters.employee || undefined,
-        team: activeFilters.team || undefined,
+        team: activeFilters.team === UNASSIGNED_ENTRY_TEAM ? undefined : activeFilters.team || undefined,
         // Fetch every task in the selected scope first. Filtering locally
         // preserves true between-session gaps when switching projects.
         project: mode === "attendance" ? activeFilters.project || undefined : undefined,
@@ -339,8 +353,9 @@ function AdminReportContent({
       if (!isCurrent()) return;
       const fetched = mode === "attendance" ? data.attendance || [] : data.timeLogs || [];
       if (mode === "time") {
-        setAllTimeRecords(fetched);
-        setRecords(fetched.filter((record) =>
+        const scoped = entryManagement ? fetched.filter(record => String(record.employee?._id || record.employee || '') === activeFilters.employee) : fetched;
+        setAllTimeRecords(scoped);
+        setRecords(scoped.filter((record) =>
           (!activeFilters.project || String(record.project?._id || record.project || "") === activeFilters.project)
           && (!activeFilters.task || String(record.task?._id || record.task || "") === activeFilters.task)));
       } else {
@@ -370,9 +385,21 @@ function AdminReportContent({
       pendingReportRequestsRef.current -= 1;
       if (isCurrent() && (!silent || force)) setLoading(false);
     }
-  }, [employee, fromDate, mode, project, scope, task, team, toDate]);
+  }, [employee, fromDate, mode, project, scope, task, team, toDate, entryManagement, employees]);
 
   const runReport = () => loadReport();
+  const changeEntryScope = (nextTeam, nextEmployee) => {
+    // Discard pending responses and old rows immediately when switching people.
+    latestReportRequestRef.current += 1;
+    setTeam(nextTeam); setEmployee(nextEmployee);
+    setProject(''); setTask(''); setAppliedProject(''); setAppliedTask('');
+    setRecords([]); setAllTimeRecords([]); setHasRun(false); setLoading(false); setError('');
+    appliedFiltersRef.current = { ...appliedFiltersRef.current, team: nextTeam, employee: nextEmployee, project: '', task: '' };
+    if (nextEmployee) {
+      // Use the clicked employee explicitly rather than the previous render's state.
+      void loadReport({ filters: { fromDate, toDate, team: nextTeam, employee: nextEmployee, project: '', task: '' } });
+    }
+  };
   // Replay the applied filters even while a draft selection is being edited.
   const handleEntrySaved = (timeLog) => {
     setEntryNotice(`Entry added for ${timeLog?.employee?.fullName || "the employee"}.`);
@@ -399,7 +426,7 @@ function AdminReportContent({
     if (restoredReportRef.current) return;
     restoredReportRef.current = true;
     if (savedReportState.hasRun) void loadReport();
-  }, [loadReport, savedReportState.hasRun]);
+  }, [loadReport, savedReportState.hasRun, entryManagement]);
 
   useDataRefresh(() => {
     if (hasRun) return loadReport({ silent: true });
@@ -515,7 +542,7 @@ function AdminReportContent({
   return (
     <DashboardLayout title={title}>
       <div className="admin-report-page">
-        {variant !== "summary" && <ReportSummary items={mode === "time" ? [
+        {variant !== "summary" && (!entryManagement || hasRun) && <ReportSummary items={mode === "time" ? [
           { label: variant === "detailed" ? "Timeline entries" : "Records", value: hasRun ? resultCount : "—", help: variant === "detailed" ? `${records.length} timer sessions` : undefined },
           { label: "Worked time", value: hasRun ? formatDuration(totalSeconds) : "—" },
           { label: "Break time", value: hasRun ? formatDuration(totalBreakSeconds) : "—", help: "Intentional timer breaks" },
@@ -526,13 +553,15 @@ function AdminReportContent({
         ]} />}
         <section className="admin-report-filter card">
           <div>
-            <span className="admin-report-kicker">Report filters</span>
+            <span className="admin-report-kicker">{entryManagement ? 'Entry filters' : 'Report filters'}</span>
             <h2>{title}</h2>
             <p>{description}</p>
           </div>
 
           <div className="admin-report-controls">
-            {hasTeamFilter && mode === "time" && (
+            {entryManagement && <EntryEmployeePicker teams={teams} employees={employees} team={team} employee={employee} loading={entryOptionsLoading}
+              onTeamChange={nextTeam => changeEntryScope(nextTeam, '')} onEmployeeChange={nextEmployee => changeEntryScope(team, nextEmployee)} />}
+            {!entryManagement && hasTeamFilter && mode === "time" && (
               <select
                 value={team}
                 onChange={(event) => {
@@ -555,7 +584,7 @@ function AdminReportContent({
                 ))}
               </select>
             )}
-            {showEmployeeFilter && mode !== "tracking" && (
+            {!entryManagement && showEmployeeFilter && mode !== "tracking" && (
               <select
                 value={employee}
                 onChange={(event) => setEmployee(event.target.value)}
@@ -567,6 +596,7 @@ function AdminReportContent({
                 ))}
               </select>
             )}
+            {(!entryManagement || entryScopeValid) && <>
             {mode === "time" && (
               <select
                 value={project}
@@ -616,12 +646,15 @@ function AdminReportContent({
               />
             </label>
             <button type="button" onClick={runReport} disabled={loading}>
-              <Search size={16} />{loading ? "Loading…" : "Generate"}
+              <Search size={16} />{loading ? "Loading…" : entryManagement ? 'Load entries' : "Generate"}
             </button>
+            </>}
           </div>
+          {entryManagement && !entryScopeValid && <p className="admin-report-message">Select a team, then choose an employee to load their entries.</p>}
+          {entryManagement && error && !hasRun && <p role="alert" className="admin-report-message error-message">{error}</p>}
         </section>
 
-        <section className="admin-report-results card">
+        {(!entryManagement || hasRun) && <section className="admin-report-results card">
           <header>
             <div>
               <span className="admin-report-kicker">Results</span>
@@ -765,7 +798,7 @@ function AdminReportContent({
           {!error && mode === "time" && records.length > 0 && variant === "detailed" && (
             <div className="admin-report-table-wrap">
               <table>
-                <thead><tr>{scope === "company" && <th>Employee</th>}<th>Type</th><th>Project</th><th>Task / segment</th><th>Started</th><th>Finished</th><th>Duration</th><th>Idle</th><th>Status</th><th>Note</th></tr></thead>
+                <thead><tr>{scope === "company" && <th>Employee</th>}<th>Type</th><th>Project</th><th>Task / segment</th><th>Started</th><th>Finished</th><th>Duration</th><th>Idle</th><th>Status</th><th>Note</th>{canEditEntries && <th>Actions</th>}</tr></thead>
                 <tbody>{timelineRows.map(({ record, entry, key }) => (
                       <tr className={`report-timeline-row report-${entry.type}-row`} key={key}>
                         {scope === "company" && <td>{record.employee?.fullName || "—"}</td>}
@@ -778,6 +811,7 @@ function AdminReportContent({
                         <td>{entry.type === "idle" ? formatReportDuration(entry.durationSeconds) : "—"}</td>
                         <td>{reportEntryStatus(record, entry)}</td>
                         <td className="report-entry-note">{entry.type === "work" ? record.note || "—" : "—"}</td>
+                        {canEditEntries && <td><button type="button" className="secondary-button report-edit-entry-button" disabled={record.status !== 'stopped' || !record.stoppedAt || record.isActiveTimer === true} onClick={() => setEditingEntry({ record, entry })}>{entry.source === 'between_sessions' ? 'Edit gap' : 'Edit entry'}</button></td>}
                       </tr>
                 ))}</tbody>
               </table>
@@ -794,9 +828,10 @@ function AdminReportContent({
               </table>
             </div>
           )}
-        </section>
+        </section>}
       </div>
       {entryEmployee && <AddEntryModal employee={entryEmployee} onClose={() => setEntryEmployee(null)} onSaved={handleEntrySaved} />}
+      {editingEntry && <EditEntryModal entry={editingEntry} onClose={() => setEditingEntry(null)} onSaved={() => void loadReport({ silent: true, force: true })} />}
       {manualEntryEmployee && <ManualEntriesModal employee={manualEntryEmployee}
         records={scope === "personal" ? records.map((record) => ({ ...record, employee: record.employee || user })) : records}
         onClose={() => setManualEntryEmployee(null)} onDeleted={handleEntryDeleted} />}
