@@ -43,6 +43,13 @@ const taskTimeLogSchema = new mongoose.Schema(
       default: null,
     },
 
+    // Optional for additive rollout; never backfill or rewrite historical tuples.
+    activityMapping: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ActivityMapping',
+      default: undefined,
+    },
+
     task: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Task",

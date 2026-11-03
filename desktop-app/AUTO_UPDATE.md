@@ -1,5 +1,7 @@
 # CRM automatic updates: implementation and pilot release guide
 
+For the newly added Windows launch-at-login and saved-account sign-in behavior, see [Startup and sign-in](STARTUP_AND_SIGN_IN.md). It requires an updated installed desktop release.
+
 ## Version 1.2.32: automatic restart to install
 
 Before 1.2.32 a downloaded update waited until the employee closed CRM.

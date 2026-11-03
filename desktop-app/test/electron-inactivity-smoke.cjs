@@ -58,6 +58,7 @@ const server = http.createServer((req, res) => {
       { _id: "client-a", clientName: "ABC Company", status: "Active" },
       { _id: "client-b", clientName: "XYZ LLC", status: "Active" },
     ] };
+    else if (req.url.includes('/activity-options')) { res.statusCode = 404; data = { message: 'API route not found.' }; }
     else if (req.url.startsWith("/api/projects")) data = { projects: [{ _id: "project", projectName: "Project", clientName: "" }], totalPages: 1 };
     else if (req.url.startsWith("/api/tasks")) data = {
       tasks: req.url.includes("taskType=break")
@@ -113,6 +114,7 @@ app.whenReady().then(async () => {
     assert.deepEqual(await evaluate("[...document.getElementById('clientSelect').options].map(option => option.textContent)"), ["Select client", "ABC Company", "XYZ LLC"]);
     await evaluate(`document.getElementById("clientSelect").value = "client-b";
       document.getElementById("clientSelect").dispatchEvent(new Event("change"));`);
+    await until(() => evaluate("!document.getElementById('taskSelect').disabled && [...document.getElementById('taskSelect').options].some(option => option.value === 'task')"));
     await evaluate(`document.getElementById("taskSelect").value = "task";
       document.getElementById("taskSelect").dispatchEvent(new Event("change"));
       document.getElementById("startTimerButton").click();`);
@@ -131,6 +133,14 @@ app.whenReady().then(async () => {
       document.getElementById("startTimerButton").click();`);
     await until(() => evaluate("document.getElementById('timerStatus').textContent === 'On Break'"));
     await until(() => evaluate("!document.getElementById('stopBreakButton').hidden && !document.getElementById('stopBreakButton').disabled"));
+    idleSeconds = 8 * 3600;
+    const breakActionsBefore = actions.length;
+    await evaluate('checkSystemIdleState()');
+    assert.equal(await evaluate("document.getElementById('timerStatus').textContent"), 'On Break');
+    assert.equal(await evaluate("document.getElementById('idleStartedDialog').open"), false);
+    assert.equal(await evaluate("!!localStorage.getItem('token')"), true);
+    assert.equal(actions.length, breakActionsBefore, 'Eight idle hours must not stop a running break or log out');
+    idleSeconds = 0;
     await delay(2100);
     assert.notEqual(await evaluate("document.getElementById('breakDuration').textContent"), "00:00:00");
     assert.equal(await evaluate("document.getElementById('timerDuration').textContent"), "00:00:00");

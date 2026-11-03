@@ -41,10 +41,11 @@ export const zonedDateTimeToIso = (dateKey, time, timezone = APP_TIMEZONE) => {
 // The picker data comes from one request; narrowing is purely local.
 export const projectsForClient = (options, clientId) => (options?.projects || [])
   .filter((project) => (!clientId || (project.clientIds || []).some((value) => id(value) === id(clientId)))
-    && tasksForProject(options, project._id).length > 0);
+    && (options?.tasks || []).some(task => id(task.project) === id(project)));
 
-export const tasksForProject = (options, projectId) => (options?.tasks || [])
-  .filter((task) => projectId && id(task.project) === id(projectId));
+export const tasksForProject = (options, projectId, clientId = '') => (options?.tasks || [])
+  .filter((task) => projectId && id(task.project) === id(projectId)
+    && (!options.projects?.find(project => id(project) === id(projectId))?.mappingEnabled || (clientId && (task.clientIds || []).includes(id(clientId)))));
 
 export const emptyEntryForm = (now = new Date()) => ({
   client: "", project: "", task: "", date: todayDateKey(now), startTime: "", endTime: "", reason: "",
@@ -60,12 +61,13 @@ export const formatEntryDuration = (seconds) => {
 export function validateEntryForm(form, options, employeeId, now = new Date(), timezone = APP_TIMEZONE) {
   const errors = {};
   const projects = options?.projects || [];
+  if (projects.find(project => project._id === form.project)?.mappingEnabled && !form.client) errors.client = 'Select a linked client.';
   if (!form.project) errors.project = "Select a project.";
   else if (form.client && !projectsForClient(options, form.client).some((project) => project._id === form.project)) {
     errors.project = "This project does not belong to the selected client.";
   } else if (!projects.some((project) => project._id === form.project)) errors.project = "Select a valid project.";
   if (!form.task) errors.task = "Select a task.";
-  else if (!tasksForProject(options, form.project).some((task) => task._id === form.task)) errors.task = "Select a task from this project.";
+  else if (!tasksForProject(options, form.project, form.client).some((task) => task._id === form.task)) errors.task = "Select a task linked to this project and client.";
   if (!form.date) errors.date = "Choose a date.";
   if (!form.startTime) errors.startTime = "Enter a start time.";
   if (!form.endTime) errors.endTime = "Enter an end time.";

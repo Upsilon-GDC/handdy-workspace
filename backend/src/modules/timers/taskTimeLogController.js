@@ -10,6 +10,7 @@ const { getBillingDateRange, getDateKeyInTimezone } = require("../../utils/billi
 const sendErrorResponse = require("../../utils/sendErrorResponse");
 const { isAdminRole } = require("../../utils/roles");
 const { closeStaleDesktopTimers, HEARTBEAT_TIMEOUT_MS } = require("../../services/desktopTimerLease");
+const { validateActivitySelection } = require('../../services/activitySelection');
 const { isOn } = require("../../config/optimizations");
 const { recordAttendanceActivity } = require("../../services/attendanceService");
 const { beginReportSync, changedTimeLogFilter, deltaRows, reportChecksum, wantsChecksum } = require("../../services/reportSync");
@@ -296,6 +297,8 @@ const startTimer = async (req, res) => {
             });
         }
 
+        const activitySelection = await validateActivitySelection(projectExists, client, task);
+        if (activitySelection.error) return res.status(400).json({ success: false, message: activitySelection.error });
         const activeTimer = await TaskTimeLog.findOne({
             employee: employeeId,
             status: { $in: ["running", "paused"] },
@@ -314,6 +317,7 @@ const startTimer = async (req, res) => {
             employee: employeeId,
             project,
             client: client || null,
+            ...(activitySelection.mapping ? { activityMapping: activitySelection.mapping } : {}),
             task,
             note: typeof note === "string" ? note.trim().slice(0, 2000) : undefined,
             startedAt,

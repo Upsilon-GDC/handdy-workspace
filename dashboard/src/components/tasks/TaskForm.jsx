@@ -5,14 +5,15 @@ import { getAllEmployeeOptions, getAllMyTeamMembers } from "../../api/employeeAp
 import useAuth from "../../context/useAuth";
 import getApiErrorMessage from "../../utils/getApiErrorMessage";
 import PermissionNote from "../layout/PermissionNote";
+import { clientsForTaskProject, selectedCreationClient, creationTeamsForProject, automaticCreationTeamIds } from '../../utils/taskCreation';
 
 import "../../styles/adminAddTask.css";
 
 const toId = (value) => (typeof value === "string" ? value : value?._id) || "";
 
 // Shared Task Creation/Edit form used by Admin (full page + list-page edit
-// modal) and Team Lead (full page). Tasks are team-wide and can be used with
-// any active project available to their selected teams.
+// modal) and Team Lead (full page). New tasks share one project/client choice
+// per batch; editing preserves the existing project's identity and links.
 function TaskForm({
   mode = "create",
   scope = "admin",
@@ -29,9 +30,17 @@ function TaskForm({
   const canReassign = hasPermission("reassign_tasks");
   // Switching a task on or off is the "Archive tasks" duty (the API checks).
   const canArchive = hasPermission("archive_tasks");
+  const companyTaskScope = ['admin', 'alpha', 'manager', 'hr'].includes(user?.role);
+  const [overrideTeams, setOverrideTeams] = useState(false);
 
   const [taskName, setTaskName] = useState(initialTask?.taskName || "");
   const [additionalTaskNames, setAdditionalTaskNames] = useState([]);
+  const [creationOptions, setCreationOptions] = useState({ projects: [], clients: [] });
+  const [projectId, setProjectId] = useState('');
+  const [clientId, setClientId] = useState('');
+  const [optionsLoading, setOptionsLoading] = useState(mode === 'create');
+  const [optionsError, setOptionsError] = useState('');
+  const [optionsAttempt, setOptionsAttempt] = useState(0);
   const [taskType, setTaskType] = useState(initialTask?.taskType || "work");
   const [idleLogout, setIdleLogout] = useState(initialTask?.idleLogout === true);
   const [isActive, setIsActive] = useState(initialTask ? initialTask.isActive !== false : true);
@@ -74,14 +83,31 @@ function TaskForm({
   }, [error]);
 
   useEffect(() => {
-    if (scope !== "admin") return;
+    if (scope !== "admin" || mode === 'create') return;
     axiosInstance
       .get("/teams")
       .then(({ data }) => setTeamsOptions((data.teams || []).filter((team) => team.isActive)))
       .catch(() => {});
-  }, [scope]);
+  }, [scope, mode]);
 
   useEffect(() => {
+    if (mode !== 'create') return;
+    let active = true;
+    axiosInstance.get('/tasks/creation-options')
+      .then(({ data }) => {
+        if (!active) return;
+        setCreationOptions({ projects: data.projects || [], clients: data.clients || [] });
+        setTeamsOptions(data.teams || []); setOptionsError('');
+        setAllEmployees((data.employees || []).map(employee => ({ ...employee, role: 'employee' })));
+        setTeamMembers(data.employees || []);
+      })
+      .catch(reason => { if (active) setOptionsError(getApiErrorMessage(reason, 'Unable to load projects and clients.')); })
+      .finally(() => { if (active) setOptionsLoading(false); });
+    return () => { active = false; };
+  }, [mode, optionsAttempt]);
+
+  useEffect(() => {
+    if (mode === 'create') return;
     let active = true;
     if (scope === "admin") {
       getAllEmployeeOptions({ isActive: true })
@@ -93,15 +119,21 @@ function TaskForm({
         .catch((requestError) => { if (active) setError(getApiErrorMessage(requestError, "Unable to load your team.")); });
     }
     return () => { active = false; };
-  }, [scope]);
+  }, [scope, mode]);
 
-  const teamsKey = teams.join(",");
+  const creationProject = creationOptions.projects.find(project => toId(project) === projectId);
+  const creationClients = clientsForTaskProject(creationOptions, projectId);
+  const effectiveClientId = selectedCreationClient(creationClients, clientId);
+  const availableTeams = mode === 'create' ? creationTeamsForProject(teamsOptions, creationProject) : teamsOptions;
+  const effectiveTeams = mode === 'create' && !overrideTeams
+    ? automaticCreationTeamIds(teamsOptions, creationProject, companyTaskScope) : teams;
+  const teamsKey = effectiveTeams.join(",");
 
   const availableEmployees = useMemo(() => {
     const pool =
       scope === "admin"
         ? allEmployees.filter(
-            (employee) => employee.role === "employee" && teams.includes(toId(employee.team))
+            (employee) => employee.role === "employee" && effectiveTeams.includes(toId(employee.team))
           )
         : teamMembers;
     const text = employeeSearch.trim().toLowerCase();
@@ -109,7 +141,18 @@ function TaskForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scope, allEmployees, teamMembers, teamsKey, employeeSearch]);
 
-  const myTeamName = teamMembers[0]?.team?.teamName || "Your team";
+  const myTeamName = teamsOptions.find(team => team._id === toId(user?.team))?.teamName || teamMembers[0]?.team?.teamName || "Your team";
+
+  const changeCreationProject = value => {
+    setProjectId(value); setClientId(''); setAssignedTo([]); setError('');
+    setOverrideTeams(false);
+    const project = creationOptions.projects.find(project => toId(project) === value);
+    const allowed = creationTeamsForProject(teamsOptions, project).map(toId);
+    if (scope === 'admin') setTeams(current => {
+      const retained = current.filter(team => allowed.includes(team));
+      return retained.length ? retained : allowed.length === 1 ? allowed : [];
+    });
+  };
 
   const toggleTeam = (teamId) => {
     setTeams((previous) =>
@@ -129,17 +172,22 @@ function TaskForm({
     if (submittingRef.current) return;
     setError("");
 
+    if (mode === 'create' && (optionsLoading || optionsError || !creationProject || !effectiveClientId)) {
+      setError(optionsError || 'Select a project and one of its linked clients before saving.');
+      return;
+    }
+
     const taskNames = [taskName, ...additionalTaskNames].map((name) => name.trim());
     if (taskNames.some((name) => !name)) {
       setError("Enter every task name, or remove unused task-name rows.");
       return;
     }
-    if (new Set(taskNames.map((name) => name.toLowerCase())).size !== taskNames.length) {
+    if (new Set(taskNames.map((name) => name.replace(/\s+/g, ' ').toLowerCase())).size !== taskNames.length) {
       setError("Each task name in this batch must be unique.");
       return;
     }
-    if (scope === "admin" && teams.length === 0) {
-      setError("Select at least one team.");
+    if ((scope === "admin" || mode === 'create') && effectiveTeams.length === 0) {
+      setError(mode === 'create' && !overrideTeams ? 'No team can be assigned automatically. Configure project teams or choose Change team access.' : 'Select at least one team.');
       return;
     }
     if (assignType === "employee" && assignedTo.length === 0) {
@@ -152,10 +200,13 @@ function TaskForm({
       taskType,
       // A team lead's or employee's edit keeps the task's teams; the API
       // allows only their own team.
-      ...(scope === "teamLead" && mode === "edit" ? {} : { teams }),
-      project: null,
-      assignToAllEmployees: mode === "create" || assignType === "team",
-      assignedTo: mode === "create" || assignType === "team" ? [] : assignedTo,
+      ...(mode === 'create' ? {
+        teamAssignment: !companyTaskScope ? 'own' : overrideTeams ? 'selected' : 'project',
+        ...((overrideTeams && companyTaskScope) ? { teams: effectiveTeams } : {}),
+      } : scope === 'teamLead' ? {} : { teams }),
+      ...(mode === 'create' ? { project: projectId, client: effectiveClientId } : {}),
+      assignToAllEmployees: assignType === "team",
+      assignedTo: assignType === "team" ? [] : assignedTo,
       idleLogout,
       ...(mode === "edit" && canArchive ? { isActive } : {}),
     };
@@ -166,7 +217,7 @@ function TaskForm({
       const response =
         mode === "edit"
           ? await axiosInstance.put(`/tasks/${initialTask._id}`, payload)
-          : await axiosInstance.post("/tasks/bulk", { ...payload, taskNames, autoProjects: true });
+          : await axiosInstance.post('/tasks/linked', { ...payload, taskNames });
       onSaved(response.data.tasks || response.data.task);
     } catch (requestError) {
       setError(getApiErrorMessage(requestError, "Unable to save task."));
@@ -181,6 +232,27 @@ function TaskForm({
       {header}
       {error && <p ref={errorRef} className="admin-error-box" role="alert">{error}</p>}
 
+      {mode === 'create' && <section className="admin-task-project-selection" aria-label="Project and client">
+        {optionsLoading && <p role="status">Loading projects and clients…</p>}
+        {optionsError && <div role="alert"><p>{optionsError}</p><button type="button" onClick={() => { setOptionsLoading(true); setOptionsAttempt(value => value + 1); }}>Retry loading options</button></div>}
+        <label htmlFor="task-creation-project">Project</label>
+        <select id="task-creation-project" value={projectId} disabled={saving || optionsLoading || Boolean(optionsError)} onChange={event => changeCreationProject(event.target.value)} required>
+          <option value="">Select project</option>
+          {creationOptions.projects.map(project => <option key={project._id} value={project._id}>{project.projectName} ({project.projectCode})</option>)}
+        </select>
+        {!optionsLoading && !optionsError && !creationOptions.projects.length && <p>No active projects are available for your team. Ask an administrator to configure them.</p>}
+        {projectId && <>
+          <label htmlFor="task-creation-client">Client</label>
+          <select id="task-creation-client" value={effectiveClientId} disabled={saving || creationClients.length <= 1 || Boolean(optionsError)} onChange={event => setClientId(event.target.value)} required>
+            <option value="">Select client</option>
+            {creationClients.map(client => <option key={client._id} value={client._id}>{client.clientName}</option>)}
+          </select>
+          {creationClients.length === 1 && <p>{creationClients[0].clientName} is selected automatically because it is the only linked client.</p>}
+          {!creationClients.length && <p role="status">This project has no active linked clients. Ask an administrator to save its clients on the Projects page first.</p>}
+        </>}
+        <p>Choose once for this batch. Every task name below will be linked to this project and client when saved.</p>
+      </section>}
+
       <div className="admin-task-basics admin-task-name-list" style={{ gridTemplateColumns: "1fr" }}>
         <label>
           Task name
@@ -188,6 +260,7 @@ function TaskForm({
             value={taskName}
             onChange={(event) => setTaskName(event.target.value)}
             placeholder="Enter task name"
+            maxLength={200}
             required
           />
         </label>
@@ -202,6 +275,7 @@ function TaskForm({
                   current.map((item, itemIndex) => itemIndex === index ? event.target.value : item)
                 )}
                 placeholder="Enter another task name"
+                maxLength={200}
                 required
               />
             </label>
@@ -220,6 +294,7 @@ function TaskForm({
           <button
             type="button"
             className="admin-task-name-add"
+            disabled={additionalTaskNames.length >= 99 || saving}
             onClick={() => setAdditionalTaskNames((current) => [...current, ""])}
           >
             + Add another task name
@@ -255,7 +330,15 @@ function TaskForm({
         </label>
       </div>
 
-      {scope === "admin" ? (
+      {mode === 'create' && <div className="admin-task-access admin-task-auto-access">
+        <div className="admin-task-section-heading"><div><p>TEAM ACCESS</p><h3>{companyTaskScope ? overrideTeams ? 'Custom team access' : 'Assigned automatically from project' : 'Your team is assigned automatically'}</h3>
+          <span className="admin-task-selection-copy">{effectiveTeams.length ? teamsOptions.filter(team => effectiveTeams.includes(team._id)).map(team => team.teamName).join(', ') : projectId ? 'No automatic team assignment is available.' : 'Select a project first.'}</span>
+          <p className="admin-task-selection-copy">{companyTaskScope ? 'These teams can use the new tasks. Managers and admins can see all teams’ tasks.' : 'Only your team receives these tasks. Managers and admins can still see them.'}</p>
+        </div></div>
+        {companyTaskScope && projectId && <button type="button" className="admin-task-team-override" aria-expanded={overrideTeams} disabled={saving} onClick={() => { setTeams(overrideTeams ? [] : effectiveTeams); setOverrideTeams(value => !value); setAssignedTo([]); }}>{overrideTeams ? 'Use automatic team assignment' : 'Change team access'}</button>}
+      </div>}
+
+      {scope === "admin" && (mode === 'edit' || overrideTeams) ? (
         <div className="admin-task-access">
           <div className="admin-task-section-heading">
             <div>
@@ -263,11 +346,11 @@ function TaskForm({
               <h3>Select teams</h3>
               <span className="admin-task-selection-copy">Choose one or more teams for this task.</span>
             </div>
-            <span className="admin-task-selection-count">{teams.length} selected</span>
+            <span className="admin-task-selection-count">{effectiveTeams.length} selected</span>
           </div>
           <div className="admin-task-team-grid">
-            {teamsOptions.map((team) => {
-              const selected = teams.includes(team._id);
+            {availableTeams.map((team) => {
+              const selected = effectiveTeams.includes(team._id);
               return (
                 <button
                   type="button"
@@ -283,7 +366,7 @@ function TaskForm({
             })}
           </div>
         </div>
-      ) : (
+      ) : mode === 'edit' ? (
         <div className="admin-task-access">
           <div className="admin-task-section-heading">
             <div>
@@ -294,13 +377,13 @@ function TaskForm({
             <span className="admin-task-selection-count">{myTeamName}</span>
           </div>
         </div>
-      )}
+      ) : null}
 
       <p className="admin-task-project-empty">
-        This task is available across all active projects assigned to the selected teams.
+        {mode === 'create' ? 'Tasks and their project/client links are saved together. Existing tasks are not changed.' : 'Existing project and client links are retained. Use Link multiple tasks to manage additional links.'}
       </p>
 
-      {mode === "edit" && <div className="admin-task-assignees">
+      {(mode === "edit" || canReassign) && <div className="admin-task-assignees">
         <div className="admin-task-section-heading">
           <div>
             <p>ASSIGNMENT</p>
@@ -371,7 +454,7 @@ function TaskForm({
         <button type="button" className="admin-add-task-cancel" onClick={onCancel} disabled={saving}>
           Cancel
         </button>
-        <button type="submit" className="admin-add-task-save" disabled={saving}>
+        <button type="submit" className="admin-add-task-save" disabled={saving || (mode === 'create' && (optionsLoading || Boolean(optionsError) || !creationProject || !effectiveClientId))}>
           {saving
             ? "Saving..."
             : mode === "create" && additionalTaskNames.length > 0

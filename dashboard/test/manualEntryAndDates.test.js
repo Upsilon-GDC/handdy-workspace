@@ -95,6 +95,15 @@ test("populated project identifiers still match and projects without linked task
 });
 
 const NOW = new Date("2026-10-09T12:00:00Z");
+test('mapped manual tasks depend on both project and client and require a client', () => {
+  const mapped = { projects: [{ _id: 'p', clientIds: ['a', 'b'], mappingEnabled: true }], tasks: [
+    { _id: 't1', project: 'p', clientIds: ['a'] }, { _id: 't2', project: 'p', clientIds: ['b'] },
+  ] };
+  assert.deepEqual(tasksForProject(mapped, 'p', 'a').map(task => task._id), ['t1']);
+  assert.deepEqual(tasksForProject(mapped, 'p', 'b').map(task => task._id), ['t2']);
+  assert.deepEqual(tasksForProject(mapped, 'p'), []);
+  assert.ok(validateEntryForm({ project: 'p', task: 't1', client: '' }, mapped, 'employee', NOW).errors.client);
+});
 const form = (overrides = {}) => ({ ...emptyEntryForm(NOW), client: "c1", project: "p1", task: "t1",
   date: "2026-10-08", startTime: "09:00", endTime: "11:30", reason: "Timer was not started", ...overrides });
 

@@ -17,6 +17,24 @@ const Project = require("../../models/Project");
 const Client = require("../../models/Client");
 const Team = require("../../models/Team");
 const Employee = require("../../models/Employee");
+const { getActivityLinks, saveActivityLinks } = require('./activityLinkController');
+const { activityOptionsForEmployee } = require('../../services/activitySelection');
+const sendErrorResponse = require('../../utils/sendErrorResponse');
+
+router.get('/:id/activity-options', protect, async (req, res) => {
+  try {
+    const project = await Project.findOne({ _id: req.params.id, status: 'Active', deletedAt: null }).lean();
+    if (!project) return res.status(404).json({ success: false, message: 'Active project not found.' });
+    const options = await activityOptionsForEmployee(project, req.user);
+    if (!options) return res.status(403).json({ success: false, message: 'This project is not available to your team.' });
+    return res.json({ success: true, project: project._id, ...options });
+  } catch (error) { return sendErrorResponse(res, error, 'Unable to load project activity choices.'); }
+});
+
+// Company project administration plus task-edit permission. Non-HR delegated
+// users remain limited to their own task teams inside the controller.
+router.get('/activity-links', protect, requirePermission('manage_projects'), requirePermission('edit_tasks'), getActivityLinks);
+router.post('/activity-links', protect, requirePermission('manage_projects'), requirePermission('edit_tasks'), saveActivityLinks);
 
 // All logged-in users can view projects
 router.get("/", protect, catalogCache([Project, Client, Team, Employee], { shared: true }), getAllProjects);

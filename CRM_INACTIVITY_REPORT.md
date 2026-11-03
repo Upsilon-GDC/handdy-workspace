@@ -1,5 +1,11 @@
 # CRM desktop inactivity implementation
 
+## Current policy update - 2 November 2026, desktop 2.0.3
+
+Running tasks classified as taskType "break" now continue through hours of inactivity without automatic stop or logout. Employees explicitly end the break or sign out. Work tasks, sessions without a timer and legacy paused work records retain their inactivity policy. Application disconnection/heartbeat safeguards still apply. This supersedes older descriptions below that apply inactivity logout to every task type. See desktop-app/STARTUP_AND_SIGN_IN.md for current behavior.
+
+Verification: multi-hour idle unit regression and the actual Electron page with eight simulated idle hours followed by manual Stop Break. Evidence: artifacts/break-inactivity-desktop-tests.log.
+
 ## Existing behavior reviewed
 
 The desktop renderer polls `powerMonitor.getSystemIdleTime()` through the existing sandboxed preload IPC every five seconds. It already pauses through `/time-logs/pause` with reason `idle` and resumes an idle pause when system idle time falls to two seconds or less. The existing backend pause default is **5 minutes**, with a supported range of **1–240 minutes**; these conventions are preserved.

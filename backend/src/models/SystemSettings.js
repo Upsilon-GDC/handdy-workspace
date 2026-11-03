@@ -23,6 +23,16 @@ const systemSettingsSchema = new mongoose.Schema(
       max: defaults.maxLogoutMinutes,
       validate: Number.isInteger,
     },
+    // Absent on existing settings. Phase 2 stores structure only; selecting or
+    // starting a default activity remains disabled until explicitly configured.
+    defaultActivity: {
+      type: new mongoose.Schema({
+        mapping: { type: mongoose.Schema.Types.ObjectId, ref: 'ActivityMapping', required: true },
+        enabled: { type: Boolean, default: false },
+        mode: { type: String, enum: ['selection_only'], default: 'selection_only' },
+      }, { _id: false }),
+      default: undefined,
+    },
   },
   { timestamps: true }
 );

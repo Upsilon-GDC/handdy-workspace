@@ -6,10 +6,13 @@ import getApiErrorMessage from "../../utils/getApiErrorMessage";
 import useDataRefresh from "../../hooks/useDataRefresh";
 import useAuth from "../../context/useAuth";
 import PermissionNote from "../../components/layout/PermissionNote";
+import ActivityLinksModal from '../../components/tasks/ActivityLinksModal';
 
 function AdminProjects() {
   const { hasPermission } = useAuth();
   const canManage = hasPermission("manage_projects");
+  const canLink = hasPermission('manage_projects', 'edit_tasks');
+  const [showLinks, setShowLinks] = useState(false);
   const [projects, setProjects] = useState([]);
   const [teams, setTeams] = useState([]);
   const [search, setSearch] = useState("");
@@ -276,6 +279,7 @@ function AdminProjects() {
 
   return (
     <DashboardLayout title="Projects">
+      {showLinks && <ActivityLinksModal onClose={() => setShowLinks(false)} />}
       <section className="admin-card projects-card">
 
         <div className="projects-page-heading">
@@ -288,6 +292,8 @@ function AdminProjects() {
             {!canManage && <PermissionNote permissions={["manage_projects"]} />}
           </div>
 
+          <div className="activity-page-actions">
+          {canLink && <button type="button" className="add-project-button" onClick={() => setShowLinks(true)}>Link clients & tasks</button>}
           {canManage && <button
             className="add-project-button"
             type="button"
@@ -295,6 +301,7 @@ function AdminProjects() {
           >
             + Add New Project
           </button>}
+          </div>
         </div>
 
         <div className="projects-toolbar">

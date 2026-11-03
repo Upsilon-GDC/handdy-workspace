@@ -14,6 +14,7 @@ const connectDatabase = require("./src/config/db");
 const { validateProductionConfig } = require("./src/config/productionConfig");
 const { verifyEmailTransport } = require("./src/utils/mailer");
 const { ensureAuthSessionIndexes } = require("./src/services/authSessionService");
+const { ensureActivityMappingIndexes } = require('./src/services/activityMappings');
 const { startTimerSweep } = require("./src/jobs/timerSweep");
 const { PERMISSION_VERSION_HEADER, refreshPermissionOverrides } = require("./src/services/permissionService");
 const trafficMetrics = require("./src/monitoring/trafficMetrics");
@@ -216,6 +217,7 @@ const startServer = async () => {
     await connectDatabase();
     if (trafficMetrics.enabled) trafficMetrics.attachMongo(mongoose.connection.getClient());
     await ensureAuthSessionIndexes();
+    await ensureActivityMappingIndexes();
     await refreshPermissionOverrides();
     const timerSweep = await startTimerSweep();
 

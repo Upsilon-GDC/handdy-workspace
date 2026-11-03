@@ -53,6 +53,11 @@ const projectSchema = new mongoose.Schema(
       ref: "Client",
     }],
 
+    // Optimistic concurrency for website activity-link edits.
+    activityLinksVersion: { type: Number, default: 0, min: 0 },
+    // Explicit per-project rollout; removing the last mapping must not reopen legacy access.
+    activityMappingEnabled: { type: Boolean, default: false },
+
     // Projects can be shared by several teams. An empty array is retained for
     // legacy records and means the project has not yet been restricted.
     teams: [{

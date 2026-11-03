@@ -1,10 +1,13 @@
 {
   "name": "handdy-desktop-app",
-  "version": "2.0.1",
+  "version": "2.0.3",
   "description": "Employee Time & Attendance System Desktop App",
   "main": "main.js",
   "scripts": {
-    "test": "node --test --test-isolation=none test/*.test.js && npm run test:electron && npm run test:dashboard",
+    "test": "node --test --test-isolation=none test/*.test.js && npm run test:electron && npm run test:startup && npm run test:dashboard && npm run test:activity-links && npm run test:manual-entry",
+    "test:manual-entry": "set \"ELECTRON_RUN_AS_NODE=\" && electron test/manual-entry-report-smoke.cjs",
+    "test:startup": "set \"ELECTRON_RUN_AS_NODE=\" && electron test/startup-login-smoke.cjs",
+    "test:activity-links": "set \"ELECTRON_RUN_AS_NODE=\" && electron test/activity-links-smoke.cjs",
     "test:electron": "set \"ELECTRON_RUN_AS_NODE=\" && electron test/electron-inactivity-smoke.cjs",
     "test:installer": "powershell -NoProfile -File test/installer-shortcut-smoke.ps1",
     "test:dashboard": "set \"VITE_API_URL=/api\" && npm --prefix ../dashboard run build && set \"ELECTRON_RUN_AS_NODE=\" && electron test/dashboard-lifecycle-smoke.cjs",
@@ -27,6 +30,7 @@
     },
     "files": [
       "main.js",
+      "login-startup.js",
       "app-updater.js",
       "timer-lock.js",
       "lock-overlay.html",

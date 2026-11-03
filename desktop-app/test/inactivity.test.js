@@ -412,7 +412,7 @@ test("idle stops work even when the old per-task flag is disabled", async () => 
   assert.equal(h.state.stopBody.idleSeconds, 300);
 });
 
-test("intentional break is exempt from idle stop but not account auto-logout", async () => {
+test("legacy paused break retains account auto-logout", async () => {
   const h = harness({ timer: "paused", idle: 1800 });
   h.state.timer.pauses = [{ pausedAt: new Date().toISOString(), reason: "break" }];
   h.run("currentTimeLog = seed");
@@ -421,6 +421,28 @@ test("intentional break is exempt from idle stop but not account auto-logout", a
   assert.equal(h.calls.filter((url) => url.endsWith("/stop")).length, 1);
   assert.equal(h.calls.filter((url) => url.endsWith("/auth/logout")).length, 1);
   assert.equal(h.context.localStorage.getItem("token"), null);
+});
+
+test('a running break task continues through hours of inactivity without stop or logout', async () => {
+  const h = harness({ idle: 8 * 3600 });
+  h.state.timer.task = { _id: 'lunch', taskType: 'break', taskName: 'Lunch' };
+  h.run('currentTimeLog = seed');
+  h.context.localStorage.setItem('rememberedSessionToken', 'saved-account');
+  for (const idle of [300, 1800, 3600, 8 * 3600]) {
+    h.state.idle = idle;
+    await h.check();
+    assert.equal(h.state.timer.status, 'running');
+    assert.equal(h.context.localStorage.getItem('token'), 'test-only');
+    assert.equal(h.context.localStorage.getItem('rememberedSessionToken'), 'saved-account');
+    assert.equal(h.nodes.get('idleStartedDialog').open, false);
+  }
+  assert.equal(h.calls.length, 0, 'No stop, pause, logout or other API mutation');
+  // Once the employee ends the break, normal inactivity rules still apply.
+  h.state.timer = null;
+  h.run('currentTimeLog = null');
+  await h.check();
+  assert.equal(h.context.localStorage.getItem('token'), null);
+  assert.ok(h.calls.some(url => url.endsWith('/auth/logout')));
 });
 
 test("desktop honors short inactivity values saved by the administrator", () => {

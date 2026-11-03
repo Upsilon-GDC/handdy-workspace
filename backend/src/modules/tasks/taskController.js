@@ -211,6 +211,9 @@ const applyTeamLeadMutationScope = async (filter, user) => {
 // CREATE TASK
 // ======================================================
 const createTask = async (req, res) => {
+  // A caller supplying a client must use the validated, atomic linked path;
+  // never silently discard that relationship on a compatibility endpoint.
+  if (req.body.client !== undefined) return require('./linkedTaskController').createLinkedTasks(req, res);
   try {
     const {
       taskCode,
@@ -337,6 +340,7 @@ const createTask = async (req, res) => {
 
 // Create task-name/project combinations with one shared access configuration.
 const createTasksBulk = async (req, res) => {
+  if (req.body.client !== undefined) return require('./linkedTaskController').createLinkedTasks(req, res);
   try {
     const taskNames = Array.isArray(req.body.taskNames)
       ? req.body.taskNames.map((name) => String(name || "").trim())
@@ -926,6 +930,8 @@ const handleTaskError = (res, error) => {
 };
 
 module.exports = {
+  getTeamsForTask,
+  worksWithAllTeams,
   createTask,
   createTasksBulk,
   getAllTasks,

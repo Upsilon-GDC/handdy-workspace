@@ -7,6 +7,7 @@ const Project = require("../src/models/Project");
 const Task = require("../src/models/Task");
 const Team = require("../src/models/Team");
 const Client = require("../src/models/Client");
+const ActivityMapping = require('../src/models/ActivityMapping');
 const { startTimer, stopTimer, heartbeatTimer } = require("../src/modules/timers/taskTimeLogController");
 const { closeStaleDesktopTimers } = require("../src/services/desktopTimerLease");
 
@@ -31,6 +32,18 @@ const running = (extra = {}) => ({
   status: "running", isActiveTimer: true, startedAt: new Date(Date.now() - 3_600_000), pauses: [], ...extra,
 });
 const noSweep = (t) => t.mock.method(TaskTimeLog, "find", () => ({ lean: async () => [] }));
+
+test('mapped timer starts reject an unlinked task without creating time', async t => {
+  noSweep(t);
+  t.mock.method(Project, 'findById', async () => ({ _id: 'project', status: 'Active', teams: ['team'], clients: ['client'], activityMappingEnabled: true }));
+  t.mock.method(Client, 'exists', async () => ({ _id: 'client' }));
+  t.mock.method(Team, 'exists', async () => ({ _id: 'team' }));
+  t.mock.method(Task, 'findOne', async () => ({ _id: 'task' }));
+  t.mock.method(ActivityMapping, 'findOne', () => ({ select() { return this; }, lean: async () => null }));
+  const create = t.mock.method(TaskTimeLog, 'create', async () => assert.fail('no time entry may be created'));
+  const res = await call(startTimer, { project: 'project', client: 'client', task: 'task' });
+  assert.equal(res.statusCode, 400); assert.match(res.body.message, /not linked/); assert.equal(create.mock.callCount(), 0);
+});
 
 // ------------------------------------------------------------------ stop
 test("stop never overwrites a timer the lease sweep closed first", async (t) => {

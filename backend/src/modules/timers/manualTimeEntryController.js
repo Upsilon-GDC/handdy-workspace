@@ -5,6 +5,7 @@ const Task = require("../../models/Task");
 const Employee = require("../../models/Employee");
 const Team = require("../../models/Team");
 const Client = require("../../models/Client");
+const { validateActivitySelection, activityOptionsForEmployee } = require('../../services/activitySelection');
 const sendErrorResponse = require("../../utils/sendErrorResponse");
 const { isAdminRole } = require("../../utils/roles");
 const { recordAttendanceActivity } = require("../../services/attendanceService");
@@ -103,7 +104,7 @@ const loadTargetEmployee = async (id) => {
 };
 
 // GET /api/time-logs/manual/options?employee=<id>
-// One request supplies the whole Client -> Project -> Task picker for an
+// One request supplies the whole Project -> Client -> Task picker for an
 // employee, so the modal filters locally instead of calling per selection.
 const getManualEntryOptions = async (req, res) => {
   try {
@@ -115,8 +116,23 @@ const getManualEntryOptions = async (req, res) => {
 
     const scope = await buildEmployeeScope(employee);
     const allProjects = await Project.find(scope.projectFilter)
-      .select("projectCode projectName client clients clientName teams").sort("projectName").lean();
+      .select("projectCode projectName client clients clientName teams activityMappingEnabled").sort("projectName").lean();
     const candidateProjects = allProjects.filter((project) => projectAllowedForTeam(project, scope, employee));
+    if (candidateProjects.some(project => project.activityMappingEnabled)) {
+      const results = await Promise.all(candidateProjects.map(project => activityOptionsForEmployee(project, employee, {
+        workOnly: true, includeShared: project.activityMappingEnabled === true,
+      })));
+      const projects = [], tasks = [], clientMap = new Map();
+      candidateProjects.forEach((project, index) => {
+        const options = results[index];
+        if (!options?.tasks.length) return;
+        projects.push({ _id: project._id, projectName: project.projectName, projectCode: project.projectCode,
+          clientIds: options.clients.map(client => String(client._id)), mappingEnabled: options.mappingEnabled });
+        tasks.push(...options.tasks);
+        options.clients.forEach(client => clientMap.set(String(client._id), client));
+      });
+      return res.json({ success: true, employee: { _id: employee._id, employeeId: employee.employeeId, fullName: employee.fullName }, projects, tasks, clients: [...clientMap.values()] });
+    }
     const projectIds = candidateProjects.map((project) => project._id);
     const tasks = projectIds.length === 0 ? [] : await Task.find({
       isActive: true,
@@ -168,23 +184,26 @@ const createManualEntry = async (req, res) => {
 
     const scope = await buildEmployeeScope(employee);
     const project = await Project.findOne({ _id: value.project, ...scope.projectFilter })
-      .select("client clients teams").lean();
+      .select("client clients teams activityMappingEnabled").lean();
     if (!project || !projectAllowedForTeam(project, scope, employee)) {
       return res.status(400).json({ success: false, message: "This project is not available to the selected employee." });
     }
     const task = await Task.findOne({
-      _id: value.task, isActive: true, deletedAt: null, taskType: "work", project: value.project, ...scope.taskScope,
+      _id: value.task, isActive: true, deletedAt: null, taskType: "work", ...scope.taskScope,
+      ...(project.activityMappingEnabled ? { $and: [{ $or: [{ project: value.project }, { project: null }] }] } : { project: value.project }),
     }).select("_id").lean();
     if (!task) {
       return res.status(400).json({ success: false, message: "This task is not assigned to the employee or does not belong to the selected project." });
     }
     if (value.client) {
-      const belongs = projectClientIds(project).includes(value.client);
+      const belongs = !projectClientIds(project).length || projectClientIds(project).includes(value.client);
       if (!belongs || !await Client.exists({ _id: value.client, status: "Active" })) {
         return res.status(400).json({ success: false, message: "The selected client does not belong to this project." });
       }
     }
 
+    const activitySelection = await validateActivitySelection(project, value.client, value.task);
+    if (activitySelection.error) return res.status(400).json({ success: false, message: activitySelection.error });
     // Overlap (which also covers exact duplicates). An open timer has no
     // stoppedAt and is treated as running to the present.
     const conflict = await TaskTimeLog.findOne({
@@ -206,6 +225,7 @@ const createManualEntry = async (req, res) => {
       employee: employee._id,
       project: value.project,
       client: value.client,
+      ...(activitySelection.mapping ? { activityMapping: activitySelection.mapping } : {}),
       task: value.task,
       startedAt: value.startedAt,
       stoppedAt: value.stoppedAt,

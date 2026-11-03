@@ -5,7 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const assert = require("node:assert/strict");
 const dashboardRoot = path.resolve(__dirname, "../../dashboard/dist");
-const outputRoot = path.resolve(__dirname, "../../artifacts/manual-entry-review");
+const outputRoot = path.resolve(__dirname, '../../backend/.local-repairs/manual-entry-review');
 const people = [
   { _id: "64b000000000000000000a01", fullName: "A Employee", role: "employee" },
   { _id: "64b000000000000000000a02", fullName: "B Lead", role: "team_lead" },
@@ -15,15 +15,15 @@ const people = [
   { _id: "64b000000000000000000a06", fullName: "F HR", role: "hr" },
 ].map((person, index) => ({ ...person, employeeId: `1000${index}`, isActive: true, team: "team", teamLead: "64b000000000000000000a02" }));
 let actor = people[2];
-let grants = ["add_manual_entries"];
+let grants = ["add_manual_entries", "view_team_timesheets"];
 const projects = [
-  { _id: "p1", projectName: "Audit", projectCode: "PRJ-AUDIT", clientIds: ["c1"] },
-  { _id: "p2", projectName: "Tax preparation", projectCode: "PRJ-TAX", clientIds: ["c2"] },
+  { _id: "p1", projectName: "Audit", projectCode: "PRJ-AUDIT", clientIds: ["c1"], mappingEnabled: true },
+  { _id: "p2", projectName: "Tax preparation", projectCode: "PRJ-TAX", clientIds: ["c2"], mappingEnabled: true },
   { _id: "p3", projectName: "Unassigned project", clientIds: [] },
 ];
 const tasks = [
-  { _id: "t1", taskName: "Preparation", taskCode: "TSK-PREP", project: "p1", taskType: "work" },
-  { _id: "t2", taskName: "Review", taskCode: "TSK-REVIEW", project: "p2", taskType: "work" },
+  { _id: "t1", taskName: "Preparation", taskCode: "TSK-PREP", project: "p1", taskType: "work", clientIds: ['c1'] },
+  { _id: "t2", taskName: "Review", taskCode: "TSK-REVIEW", project: "p2", taskType: "work", clientIds: ['c2'] },
 ];
 const clients = [{ _id: "c1", clientName: "WCPA" }, { _id: "c2", clientName: "Second client" }];
 const makeLog = (id, employee, projectIndex = 0) => ({ _id: id, employee,
@@ -101,8 +101,9 @@ app.whenReady().then(async () => {
     await win.loadURL(`${base}/admin/timesheets/team`);
     await until(`document.querySelector('.admin-report-controls button') && document.body.textContent.includes('Add my entry')`);
     await clickText("Generate");
-    await until(`document.querySelectorAll('.report-add-entry-button').length === 4`);
-    assert.equal(await evaluate("[...document.querySelectorAll('.admin-report-table-wrap tbody tr')].filter(row => row.textContent.includes('D Other Manager') || row.textContent.includes('E Admin') || row.textContent.includes('F HR')).every(row => !row.querySelector('.report-add-entry-button'))"), true);
+    await until(`document.querySelectorAll('.admin-report-table-wrap tbody tr').length >= 6`);
+    assert.equal(await evaluate("document.querySelectorAll('.report-add-entry-button').length"), 7, 'six employee actions plus Add my entry');
+    assert.equal(await evaluate("[...document.querySelectorAll('.admin-report-table-wrap tbody tr')].filter(row => row.textContent.includes('D Other Manager') || row.textContent.includes('E Admin') || row.textContent.includes('F HR')).every(row => row.querySelector('.report-add-entry-button'))"), true, 'company-wide managers can add entries for every role');
     await clickText("Client");
     await until(`document.querySelectorAll('.client-timesheet-employee').length === 6`);
     assert.equal(await evaluate("[...document.querySelectorAll('.client-timesheet button')].some(button => button.textContent.includes('Add Entry'))"), false);
@@ -119,22 +120,22 @@ app.whenReady().then(async () => {
     await clickText("Employee");
     await evaluate("document.querySelector('.admin-report-table-wrap tbody .report-add-entry-button').click()");
     await until("document.querySelectorAll('[role=combobox]').length === 3");
-    await evaluate("document.querySelectorAll('[role=combobox]')[1].dispatchEvent(new FocusEvent('focusin', {bubbles:true}))");
-    await until("document.querySelectorAll('.searchable-select')[1].querySelectorAll('[role=option]').length === 2");
-    assert.equal(await evaluate("document.querySelectorAll('.searchable-select')[1].textContent.includes('Unassigned project')"), false);
-    await evaluate("document.querySelectorAll('.searchable-select')[1].querySelector('[role=option]').dispatchEvent(new MouseEvent('mousedown', {bubbles:true}))");
+    await evaluate("document.querySelectorAll('[role=combobox]')[0].dispatchEvent(new FocusEvent('focusin', {bubbles:true}))");
+    await until("document.querySelectorAll('.searchable-select')[0].querySelectorAll('[role=option]').length === 2");
+    assert.equal(await evaluate("document.querySelectorAll('.searchable-select')[0].textContent.includes('Unassigned project')"), false);
+    await evaluate("document.querySelectorAll('.searchable-select')[0].querySelector('[role=option]').dispatchEvent(new MouseEvent('mousedown', {bubbles:true}))");
     await evaluate("document.querySelectorAll('[role=combobox]')[2].dispatchEvent(new FocusEvent('focusin', {bubbles:true}))");
     await until("document.querySelectorAll('.searchable-select')[2].querySelectorAll('[role=option]').length === 1");
     assert.equal(await evaluate("document.querySelectorAll('.searchable-select')[2].textContent.includes('Review')"), false, "other project's task is excluded");
     await evaluate("document.querySelectorAll('.searchable-select')[2].querySelector('[role=option]').dispatchEvent(new MouseEvent('mousedown', {bubbles:true}))");
-    await evaluate("document.querySelectorAll('[role=combobox]')[1].dispatchEvent(new FocusEvent('focusin', {bubbles:true}))");
-    await until("document.querySelectorAll('.searchable-select')[1].querySelectorAll('[role=option]').length === 2");
-    await evaluate("document.querySelectorAll('.searchable-select')[1].querySelectorAll('[role=option]')[1].dispatchEvent(new MouseEvent('mousedown', {bubbles:true}))");
+    await evaluate("document.querySelectorAll('[role=combobox]')[0].dispatchEvent(new FocusEvent('focusin', {bubbles:true}))");
+    await until("document.querySelectorAll('.searchable-select')[0].querySelectorAll('[role=option]').length === 2");
+    await evaluate("document.querySelectorAll('.searchable-select')[0].querySelectorAll('[role=option]')[1].dispatchEvent(new MouseEvent('mousedown', {bubbles:true}))");
     await until("document.querySelectorAll('[role=combobox]')[2].value === ''");
     await evaluate("document.querySelectorAll('[role=combobox]')[2].dispatchEvent(new FocusEvent('focusin', {bubbles:true}))");
     await until("document.querySelectorAll('.searchable-select')[2].querySelector('[role=option]')?.textContent.includes('Review')");
-    await evaluate("document.querySelectorAll('[role=combobox]')[1].dispatchEvent(new FocusEvent('focusin', {bubbles:true}))");
-    await evaluate("document.querySelectorAll('.searchable-select')[1].querySelector('[role=option]').dispatchEvent(new MouseEvent('mousedown', {bubbles:true}))");
+    await evaluate("document.querySelectorAll('[role=combobox]')[0].dispatchEvent(new FocusEvent('focusin', {bubbles:true}))");
+    await evaluate("document.querySelectorAll('.searchable-select')[0].querySelector('[role=option]').dispatchEvent(new MouseEvent('mousedown', {bubbles:true}))");
     await evaluate("document.querySelectorAll('[role=combobox]')[2].dispatchEvent(new FocusEvent('focusin', {bubbles:true}))");
     await until("document.querySelectorAll('.searchable-select')[2].querySelector('[role=option]')?.textContent.includes('Preparation')");
     await evaluate("document.querySelectorAll('.searchable-select')[2].querySelector('[role=option]').dispatchEvent(new MouseEvent('mousedown', {bubbles:true}))");
@@ -181,7 +182,7 @@ app.whenReady().then(async () => {
     await clickText("Client");
     await until("document.querySelector('.client-timesheet-expand-all')");
     assert.equal(await evaluate("document.querySelector('.client-timesheet-add-entry')"), null);
-    grants = [];
+    grants = ["view_team_timesheets"];
     await evaluate("localStorage.removeItem('crm-report:' + JSON.parse(localStorage.getItem('user'))._id + ':/team-lead/timesheets/team')");
     await win.loadURL(`${base}/team-lead/timesheets/team`);
     await until("document.querySelector('.admin-report-controls button')");
@@ -189,7 +190,7 @@ app.whenReady().then(async () => {
     await until("document.querySelector('.report-timeline-row')");
     assert.equal(await evaluate("document.querySelector('.report-add-entry-button')"), null, "revoked manual-entry grant hides actions");
     assert.deepEqual(runtimeErrors, []);
-    console.log("PASS: manager hierarchy/self entry, linked picker choices, confirmed manual deletion, TL grant controls, removed Client Add Entry, and independent employee Expand/Collapse all.");
+    console.log("PASS: manager company/self entry, linked picker choices, confirmed manual deletion, TL grant controls, removed Client Add Entry, and independent employee Expand/Collapse all.");
     win.destroy();
     server.close();
     app.exit(0);

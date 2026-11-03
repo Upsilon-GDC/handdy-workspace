@@ -29,6 +29,10 @@ const Task = require("../../models/Task");
 const Project = require("../../models/Project");
 const Team = require("../../models/Team");
 const Employee = require("../../models/Employee");
+const { getTaskCreationOptions, createLinkedTasks } = require('./linkedTaskController');
+
+router.get('/creation-options', protect, requirePermission('create_tasks'), getTaskCreationOptions);
+router.post('/linked', protect, requirePermission('create_tasks'), guardTaskAssignmentOnCreate, createLinkedTasks);
 
 // ==============================================
 // CREATE TASK

@@ -17,6 +17,7 @@ const { fileURLToPath } = require("url");
 const { PRODUCTION_APP_ORIGIN, resolveApiBaseUrl } = require("./api-config");
 const { startAppUpdater } = require("./app-updater");
 const { createTimerLock } = require("./timer-lock");
+const { configureLaunchAtLogin } = require('./login-startup');
 
 // Pin the existing package-derived profile before changing the display name.
 // This preserves saved employee sessions in both development and packaged builds.
@@ -265,6 +266,7 @@ app.on("second-instance", () => {
 
 app.whenReady().then(() => {
   if (!ownsSession) return;
+  configureLaunchAtLogin({ app });
   // CRM needs no browser permissions (camera, microphone, location,
   // notifications from pages…); Electron would otherwise grant them.
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));

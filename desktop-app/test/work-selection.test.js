@@ -31,6 +31,70 @@ class FakeSelect {
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
+test('mapped desktop clients filter tasks by exact client and clear the prior task on client switch', async () => {
+  const h = harness();
+  h.state.activityResponse = { mappingEnabled: true, clients: [
+    { _id: 'client-a', clientName: 'Alpha' }, { _id: 'client-b', clientName: 'Beta' },
+  ], tasks: [{ _id: 't1', taskName: 'Review', clientIds: ['client-a'] }, { _id: 't2', taskName: 'Review', clientIds: ['client-b'] }] };
+  await h.context.loadClients(); await h.context.loadProjects(); await h.project.choose('p1');
+  assert.deepEqual(h.task.options.map(option => option.value), ['']);
+  await h.client.choose('client-a'); await h.task.choose('t1');
+  assert.deepEqual(h.task.options.map(option => option.value), ['', 't1']);
+  await h.client.choose('client-b');
+  assert.equal(h.task.value, ''); assert.deepEqual(h.task.options.map(option => option.value), ['', 't2']);
+});
+
+test('mapping lookup failure blocks new starts instead of falling back to legacy tasks', async () => {
+  const h = harness();
+  h.state.activityResponse = { mappingEnabled: true, clients: [{ _id: 'client-a', clientName: 'Alpha' }], tasks: [{ _id: 't1', taskName: 'Task', clientIds: ['client-a'] }] };
+  await h.context.loadClients(); await h.context.loadProjects(); await h.project.choose('p1'); await h.task.choose('t1');
+  h.state.activityFailure = true;
+  await h.context.loadTasks('p1', { background: true }); await h.context.startTimer();
+  assert.equal(h.state.startRequests.length, 0); assert.equal(h.task.disabled, true);
+});
+
+test('mapped project with no active task mappings has no selectable legacy tasks', async () => {
+  const h = harness();
+  h.state.activityResponse = { mappingEnabled: true, clients: [{ _id: 'client-a', clientName: 'Alpha' }], tasks: [] };
+  await h.context.loadClients(); await h.context.loadProjects(); await h.project.choose('p1');
+  assert.equal(h.client.value, 'client-a'); assert.deepEqual(h.task.options.map(option => option.value), ['']);
+  await h.context.startTimer(); assert.equal(h.state.startRequests.length, 0);
+});
+
+test('startup selects the unique No Project and only its linked client without starting time', async () => {
+  const h = harness();
+  h.state.projects.push({ _id: 'default', projectName: 'No Project', clients: [{ _id: 'client-b' }] });
+  await h.context.loadClients(); await h.context.loadProjects();
+  h.run('timerStateConfirmed = true; selectedProjectId = "p1"; selectedTaskId = "t1";');
+  assert.equal(await h.context.applyStartupActivitySelection(), true);
+  assert.equal(h.project.value, 'default'); assert.equal(h.client.value, 'client-b'); assert.equal(h.task.value, '');
+  assert.deepEqual(h.client.options.map(option => option.value), ['', 'client-b']);
+  assert.equal(h.state.startBodies.length, 0);
+});
+
+test('startup preserves active timers and refuses to assume no timer after an outage', async () => {
+  const h = harness();
+  h.state.projects.push({ _id: 'default', projectName: 'No Project', clients: ['client-b'] });
+  await h.context.loadClients(); await h.context.loadProjects();
+  h.run('selectedProjectId = "p1"; selectedTaskId = "t1"; timerStateConfirmed = false;');
+  assert.equal(await h.context.applyStartupActivitySelection(), false);
+  h.run('timerStateConfirmed = true; currentTimeLog = { _id: "running", status: "running" };');
+  assert.equal(await h.context.applyStartupActivitySelection(), false);
+  assert.equal(h.run('selectedProjectId'), 'p1'); assert.equal(h.run('selectedTaskId'), 't1');
+});
+
+test('startup does not guess a missing client or between duplicate No Project records', async () => {
+  const h = harness();
+  h.state.projects.push({ _id: 'default', projectName: 'No Project', clients: ['missing'] });
+  await h.context.loadClients(); await h.context.loadProjects();
+  h.run('timerStateConfirmed = true;');
+  await h.context.applyStartupActivitySelection();
+  assert.equal(h.client.value, ''); assert.deepEqual(h.client.options.map(option => option.value), ['']);
+  h.state.projects.push({ _id: 'duplicate', projectName: 'No Project', clients: ['client-a'] });
+  await h.context.loadProjects();
+  assert.equal(await h.context.applyStartupActivitySelection(), false);
+});
+
 function harness({ role = "employee" } = {}) {
   const nodes = new Map([["projectSelect", new FakeSelect()], ["clientSelect", new FakeSelect()], ["taskSelect", new FakeSelect()]]);
   const values = new Map([["token", "test-only"]]);
@@ -78,6 +142,11 @@ function harness({ role = "employee" } = {}) {
     window: { electronAPI: {}, location: { replace() {} }, addEventListener() {} },
     fetch: async (url, options = {}) => {
       const json = (body, ok = true) => ({ ok, status: ok ? 200 : 500, json: async () => body });
+      if (url.includes('/activity-options')) {
+        if (state.activityFailure) return { ok: false, status: 500, json: async () => ({ message: 'Unavailable' }) };
+        if (state.activityResponse) return json(state.activityResponse);
+        return { ok: false, status: 404, json: async () => ({ message: 'API route not found.' }) };
+      }
       state.cacheModes.push([new URL(url).pathname, options.cache]);
       if (url.includes("/clients")) {
         assert.equal(options.headers.Authorization, "Bearer test-only");
@@ -145,6 +214,7 @@ test("desktop client selector uses all active clients and starts promptly", asyn
   await h.context.startTimer();
   assert.equal(h.state.startRequests.length, 0, "a client is required when active clients are available");
   await h.client.choose("client-b");
+  await h.task.choose('t1');
   let releaseStart;
   h.state.pendingStart = new Promise((resolve) => { releaseStart = resolve; });
   const pending = h.context.startTimer();
@@ -170,7 +240,8 @@ for (const role of ["employee", "team_lead"]) {
     await h.client.choose("client-a");
     await h.task.choose("t1");
     await h.client.choose("client-b");
-    assert.equal(h.task.value, "t1");
+    assert.equal(h.task.value, '');
+    await h.task.choose('t1');
     await h.context.startTimer();
     assert.deepEqual(h.state.startBodies[0].client, "client-b");
     assert.equal(h.state.startBodies[0].project, "p1");
@@ -292,6 +363,7 @@ test("idle stop preserves project/client/task for an explicit Start; manual Stop
   await h.project.choose('p1');
   await h.task.choose('t2');
   await h.client.choose('client-b');
+  await h.task.choose('t2');
   await h.context.startTimer();
   await h.context.stopTimer({ idleSeconds: 300 });
   assert.equal(h.project.value, 'p1');
@@ -477,6 +549,7 @@ async function readyToStart(h) {
   await h.project.choose("p1");
   await h.task.choose("t1");
   await h.client.choose("client-b");
+  await h.task.choose('t1');
 }
 
 test("a start retried after a lost response reuses its operation ID; the next start gets a new one", async () => {

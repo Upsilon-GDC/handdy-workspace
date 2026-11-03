@@ -7,6 +7,7 @@ const Project = require("../src/models/Project");
 const Task = require("../src/models/Task");
 const Team = require("../src/models/Team");
 const Client = require("../src/models/Client");
+const ActivityMapping = require('../src/models/ActivityMapping');
 const {
   canActOnEmployee,
   createManualEntry,
@@ -87,6 +88,20 @@ const mockHappyPath = (t, { conflict = null, taskFound = true, createdRef } = {}
   t.mock.method(TaskTimeLog, "create", async (doc) => { if (createdRef) createdRef.doc = doc; return { ...doc, _id: "log-1" }; });
   t.mock.method(TaskTimeLog, "findById", () => chain({ _id: "log-1", entrySource: "manual" }));
 };
+
+test('manual entries enforce the same exact tuple and retain the accepted mapping ID', async t => {
+  const created = {};
+  mockHappyPath(t, { createdRef: created });
+  t.mock.method(Project, 'findOne', () => chain({ _id: ids.project, clients: [ids.client], teams: [ids.team], activityMappingEnabled: true }));
+  t.mock.method(ActivityMapping, 'findOne', () => chain(null));
+  const denied = response();
+  await createManualEntry({ user: { _id: ids.admin, role: 'admin' }, body: valid() }, denied);
+  assert.equal(denied.statusCode, 400); assert.equal(created.doc, undefined);
+  t.mock.method(ActivityMapping, 'findOne', () => chain({ _id: 'mapping' }));
+  const allowed = response();
+  await createManualEntry({ user: { _id: ids.admin, role: 'admin' }, body: valid() }, allowed);
+  assert.equal(allowed.statusCode, 201); assert.equal(created.doc.activityMapping, 'mapping');
+});
 
 test("an authorized manager records a stopped, clearly-marked, auditable manual entry", async (t) => {
   const created = {};

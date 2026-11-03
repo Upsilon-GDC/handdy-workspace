@@ -76,6 +76,7 @@ test("real NSIS quit hook waits for the existing main-process timer-close handsh
         shell: {}, dialog: { showMessageBox: async () => ({ response: 0 }) }, session: fakeSession(),
       };
       if (name === "./api-config") return require("../api-config");
+      if (name === './login-startup') return require('../login-startup');
       if (name === "./timer-lock") return require("../timer-lock");
       if (name === "./app-updater") return { startAppUpdater: () => createUpdateService({
         app, autoUpdater: updater, logger, platform: "win32", schedule, cancel,
@@ -160,6 +161,7 @@ async function bootMainWithAutoRestart({ url = "file:///C:/CRM/resources/app.asa
         shell: {}, dialog: { showMessageBox: async () => assert.fail("An update restart never shows the close warning") }, session: electronSession,
       };
       if (name === "./api-config") return require("../api-config");
+      if (name === './login-startup') return require('../login-startup');
       if (name === "./timer-lock") return require("../timer-lock");
       if (name === "./app-updater") return { startAppUpdater: (_app, hooks) => createUpdateService({
         app, autoUpdater: updater, logger: { info() {}, warn() {}, error() {} }, platform: "win32",

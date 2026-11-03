@@ -469,6 +469,8 @@ async function signOut(inactivity = false) {
     if (timerStatus) timerStatus.textContent = "Idle";
     localStorage.removeItem("token");
     localStorage.removeItem("user");
+    // Explicit sign-out must not immediately sign the same employee back in.
+    localStorage.setItem('desktopAutoLoginPaused', 'true');
     if (inactivity) {
       localStorage.removeItem("rememberedSessionToken");
       localStorage.removeItem("rememberedUser");
@@ -546,6 +548,9 @@ async function checkSystemIdleState() {
   try {
     const systemIdleSeconds = await window.electronAPI.getSystemIdleTime();
     if (!getToken()) return;
+    // A deliberately running break task ends only through an explicit user
+    // action. Hours away from the keyboard must not stop it or sign out.
+    if (currentTimeLog?.status === 'running' && isBreakTask()) return;
     // Returning activity does not acknowledge an open warning. The employee
     // must press Continue; until then its inactivity/countdown remains live.
     const idleSeconds = idleStartedDialog?.open ? getIdleNoticeSeconds()
@@ -571,8 +576,8 @@ async function checkSystemIdleState() {
       await runTimerAction(() => stopTimer({ idleSeconds: Math.max(idleSeconds,
         Math.floor((Date.now() - pendingIdleStop.startedAt) / 1000)) }));
     }
-    // Session-level auto-logout applies to every logged-in session regardless
-    // of timer state, task type, intentional break, or the old per-task flag.
+    // Other sessions retain automatic logout, including legacy intentional
+    // pauses. Only a running break task is exempt above.
     // (idlePolicy.exempt intentionally does NOT block this - it only exempts
     // an employee's active work from being auto-paused for idleness, see below.)
     if (logoutPending || idleSeconds >= idlePolicy.logoutSeconds) {
@@ -637,6 +642,9 @@ function getStoredUser() {
 let selectedProjectId = "";
 let selectedTaskId = "";
 let selectedClientId = "";
+let availableProjects = [];
+let activityCatalog = null;
+let activitySelectionError = false;
 let activeClients = [];
 let clientsLoaded = false;
 let clientLoadFailed = false;
@@ -798,7 +806,11 @@ function ensureOption(select, value, label) {
 function updateClientName() {
   if (!clientSelect) return;
   const hasProject = Boolean(selectedProjectId || currentTimeLog?.project);
-  const clients = hasProject ? activeClients : [];
+  const selectedProject = availableProjects.find(project => String(project._id) === selectedProjectId);
+  const isDefaultProject = String(selectedProject?.projectName || '').trim().toLowerCase() === 'no project';
+  const linkedIds = [...(selectedProject?.clients || []), selectedProject?.client].filter(Boolean).map(value => String(value?._id || value));
+  const clients = !hasProject ? [] : activityCatalog?.project === selectedProjectId ? activityCatalog.clients
+    : (isDefaultProject || linkedIds.length) ? activeClients.filter(client => linkedIds.includes(client._id)) : activeClients;
   const placeholder = !hasProject ? "Select project first"
     : !clientsLoaded ? clientLoadFailed ? "Unable to load clients" : "Loading clients..."
       : clients.length ? "Select client" : "No clients available";
@@ -908,6 +920,7 @@ async function loadProjects() {
 
     // Rebuilding the options closes an open dropdown and momentarily shows
     // the placeholder, so only rebuild when the project list really changed.
+    availableProjects = projects;
     const signature = JSON.stringify(projects.map((project) => [project._id, project.projectName]));
 
     if (signature !== projectsSignature) {
@@ -939,6 +952,24 @@ async function loadProjects() {
   }
 }
 
+async function applyStartupActivitySelection() {
+  // The backend's active timer always wins, including paused sessions. An
+  // outage is not proof that the employee has no active work to restore.
+  if (currentTimeLog || !timerStateConfirmed) return false;
+  const matches = availableProjects.filter(project => String(project.projectName || '').trim().toLowerCase() === 'no project');
+  if (matches.length !== 1) return false; // Do not guess between duplicate names.
+  const project = matches[0];
+  setSelectedProjectId(String(project._id), 'startup default activity');
+  setSelectedTaskId('', 'startup default requires employee task choice');
+  selectedClientId = '';
+  projectSelect.value = selectedProjectId;
+  updateClientName(); // Auto-selects only a sole active client linked to No Project.
+  saveWorkSelection();
+  await loadTasks(selectedProjectId);
+  if (timerMessage && !selectedClientId) timerMessage.textContent = 'No Project is selected. Choose one of its linked clients, or ask an administrator to configure its clients.';
+  return true;
+}
+
 async function loadTasks(projectId, { background = false } = {}) {
   if (!taskSelect) return;
 
@@ -960,6 +991,28 @@ async function loadTasks(projectId, { background = false } = {}) {
   }
 
   try {
+    const responseOptions = await fetch(`${API_BASE_URL}/projects/${encodeURIComponent(projectId)}/activity-options`, {
+      headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
+    });
+    const options = await responseOptions.json().catch(() => ({}));
+    if (requestId !== taskRequestId || projectId !== selectedProjectId || token !== getToken()) return;
+    const knownProject = availableProjects.find(project => String(project._id) === projectId);
+    if (responseOptions.status === 404 && !knownProject?.activityMappingEnabled && options.message !== 'Active project not found.') {
+      activityCatalog = null; activitySelectionError = false; // Older server; retain its original paginated contract.
+    } else {
+      if (!responseOptions.ok || !Array.isArray(options.clients) || !Array.isArray(options.tasks)
+        || options.clients.some(client => !client?._id || typeof client.clientName !== 'string')
+        || options.tasks.some(task => !task?._id || typeof task.taskName !== 'string' || (options.mappingEnabled && !Array.isArray(task.clientIds)))) {
+        throw new Error(options.message || 'Unable to load linked activity choices.');
+      }
+      activityCatalog = { project: projectId, clients: options.clients, tasks: options.tasks, mappingEnabled: options.mappingEnabled === true };
+      activitySelectionError = false;
+      clientsLoaded = true; clientLoadFailed = false;
+      updateClientName();
+      const tasks = activityCatalog.tasks.filter(task => !activityCatalog.mappingEnabled || (selectedClientId && task.clientIds.includes(selectedClientId)));
+      renderAvailableTasks(tasks);
+      return;
+    }
     const { response, data, items: projectTasks, cancelled } = await fetchAllPages(
       `${API_BASE_URL}/tasks?project=${encodeURIComponent(projectId)}&active=true`,
       "tasks",
@@ -999,6 +1052,17 @@ async function loadTasks(projectId, { background = false } = {}) {
       ...breakResult.items.filter((task) => !task.project),
     ].map((task) => [task._id, task])).values()];
 
+    renderAvailableTasks(tasks);
+  } catch (error) {
+    if (requestId !== taskRequestId || projectId !== selectedProjectId) return;
+    activitySelectionError = true;
+    if (!keepExistingTasks) renderTaskPlaceholder("Unable to load tasks");
+    taskSelect.disabled = true;
+    workSelectionMessage.textContent = error.message || 'Unable to reach the backend server.';
+  }
+}
+
+function renderAvailableTasks(tasks) {
     if (tasks.length === 0) {
       renderTaskPlaceholder("No tasks available for this project");
       if (!currentTimeLog) setSelectedTaskId("", "loadTasks: project has no available tasks");
@@ -1032,12 +1096,6 @@ async function loadTasks(projectId, { background = false } = {}) {
     taskSelect.value = selectedTaskId;
     taskSelect.disabled = Boolean(currentTimeLog);
     workSelectionMessage.textContent = "";
-  } catch (error) {
-    if (requestId !== taskRequestId || projectId !== selectedProjectId || keepExistingTasks) return;
-    renderTaskPlaceholder("Unable to load tasks");
-    workSelectionMessage.textContent =
-      "Unable to reach the backend server.";
-  }
 }
 
 function formatTime(value) {
@@ -2172,6 +2230,10 @@ async function startTimer() {
     return;
   }
 
+  if (activitySelectionError) {
+    timerMessage.textContent = 'Activity choices could not be refreshed. Check your connection and try again.';
+    return;
+  }
   if (clientSelect && !clientsLoaded) {
     timerMessage.textContent = clientLoadFailed
       ? "Unable to load clients. Please try again."
@@ -2312,9 +2374,11 @@ projectSelect?.addEventListener(
   }
 );
 
-clientSelect?.addEventListener("change", () => {
+clientSelect?.addEventListener("change", async () => {
   selectedClientId = String(clientSelect.value || "");
+  setSelectedTaskId('', 'employee changed client');
   saveWorkSelection();
+  await loadTasks(selectedProjectId);
 });
 
 taskSelect?.addEventListener("change", () => {
@@ -2336,9 +2400,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") void refreshDesktopData();
 });
 
-loginForm?.addEventListener(
-  "submit",
-  async (event) => {
+async function submitLogin(event, { automatic = false } = {}) {
     event.preventDefault();
     if (loginInProgress) {
       console.debug("[desktop-login] Duplicate submit ignored");
@@ -2351,7 +2413,7 @@ loginForm?.addEventListener(
     const password = String(loginForm.elements.password?.value || "");
     console.debug(`[desktop-login] Button clicked; email present: ${Boolean(email)}; password present: ${Boolean(password)}; API URL: ${API_BASE_URL}/auth/login`);
 
-    message.textContent = "";
+    message.textContent = automatic ? 'Signing in automatically…' : '';
     message.classList.remove("approval-pending");
 
     const rememberedSessionToken = localStorage.getItem("rememberedSessionToken");
@@ -2397,7 +2459,7 @@ loginForm?.addEventListener(
           if (rememberedLogin) rememberedLogin.hidden = true;
           if (loginForm) loginForm.hidden = false;
         }
-        message.textContent = useRememberedSession
+        message.textContent = useRememberedSession && [401, 403].includes(response.status)
           ? "Your remembered session has expired. Enter your email and password."
           : response.status === 401
             ? "Invalid email or password."
@@ -2431,6 +2493,8 @@ loginForm?.addEventListener(
         localStorage.setItem("rememberedUser", JSON.stringify(data.user));
       }
 
+      localStorage.removeItem('desktopAutoLoginPaused');
+
       console.debug("[desktop-login] Navigating to: ./dashboard.html");
       window.location.replace("./dashboard.html");
     } catch (error) {
@@ -2444,8 +2508,8 @@ loginForm?.addEventListener(
       loginButton.disabled = false;
       loginButton.textContent = "Login";
     }
-  }
-);
+}
+loginForm?.addEventListener('submit', submitLogin);
 
 refreshTimesheetButton?.addEventListener(
   "click",
@@ -2459,6 +2523,7 @@ quickLoginButton?.addEventListener("click", () => {
 });
 
 differentAccountButton?.addEventListener("click", () => {
+  localStorage.setItem('desktopAutoLoginPaused', 'true');
   localStorage.removeItem("rememberedSessionToken");
   localStorage.removeItem("rememberedUser");
   rememberedLogin.hidden = true;
@@ -2496,7 +2561,15 @@ allowNewDeviceButton?.addEventListener("click", () => decideDeviceLogin("allow")
 
 async function initializeApp() {
   const storedUser = getStoredUser();
-  const token = getToken();
+  let token = getToken();
+  if (isLoginPage && token && !storedUser) {
+    // A damaged/missing local profile cannot be used with the stored access
+    // token; recover through the remembered credential or the login form.
+    localStorage.removeItem('token'); token = null;
+  }
+  const automaticLoginBlocked = localStorage.getItem('desktopAutoLoginPaused') === 'true'
+    || Boolean(sessionStorage.getItem('inactivityLogout') || sessionStorage.getItem('sessionEndedMessage'));
+  if (automaticLoginBlocked) localStorage.setItem('desktopAutoLoginPaused', 'true');
   if (isLoginPage && sessionStorage.getItem("inactivityLogout")) {
     const logoutMinutes = Number(sessionStorage.getItem("inactivityLogoutMinutes"));
     message.textContent = Number.isFinite(logoutMinutes) && logoutMinutes > 0
@@ -2529,6 +2602,12 @@ async function initializeApp() {
     return;
   }
 
+  if (isLoginPage && !token && localStorage.getItem('rememberedSessionToken') && !automaticLoginBlocked) {
+    emailInput.value = ''; passwordInput.value = '';
+    await submitLogin({ preventDefault() {} }, { automatic: true });
+    return;
+  }
+
   if (!isLoginPage && (!storedUser || !token)) {
     window.location.replace("./index.html");
     return;
@@ -2541,6 +2620,10 @@ async function initializeApp() {
         signal: AbortSignal.timeout(10000),
       });
       if (response.status === 401 || response.status === 403) {
+        const failure = await response.json().catch(() => ({}));
+        if (response.status === 403 || ['SESSION_REVOKED', 'TOKEN_REVOKED'].includes(failure.code)) {
+          localStorage.setItem('desktopAutoLoginPaused', 'true');
+        }
         localStorage.removeItem("token");
         localStorage.removeItem("user");
         window.location.replace("./index.html");
@@ -2564,6 +2647,7 @@ async function initializeApp() {
     if (logoutPending || !getToken()) return;
     await loadActiveTimer();
     if (logoutPending || !getToken()) return;
+    await applyStartupActivitySelection();
     await loadTodayTimesheet();
     if (logoutPending || !getToken()) return;
 

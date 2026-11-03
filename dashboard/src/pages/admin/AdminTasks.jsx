@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { Pencil, Trash2 } from "lucide-react";
 import DashboardLayout from "../../components/layout/DashboardLayout";
 import TaskForm from "../../components/tasks/TaskForm";
+import ActivityLinksModal from '../../components/tasks/ActivityLinksModal';
 import "../../styles/adminTasks.css";
 import { deleteTask, getAllTasks } from "../../api/taskApi";
 import getApiErrorMessage from "../../utils/getApiErrorMessage";
@@ -47,6 +48,8 @@ function AdminTasks() {
   const { hasPermission } = useAuth();
   const canCreate = hasPermission(...TASK_CREATE_PERMISSIONS);
   const canEdit = hasPermission("edit_tasks");
+  const canLink = hasPermission('manage_projects', 'edit_tasks');
+  const [showLinks, setShowLinks] = useState(false);
   const canArchive = hasPermission("archive_tasks");
   const missingPermissions = missingTaskPermissions(hasPermission);
   const [tasks, setTasks] = useState([]);
@@ -352,6 +355,7 @@ function AdminTasks() {
 
   return (
     <DashboardLayout title="Tasks">
+      {showLinks && <ActivityLinksModal onClose={() => setShowLinks(false)} />}
       <div className="tasks-page">
         <h1 className="tasks-page-title">
           Tasks
@@ -363,6 +367,7 @@ function AdminTasks() {
 
           <div className="tasks-toolbar">
             <button type="button" onClick={() => void loadTasks()} disabled={loading}>Refresh</button>
+            {canLink && <button type="button" className="tasks-add-button" onClick={() => setShowLinks(true)}>Link multiple tasks</button>}
             <div className="tasks-search-box">
               <label htmlFor="task-search">
                 Search:

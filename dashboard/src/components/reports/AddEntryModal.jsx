@@ -44,16 +44,24 @@ export default function AddEntryModal({ employee, onClose, onSaved }) {
         next.project = "";
         next.task = "";
       }
-      if (field === "project") next.task = "";
+      if (field === 'client') next.task = '';
+      if (field === "project") {
+        next.task = "";
+        const project = options?.projects.find(project => project._id === value);
+        if (!(project?.clientIds || []).includes(next.client)) next.client = project?.clientIds?.length === 1 ? project.clientIds[0] : '';
+      }
       return next;
     });
   };
 
-  const clientOptions = useMemo(() => (options?.clients || []).map((client) => ({ value: client._id, label: client.clientName })), [options]);
-  const projectOptions = useMemo(() => projectsForClient(options, form.client)
-    .map((project) => ({ value: project._id, label: `${project.projectName}${project.projectCode ? ` (${project.projectCode})` : ""}` })), [options, form.client]);
-  const taskOptions = useMemo(() => tasksForProject(options, form.project)
-    .map((task) => ({ value: task._id, label: `${task.taskName}${task.taskCode ? ` (${task.taskCode})` : ""}` })), [options, form.project]);
+  const clientOptions = useMemo(() => (options?.clients || []).filter(client => {
+    const project = options?.projects.find(project => project._id === form.project);
+    return !project || !(project.clientIds || []).length || project.clientIds.includes(client._id);
+  }).map((client) => ({ value: client._id, label: client.clientName })), [options, form.project]);
+  const projectOptions = useMemo(() => projectsForClient(options, '')
+    .map((project) => ({ value: project._id, label: `${project.projectName}${project.projectCode ? ` (${project.projectCode})` : ""}` })), [options]);
+  const taskOptions = useMemo(() => tasksForProject(options, form.project, form.client)
+    .map((task) => ({ value: task._id, label: `${task.taskName}${task.taskCode ? ` (${task.taskCode})` : ""}` })), [options, form.project, form.client]);
 
   const result = useMemo(() => validateEntryForm(form, options, employee.id), [form, options, employee.id]);
   const errors = touched ? result.errors : {};
@@ -99,8 +107,8 @@ export default function AddEntryModal({ employee, onClose, onSaved }) {
           <form className="employee-form" onSubmit={review} noValidate>
             <div className="employee-form-grid">
               <div><label>Employee</label><input type="text" value={`${options.employee.fullName} (${options.employee.employeeId})`} readOnly /></div>
-              <SearchableSelect label="Client (optional)" options={clientOptions} value={form.client} onChange={set("client")} placeholder="All clients" emptyText="No clients" />
-              <SearchableSelect label="Project" options={projectOptions} value={form.project} onChange={set("project")} placeholder="Search projects" error={errors.project} emptyText="No projects for this client" />
+              <SearchableSelect label="Project" options={projectOptions} value={form.project} onChange={set("project")} placeholder="Search projects" error={errors.project} emptyText="No assigned projects" />
+              <SearchableSelect label={options.projects.find(project => project._id === form.project)?.mappingEnabled ? 'Client' : 'Client (optional)'} options={clientOptions} value={form.client} onChange={set("client")} placeholder="Select client" error={errors.client} emptyText="No linked clients" />
               <SearchableSelect label="Task" options={taskOptions} value={form.task} onChange={set("task")} placeholder={form.project ? "Search tasks" : "Select a project first"} disabled={!form.project} error={errors.task} emptyText="No tasks assigned for this project" />
               <div><label htmlFor="entry-date">Date</label><input id="entry-date" type="date" value={form.date} onChange={(event) => set("date")(event.target.value)} />{errors.date && <small className="field-error" role="alert">{errors.date}</small>}</div>
               <div className="add-entry-times">
