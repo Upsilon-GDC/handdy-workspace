@@ -5,7 +5,7 @@ export default function EntryEmployeePicker({ teams, employees, team, employee, 
   const [search, setSearch] = useState('');
   const available = entryEmployeesForTeam(employees, team);
   const hasUnassigned = employees.some(employee => employee.role !== 'alpha' && !employee.team);
-  co nst teamChoices = [...teams, ...(hasUnassigned ? [{ _id: UNASSIGNED_ENTRY_TEAM, teamName: 'No team assigned' }] : [])];
+  const teamChoices = [...teams, ...(hasUnassigned ? [{ _id: UNASSIGNED_ENTRY_TEAM, teamName: 'No team assigned' }] : [])];
   const selectedTeam = teamChoices.find(item => item._id === team);
   const selectedEmployee = available.find(item => item._id === employee);
   const needle = search.trim().toLowerCase();
