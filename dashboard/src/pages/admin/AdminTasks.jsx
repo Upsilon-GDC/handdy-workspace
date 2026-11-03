@@ -48,7 +48,7 @@ function AdminTasks() {
   const { hasPermission } = useAuth();
   const canCreate = hasPermission(...TASK_CREATE_PERMISSIONS);
   const canEdit = hasPermission("edit_tasks");
-  const canLink = hasPermission('manage_projects', 'edit_tasks');
+  const canLink = hasPermission('manage_activity_links');
   const [showLinks, setShowLinks] = useState(false);
   const canArchive = hasPermission("archive_tasks");
   const missingPermissions = missingTaskPermissions(hasPermission);

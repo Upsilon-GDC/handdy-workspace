@@ -31,10 +31,10 @@ router.get('/:id/activity-options', protect, async (req, res) => {
   } catch (error) { return sendErrorResponse(res, error, 'Unable to load project activity choices.'); }
 });
 
-// Company project administration plus task-edit permission. Non-HR delegated
+// Dedicated linking permission. Non-HR delegated
 // users remain limited to their own task teams inside the controller.
-router.get('/activity-links', protect, requirePermission('manage_projects'), requirePermission('edit_tasks'), getActivityLinks);
-router.post('/activity-links', protect, requirePermission('manage_projects'), requirePermission('edit_tasks'), saveActivityLinks);
+router.get('/activity-links', protect, requirePermission('manage_activity_links'), getActivityLinks);
+router.post('/activity-links', protect, requirePermission('manage_activity_links'), saveActivityLinks);
 
 // All logged-in users can view projects
 router.get("/", protect, catalogCache([Project, Client, Team, Employee], { shared: true }), getAllProjects);

@@ -7,6 +7,17 @@ import { isAdminRole, missingPermissionHint, missingTaskPermissions } from "../s
 const grants = (role, keys) => (...needed) => isAdminRole(role) || needed.every((key) => keys.includes(key));
 const paths = (role, keys) => navigationForRole(role, grants(role, keys)).map((item) => item.path);
 
+test('a personal linking grant opens Task links without project/task administration', () => {
+  for (const role of ['employee', 'team_lead']) {
+    const menu = dutyNavigationFor(role, grants(role, ['manage_activity_links']));
+    assert.ok(menu.some(item => item.path === '/admin/task-links'));
+    assert.equal(menu.some(item => item.path === '/admin/projects'), false);
+    assert.equal(dutyNavigationFor(role, grants(role, [])).some(item => item.path === '/admin/task-links'), false);
+  }
+  assert.ok(paths('hr', ['manage_activity_links']).includes('/admin/task-links'));
+  assert.equal(paths('hr', []).includes('/admin/task-links'), false);
+});
+
 test("admin-level roles keep the full menu whatever the grants", () => {
   for (const role of ["admin", "alpha", "manager"]) {
     const menu = paths(role, []);

@@ -12,6 +12,7 @@ const clients = [{ _id: 'c1', clientName: 'Client One' }, { _id: 'c2', clientNam
 const tasks = Array.from({ length: 125 }, (_, index) => ({ _id: `t${index + 1}`, taskName: `Task ${index + 1}`, taskCode: `CODE-${index + 1}`, taskType: 'work', teams: [{ _id: 'team', teamName: 'Audit team' }] }));
 tasks.push({ _id: 'excluded', taskName: 'Wrong project task', project: 'p2', teams: [{ _id: 'other-team' }] });
 let mappings = [], requests = [], forceConflict = false;
+let permissionGrants = ['create_tasks', 'reassign_tasks'];
 let creationRejected = false;
 const creationRequests = [];
 let createdTasks = [], editedTaskBody = null;
@@ -29,7 +30,7 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   let body = {};
   if (url.pathname === '/api/auth/me') body = { user };
-  if (url.pathname === '/api/permissions/me') body = { permissions: ['create_tasks', 'reassign_tasks'] };
+  if (url.pathname === '/api/permissions/me') body = { permissions: permissionGrants };
   if (url.pathname === '/api/tasks') body = { tasks: createdTasks, totalPages: 1 };
   if (url.pathname === '/api/employees/options' || url.pathname === '/api/employees/my-team') body = { employees: [], totalPages: 1 };
   if (url.pathname === '/api/tasks/creation-options') body = {
@@ -202,7 +203,29 @@ app.whenReady().then(async () => {
     await evaluate(`localStorage.setItem('user', ${JSON.stringify(JSON.stringify(user))})`);
     await win.loadURL(`${base}/admin/tasks`);
     await until(`!!document.querySelector('button[aria-label="Edit Lead review"]')`);
-    console.log('PASS: bulk links, automatic manager/project and TL/own-team assignment, admin override excluding Software, manager visibility, linked creation and edit preservation. Mock API only.');
+    user.role = 'employee';
+    permissionGrants = ['manage_activity_links'];
+    forceConflict = false;
+    await evaluate(`localStorage.setItem('user', ${JSON.stringify(JSON.stringify(user))})`);
+    await win.loadURL(`${base}/admin/task-links`);
+    await until(`!!document.querySelector('a[href="/admin/task-links"]') && document.body.textContent.includes('Link existing tasks')`);
+    assert.equal(await evaluate(`!!document.querySelector('a[href="/admin/projects"]')`), false, 'linking does not grant project management');
+    await clickText('Link projects, clients and tasks');
+    await until(`!!document.querySelector('#activity-project option[value="p1"]')`);
+    await choose('#activity-project', 'p1');
+    await choose('#activity-client', 'c1');
+    assert.equal(await evaluate(`[...document.querySelectorAll('button')].some(b=>/Enable linked selection|Restore legacy selection/.test(b.textContent))`), false);
+    await clickText('Select all shown');
+    await clickText('Link selected tasks');
+    await until(`document.querySelectorAll('.activity-linked-badge').length === 125 && !document.querySelector('fieldset').disabled`);
+    assert.equal(requests.at(-1).action, 'link');
+    const delegatedScreenshot = path.join(__dirname, '../../backend/.local-repairs/activity-phase2/delegated-task-links.png');
+    fs.writeFileSync(delegatedScreenshot, (await win.webContents.capturePage()).toPNG());
+    permissionGrants = [];
+    await win.loadURL(`${base}/admin/task-links`);
+    await until(`location.pathname === '/employee/dashboard'`);
+    assert.equal(await evaluate(`!!document.querySelector('a[href="/admin/task-links"]')`), false);
+    console.log('PASS: bulk links, automatic manager/project and TL/own-team assignment, admin override excluding Software, manager visibility, linked creation and edit preservation. Delegated employee link-only access and revocation. Mock API only.');
   } catch (error) { console.error(error); process.exitCode = 1; }
   finally { win?.destroy(); server.close(); app.exit(process.exitCode || 0); }
 });

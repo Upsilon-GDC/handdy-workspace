@@ -5,6 +5,7 @@ const Project = require('../src/models/Project');
 const Task = require('../src/models/Task');
 const Client = require('../src/models/Client');
 const ActivityMapping = require('../src/models/ActivityMapping');
+const Team = require('../src/models/Team');
 const { validateLinkRequest, validateTaskLinks, saveActivityLinks } = require('../src/modules/projects/activityLinkController');
 const routes = require('../src/modules/projects/projectRoutes');
 const ids = { project: '64b000000000000000000a01', client: '64b000000000000000000a02', task: '64b000000000000000000a03', team: '64b000000000000000000a04' };
@@ -26,21 +27,29 @@ test('mapping validation rejects cross-project, cross-team and out-of-scope task
   assert.throws(() => validateTaskLinks(project, [{ teams: ['other'] }], 1), /no team/);
   assert.throws(() => validateTaskLinks(project, [], 1), /permissions/);
 });
-test('routes require BOTH project and task permissions, including personal revocations', () => {
+test('link routes require the dedicated permission, honor personal grants and revocations', () => {
   for (const method of ['get', 'post']) {
     const route = routes.stack.find(layer => layer.route?.path === '/activity-links' && layer.route.methods[method]).route;
-    for (const revoked of ['manage_projects', 'edit_tasks']) {
-      const user = { role: 'hr', permissionOverrides: { revoked: [revoked] } };
-      let rejected = false;
+    const users = [
+      [{ role: 'employee' }, false],
+      [{ role: 'employee', permissionOverrides: { granted: ['manage_activity_links'] } }, true],
+      [{ role: 'team_lead', permissionOverrides: { granted: ['manage_activity_links'] } }, true],
+      [{ role: 'hr', permissionOverrides: { revoked: ['manage_activity_links'] } }, false],
+      [{ role: 'employee', permissionOverrides: { granted: ['manage_projects', 'edit_tasks'] } }, false],
+      [{ role: 'admin' }, true], [{ role: 'manager' }, true], [{ role: 'alpha' }, true],
+    ];
+    for (const [user, expected] of users) {
+      const res = response(); let allowed = true;
       for (const gate of route.stack.slice(1, -1)) {
-        let passed = false; const res = response();
+        let passed = false;
         gate.handle({ user }, res, () => { passed = true; });
-        if (!passed) { assert.equal(res.code, 403); rejected = true; break; }
+        if (!passed) { allowed = false; assert.equal(res.code, 403); break; }
       }
-      assert.equal(rejected, true);
+      assert.equal(allowed, expected);
     }
   }
 });
+
 function setup(t, overrides = {}) {
   const project = { _id: ids.project, clients: [ids.client], teams: [ids.team], activityLinksVersion: 0, ...overrides };
   const calls = { writes: [], ended: false };
@@ -56,6 +65,28 @@ function setup(t, overrides = {}) {
   return calls;
 }
 const user = { role: 'admin', _id: '64b000000000000000000a05' };
+
+test('delegated linking scopes project writes to the active own team and cannot toggle enforcement', async t => {
+  const calls = setup(t);
+  t.mock.method(Team, 'findOne', () => query({ _id: ids.team }));
+  let projectFilter;
+  t.mock.method(Project, 'findOne', filter => { projectFilter = filter; return query({ _id: ids.project, clients: [ids.client], teams: [ids.team], activityLinksVersion: 0 }); });
+  const employee = { _id: user._id, role: 'employee', team: ids.team };
+  const linked = response();
+  await saveActivityLinks({ body: input(), user: employee }, linked);
+  assert.equal(linked.code, 200);
+  assert.deepEqual(projectFilter.teams, { $in: [ids.team] });
+  calls.writes.length = 0;
+  const denied = response();
+  await saveActivityLinks({ body: input({ action: 'policy', enabled: true }), user: employee }, denied);
+  assert.equal(denied.code, 403);
+  assert.equal(calls.writes.length, 0);
+  t.mock.method(Project, 'findOne', () => query(null));
+  const other = response();
+  await saveActivityLinks({ body: input(), user: employee }, other);
+  assert.equal(other.code, 404);
+  assert.equal(calls.writes.length, 0);
+});
 test('linking uses tuple upserts in a transaction and changes no task or historical log', async t => {
   const calls = setup(t); const res = response();
   await saveActivityLinks({ body: input(), user }, res);
