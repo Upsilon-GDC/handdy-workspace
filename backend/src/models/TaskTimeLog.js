@@ -111,6 +111,7 @@ const taskTimeLogSchema = new mongoose.Schema(
     // Records created by an authorized manager/admin instead of a live timer.
     // Absent on every pre-existing log, which is treated as "timer".
     entrySource: { type: String, enum: ["timer", "manual"], default: "timer" },
+    editVersion: { type: Number, default: 0, min: 0 },
     manualEntry: {
       type: new mongoose.Schema(
         {

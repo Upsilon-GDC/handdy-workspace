@@ -71,7 +71,7 @@ export default function AppShell({ children }) {
   const current = navigation.find((item) => item.path === location.pathname);
   const name = user?.fullName || user?.name || "Your account";
   const initials = name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("");
-  const groups = ["Workspace", "Time & attendance", "Finance", "System"].filter((group) => navigation.some((item) => item.group === group));
+  const groups = ["Workspace", "Entry management", "Time & attendance", "Finance", "System"].filter((group) => navigation.some((item) => item.group === group));
   const results = search.trim() ? navigation.filter((item) => item.title.toLowerCase().includes(search.toLowerCase())) : [];
   const closeNavigation = () => { setMobileOpen(false); setSearch(""); };
   const signOut = async () => {
@@ -114,6 +114,10 @@ export default function AppShell({ children }) {
         <div className="crm-workspace-label"><span className="crm-workspace-initial">{initials}</span><span>{user?.companyName || "Your workspace"}<small>{user?.role?.replaceAll("_", " ")}</small></span></div>
         <nav>
           {groups.map((group) => {
+            if (group === 'Entry management') return <section className="crm-nav-edit-section" aria-label="Entry management" key={group}>
+              <p>Entry management</p>
+              {navigation.filter(item => item.group === group).map(item => <NavLink key={item.path} to={item.path} end title={item.title} onClick={closeNavigation}><ClipboardList size={16} /><span>{item.title}</span></NavLink>)}
+            </section>;
             const Icon = icons[group] || ClipboardList;
             return <details key={group} open={group === "Workspace" || group === "Time & attendance" || current?.group === group}>
               <summary title={group === "Time & attendance" ? "Time & reports" : group}><Icon size={15} /><span>{group === "Time & attendance" ? "Time & reports" : group}</span></summary>

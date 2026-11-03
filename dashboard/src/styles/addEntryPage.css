@@ -1,0 +1,6 @@
+.entry-add-panel { max-width: 760px; padding: 24px; }
+.entry-add-panel > p { margin: 12px 0 18px; line-height: 1.6; }
+.entry-add-panel .entry-employee-picker { margin: 20px 0; }
+.entry-add-panel input { width: 100%; box-sizing: border-box; }
+.entry-add-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin-top: 20px; }
+.entry-add-actions button { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 7px; }

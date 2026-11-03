@@ -1,5 +1,9 @@
 # CRM - Employee Time & Attendance System
 
+For the team-based Admin **Overview**, live activity, team hours and deployment details, see [Admin team Overview](CRM_ADMIN_OVERVIEW.md).
+
+For the new Admin/Alpha/Manager **Edit entry** workflow, MongoDB audit history and deployment/testing details, see [Website time-entry corrections](CRM_TIME_ENTRY_EDITING.md).
+
 This folder merges the useful work from the two project copies in the uploaded ZIP into one clean project.
 
 ## What was merged
