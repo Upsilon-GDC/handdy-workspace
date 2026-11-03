@@ -11,7 +11,7 @@ import ActivityLinksModal from '../../components/tasks/ActivityLinksModal';
 function AdminProjects() {
   const { hasPermission } = useAuth();
   const canManage = hasPermission("manage_projects");
-  const canLink = hasPermission('manage_projects', 'edit_tasks');
+  const canLink = hasPermission('manage_activity_links');
   const [showLinks, setShowLinks] = useState(false);
   const [projects, setProjects] = useState([]);
   const [teams, setTeams] = useState([]);

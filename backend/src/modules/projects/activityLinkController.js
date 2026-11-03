@@ -13,6 +13,7 @@ const projectClients = project => ids([...(project.clients || []), project.clien
 const fail = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode });
 const elevated = user => isAdminRole(user.role) || user.role === 'hr';
 const taskScope = async user => elevated(user) ? {} : teamTaskMatch(await ownTeamIds(user));
+const projectScope = async user => elevated(user) ? {} : { teams: { $in: await ownTeamIds(user) } };
 
 function validateLinkRequest(body = {}) {
   if (!mongoose.isObjectIdOrHexString(body.project)) throw fail('Select a valid project.');
@@ -42,12 +43,13 @@ function validateTaskLinks(project, tasks, expectedCount) {
 async function getActivityLinks(req, res) {
   try {
     const scope = await taskScope(req.user);
+    const projectsScope = await projectScope(req.user);
     const [projects, clients, tasks] = await Promise.all([
-      Project.find({ status: 'Active', deletedAt: null }).select('projectName projectCode client clients teams activityLinksVersion activityMappingEnabled').sort('projectName').lean(),
+      Project.find({ status: 'Active', deletedAt: null, ...projectsScope }).select('projectName projectCode client clients teams activityLinksVersion activityMappingEnabled').sort('projectName').lean(),
       Client.find({ status: 'Active' }).select('clientName').sort('clientName').lean(),
       Task.find({ isActive: true, deletedAt: null, ...scope }).select('taskName taskCode taskType project team teams assignToAllEmployees').populate('teams', 'teamName').populate('team', 'teamName').sort('taskName').lean(),
     ]);
-    const mappings = await ActivityMapping.find({ isActive: true, task: { $in: tasks.map(task => task._id) } }).select('project client task').lean();
+    const mappings = await ActivityMapping.find({ isActive: true, project: { $in: projects.map(project => project._id) }, task: { $in: tasks.map(task => task._id) } }).select('project client task').lean();
     return res.json({ success: true, projects, clients, tasks, mappings });
   } catch (error) { return sendErrorResponse(res, error, 'Unable to load activity links.'); }
 }
@@ -57,10 +59,11 @@ async function saveActivityLinks(req, res) {
   try {
     const input = validateLinkRequest(req.body);
     const scope = await taskScope(req.user);
+    const projectsScope = await projectScope(req.user);
     session = await mongoose.startSession();
     let nextVersion;
     await session.withTransaction(async () => {
-      const project = await Project.findOne({ _id: input.project, status: 'Active', deletedAt: null }).session(session).lean();
+      const project = await Project.findOne({ _id: input.project, status: 'Active', deletedAt: null, ...projectsScope }).session(session).lean();
       if (!project) throw fail('Active project not found.', 404);
       if ((project.activityLinksVersion || 0) !== input.version) throw fail('These links changed in another window. Refresh before saving.', 409);
       // All link writes on this project contend on one document. Transaction

@@ -81,6 +81,8 @@ const PERMISSION_CATEGORIES = [
         description: "Not used yet. Projects are always listed so employees can start timers." },
       { key: "manage_projects", label: "Create/edit projects", enforcement: "backend",
         description: "Add, edit and delete every project, including their clients and teams (adds Projects to the menu)." },
+      { key: "manage_activity_links", label: "Link projects, clients and tasks", enforcement: "backend", sensitive: true,
+        description: "Open Task links to link or unlink existing tasks and project clients. Employees and team leads are limited to their own team; HR works across teams. Selection enforcement remains restricted to company task administrators." },
       { key: "assign_projects", label: "Assign projects", enforcement: "none",
         description: "Not used yet. Project teams are set with “Create/edit projects”." },
     ],
@@ -119,7 +121,7 @@ const DEFAULT_ROLE_PERMISSIONS = {
     "view_tasks", "create_tasks", "edit_tasks", "reassign_tasks", "archive_tasks",
     "add_manual_entries",
     "view_teams", "create_teams", "edit_teams",
-    "view_clients", "manage_clients", "view_projects", "manage_projects",
+    "view_clients", "manage_clients", "view_projects", "manage_projects", "manage_activity_links",
     "view_personal_reports", "view_all_reports", "export_reports", "view_billing_amounts",
   ],
   team_lead: [

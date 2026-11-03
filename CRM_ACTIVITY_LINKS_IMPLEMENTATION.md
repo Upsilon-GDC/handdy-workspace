@@ -43,7 +43,7 @@ Existing task IDs and assignments are reused. Different IDs with the same name r
 
 ## Permissions and validation
 
-Both `manage_projects` and `edit_tasks` are required by the UI and API. Admin-level roles always hold those permissions. HR uses its effective grants; delegated non-HR users can only link tasks within their task-team scope.
+The UI and API require the dedicated `manage_activity_links` permission, labelled **Link projects, clients and tasks**. Admin/Alpha/Managers always have it; HR receives it in the built-in defaults. Existing saved role configurations must explicitly grant the new permission if it is absent. Project creation/editing and task editing permissions do not implicitly grant linking access. Delegated employees and TLs can only manage links for projects assigned to their active own team(s), and tasks within those teams. HR uses its effective grants and works across teams. Changing selection enforcement remains limited to company task administrators (Admin/Alpha/Manager/HR); an employee or TL grant cannot change that policy.
 
 Task linking checks active project/client membership, active non-deleted tasks, explicit task project compatibility and overlapping project/task teams. Assignments are never broadened by editing a mapping. Removing a project client soft-disables its mappings; delegated users cannot thereby unlink tasks outside their allowed scope.
 
@@ -98,3 +98,16 @@ Earlier increment evidence:
 - For the automatic-assignment follow-up, backend/frontend suites, lint, production build and the extended browser smoke were rerun. The smoke covers hidden default team controls, manager defaults, explicit admin subset selection, Software exclusion, TL own-team mode and manager visibility after TL creation. Desktop timer code was not changed; its full suite was not repeated for this follow-up. Backend evidence: `artifacts/automatic-team-backend-tests.log`.
 
 The earlier controller tests use mocked database operations. They are now supplemented by nine real MongoDB integration tests, run with `npm --prefix backend run test:integration`. The [database integration report](CRM_ACTIVITY_LINKS_DATABASE_TEST_REPORT.md) records the results, isolation and remaining deployment checks. No production credentials or writes are used by the integration runner or browser smoke tests.
+
+
+## Delegating linking to an employee (3 November 2026)
+
+1. Open **System ? Permissions ? By employee**.
+2. Select the employee. Under **Client and project permissions**, enable **Link projects, clients and tasks**, then save.
+3. That employee gets **Workspace ? Task links**. Click **Link projects, clients and tasks** to open the existing linking controls. Projects and tasks are limited to their team access.
+4. Select a project and its saved client, select existing tasks and link/unlink them. Project-client edits retain the existing guard against disabling mappings for tasks outside the person's scope.
+5. Remove the personal grant (or revoke an inherited role grant) to remove access. The menu refreshes through the existing permission-version mechanism; APIs recheck effective permissions for every request.
+
+Use **By employee** for selected people; enabling it under **By role** gives it to all accounts of that role. No employee grant or production permission record was changed during implementation. Deploy the updated backend and dashboard together; no new desktop installer is required for this website permission.
+
+Validation: 278 backend tests, 80 dashboard tests, ESLint, route audit (44 navigation targets / 66 routes), production build, and the activity-links browser smoke passed. The browser fixture exercised employee link-only access, absence of project administration and policy controls, linking, and loss of navigation/route access after revocation. The backend tests enforce the permission independently of the UI and verify team-scoped project writes and denied employee enforcement changes.

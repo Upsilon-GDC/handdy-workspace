@@ -17,6 +17,7 @@ export const PERMISSION_LABELS = {
   view_team_timesheets: "View team timesheets",
   manage_clients: "Create/edit clients",
   manage_projects: "Create/edit projects",
+  manage_activity_links: "Link projects, clients and tasks",
   view_all_reports: "View all employee reports",
   export_reports: "Export Excel/PDF",
   view_billing_amounts: "View billing amounts",

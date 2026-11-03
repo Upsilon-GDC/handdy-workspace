@@ -1,3 +1,4 @@
+import AdminTaskLinksPage from '../pages/admin/AdminTaskLinksPage';
 import {
   Navigate,
   Route,
@@ -438,6 +439,8 @@ function AppRoutes() {
           </AdminStaffOnly>
         }
       />
+
+      <Route path="/admin/task-links" element={<AdminStaffOnly needs={["manage_activity_links"]} grants={["manage_activity_links"]}><AdminTaskLinksPage /></AdminStaffOnly>} />
 
       <Route
         path="/admin/projects"
