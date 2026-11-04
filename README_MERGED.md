@@ -4,6 +4,10 @@ For the team-based Admin **Overview**, live activity, team hours and deployment 
 
 For the new Admin/Alpha/Manager **Edit entry** workflow, MongoDB audit history and deployment/testing details, see [Website time-entry corrections](CRM_TIME_ENTRY_EDITING.md).
 
+For Admin-only daily working-hour configuration, effective-dated requirements,
+leave/half-day exceptions and the team productivity dashboard, see
+[Employee working hours](CRM_WORKING_HOURS.md).
+
 This folder merges the useful work from the two project copies in the uploaded ZIP into one clean project.
 
 ## What was merged
@@ -53,6 +57,13 @@ that would affect another team's tasks.
 Both **Task Linking → Task links** and **Project & client links** open their
 editors directly on the page, without an introductory card or extra launch
 button. The client-only tab has no task selectors or task-setting controls.
+
+After a successful confirmation, both editors clear all selections and searches.
+Failed saves retain selections for correction or retry. A paginated **History**
+section below each editor records new completed link/unlink actions, including
+the selected names, user and time, and survives page refreshes. History and links
+save in the same database transaction. Delegated users see their own actions;
+administrators, managers and HR can see all actions. Earlier saves are not backfilled.
 
 Task creation also supports multiple projects directly: use the single
 **Projects** section to select one or more projects and a client for each.

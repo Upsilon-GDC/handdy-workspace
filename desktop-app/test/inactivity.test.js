@@ -875,30 +875,31 @@ async function startHarness() {
   return { h, respond };
 }
 
-test("Start lifts the screen lock as soon as the request is sent", async () => {
+test("Start keeps the screen locked until the server confirms a running timer", async () => {
   const { h, respond } = await startHarness();
   assert.equal(h.state.lock.at(-1), "locked");
   const starting = h.run("runTimerAction(startTimer)");
-  assert.equal(h.state.sentLock, "running", "unlocked before the server answers");
+  assert.equal(h.state.sentLock, "locked", "a pending request must not unlock the screen");
   await h.check();
-  assert.equal(h.state.lock.at(-1), "running", "idle polls keep it unlocked while the start is pending");
+  assert.equal(h.state.lock.at(-1), "locked", "idle polls keep it locked while the start is pending");
   respond(true, { timeLog: { _id: "new", status: "running", startedAt: new Date().toISOString(), pauses: [] } });
   await starting;
   assert.equal(h.state.lock.at(-1), "running");
   assert.equal(h.nodes.get("timerLockNotice").hidden, true);
 });
 
-test("a refused start locks the screen again; a start that is never sent never unlocks", async () => {
+test("a refused or unsent start never unlocks the screen", async () => {
   const { h, respond } = await startHarness();
   h.nodes.get("taskSelect").value = "";
   await h.run("runTimerAction(startTimer)");
   assert.ok(!h.state.lock.includes("running"), "no task chosen: the request is not sent and the lock stays");
   h.nodes.get("taskSelect").value = "task-1";
   const starting = h.run("runTimerAction(startTimer)");
-  assert.equal(h.state.sentLock, "running");
+  assert.equal(h.state.sentLock, "locked");
   respond(false, { message: "This task is closed." });
   await starting;
   assert.equal(h.state.lock.at(-1), "locked");
+  assert.ok(!h.state.lock.includes("running"), "a refused start never releases the lock");
   assert.equal(h.nodes.get("timerMessage").textContent, "This task is closed.");
 });
 

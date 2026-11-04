@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Activity, ArrowUpRight, BriefcaseBusiness, Clock3, Coffee, RefreshCw, Search, Users } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import ReportSummary from '../../components/dashboard/ReportSummary';
+import TeamWorkingHours from '../../components/dashboard/TeamWorkingHours';
 import { getAllEmployeeOptions } from '../../api/employeeApi';
 import { getAllTeams } from '../../api/teamApi';
 import { getAdminTimeLogs } from '../../api/reportApi';
@@ -101,6 +102,7 @@ export default function AdminOverviewPage() {
         { label: 'Break hours', value: overviewHours(total.breakSeconds), help: 'Break tasks and intentional breaks' },
         { label: 'Idle hours', value: overviewHours(total.idleSeconds), help: 'Idle pauses and same-day gaps' },
       ]} />}
+      <TeamWorkingHours />
       {snapshot && <>
         <section className="overview-teams-section" aria-label="Team activity">
           <header className="overview-section-heading"><div><p className="overview-eyebrow">TEAMS</p><h2>Team activity</h2></div><label className="overview-search"><Search size={16} /><input aria-label="Search overview teams" placeholder="Search teams…" value={teamSearch} onChange={event => setTeamSearch(event.target.value)} /></label></header>

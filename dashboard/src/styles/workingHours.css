@@ -1,0 +1,120 @@
+.working-hours-settings, .wh-overview { display: grid; gap: 20px; min-width: 0; }
+.wh-overview { border-top: 1px solid var(--border-color, #dce4e5); margin-top: 28px; padding-top: 28px; }
+.wh-overview .crm-stat-strip { grid-template-columns: repeat(5, minmax(0, 1fr)); margin: 0; }
+.working-hours-settings .card, .wh-overview .card { padding: 24px; min-width: 0; }
+.wh-intro { display: flex; gap: 16px; align-items: flex-start; }
+.wh-intro > svg { color: var(--primary); flex-shrink: 0; margin-top: 4px; }
+.working-hours-settings h2, .wh-overview h2 { font-size: 19px; margin: 0 0 7px; }
+.working-hours-settings h3, .wh-overview h3 { font-size: 15px; margin: 0; }
+.working-hours-settings p, .wh-overview p { font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin: 6px 0 12px; }
+.wh-section-header, .wh-filters, .wh-selection { display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.wh-filters { justify-content: flex-start; align-items: flex-end; margin: 12px 0; }
+.working-hours-settings fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.working-hours-settings label, .wh-overview label { display: flex; flex-direction: column; gap: 7px; font-size: 12px; font-weight: 600; }
+.working-hours-settings input:not([type=checkbox]), .working-hours-settings select, .working-hours-settings textarea, .wh-overview input, .wh-overview select { min-height: 38px; border: 1px solid var(--border-color, #dce4e5); border-radius: 8px; padding: 8px 11px; background: var(--surface, #fff); color: var(--text-primary); max-width: 100%; }
+.working-hours-settings button, .wh-overview button { cursor: pointer; }
+.wh-section-header > button, .wh-filters > button, .wh-selection button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--border-color, #dce4e5); padding: 9px 12px; background: var(--surface, #fff); color: var(--primary); border-radius: 8px; font-size: 12px; }
+.working-hours-settings button:disabled, .wh-overview button:disabled { opacity: .55; cursor: default; }
+.wh-search { position: relative; flex: 1; min-width: 180px; }
+.wh-search svg { position: absolute; left: 12px; top: 11px; color: var(--text-secondary); }
+.wh-search input { padding-left: 36px !important; }
+.wh-selection { justify-content: flex-start; margin: 16px 0; font-size: 12px; }
+.wh-team-group { margin-top: 20px; }
+.wh-team-group h3 { display: flex; gap: 12px; align-items: center; padding-bottom: 12px; }
+.wh-table-scroll { overflow-x: auto; border: 1px solid var(--border-color, #dce4e5); border-radius: 10px; }
+.wh-table-scroll table { border-collapse: collapse; width: 100%; min-width: 760px; text-align: left; }
+.wh-table-scroll th, .wh-table-scroll td { padding: 13px 14px; border-bottom: 1px solid var(--border-color, #dce4e5); font-size: 12px; vertical-align: top; }
+.wh-table-scroll thead, .wh-table-scroll tfoot { background: var(--surface-muted, #f4f7f7); }
+.wh-table-scroll tr:last-child td { border-bottom: 0; }
+.wh-table-scroll small { display: block; color: var(--text-secondary); margin-top: 5px; font-size: 11px; }
+.wh-table-scroll details { max-width: 270px; }
+.wh-table-scroll summary { color: var(--primary); cursor: pointer; }
+.wh-text-button { border: 0; background: none; color: var(--primary); padding: 5px 0 0; font-size: 11px; }
+.wh-settings-forms { display: block; margin-top: 16px; }
+.wh-settings-forms form[hidden] { display: none !important; }
+.wh-settings-forms fieldset { display: grid; grid-template-columns: 1fr 1.2fr 1fr auto; align-items: start; gap: 16px; }
+.wh-settings-forms form[aria-label="Daily attendance exception form"] fieldset { grid-template-columns: 1fr 2fr auto; }
+.wh-settings-forms label { margin: 0; }
+.wh-settings-forms small { color: var(--text-secondary); font-size: 12px; line-height: 1.6; display: block; margin-top: 7px; }
+.wh-settings-forms textarea { min-height: 40px; height: 40px; resize: vertical; }
+.wh-primary { display: block; width: 100%; background: var(--primary, #206450); color: #fff; border: 0; border-radius: 8px; padding: 12px; margin-top: 20px; font-weight: 600; }
+.wh-error, .wh-success, .wh-warning { border-radius: 8px; padding: 12px 16px; font-size: 13px; }
+.wh-error { background: #fff0ef; color: #992e24 !important; }
+.wh-success { background: #e8f5ed; color: #185d40 !important; }
+.wh-warning { background: #fff6df; color: #775211 !important; }
+.wh-muted, .wh-note { color: var(--text-secondary); }
+.wh-empty { padding: 24px; text-align: center; color: var(--text-secondary); }
+.wh-team-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.wh-team-card { text-align: left; border: 1px solid var(--border-color, #dce4e5); background: var(--surface, #fff); color: var(--text-primary); }
+.working-hours-settings { gap: 16px; }
+.wh-settings-team-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+html[data-theme] .crm-content .wh-settings-team-card { display: flex; align-items: center; gap: 14px; text-align: left; padding: 22px; border: 1px solid var(--border-color); background: var(--surface); color: var(--text-primary); box-shadow: 0 2px 10px rgb(16 24 40 / 4%); }
+html[data-theme] .crm-content .wh-settings-team-card:hover { border-color: var(--primary); background: var(--surface-muted); }
+.wh-settings-team-card > span:nth-child(2) { flex: 1; min-width: 0; }
+.wh-settings-team-card strong { display: block; font-size: 15px; overflow-wrap: anywhere; }
+.wh-settings-team-card small { display: block; margin-top: 7px; font-size: 11px; color: var(--text-secondary); font-weight: 400; }
+.wh-settings-team-icon { display: grid; place-items: center; width: 42px; height: 42px; flex-shrink: 0; background: var(--surface-muted); border-radius: 11px; color: var(--primary); }
+.wh-chosen-team { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: 12px; }
+.wh-chosen-team strong { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; }
+.wh-chosen-team > span { color: var(--text-secondary); }
+html[data-theme] .crm-content .wh-chosen-team button, html[data-theme] .crm-content .wh-assignment-choice button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border-radius: 7px; border: 1px solid var(--border-color); background: var(--surface); color: var(--primary); font-size: 12px; }
+.wh-assignment-choice { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; }
+.wh-assignment-choice > span { color: var(--text-secondary); margin-right: 3px; }
+.wh-page-heading h1 { margin: 0; font-size: 26px; }
+.working-hours-settings .wh-page-heading p { margin: 6px 0 0; }
+.working-hours-settings .wh-action-panel { position: sticky; top: 12px; z-index: 5; padding: 18px 20px; background: var(--surface); box-shadow: 0 4px 18px rgb(16 24 40 / 8%); }
+.wh-action-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+html[data-theme] .crm-content .wh-page-heading { display: block; margin: 0; padding: 0; border: 0; min-height: 0; background: transparent; }
+html[data-theme] .crm-content .wh-page-heading h1 { font-family: inherit; font-size: 24px; line-height: 1.25; margin: 0; }
+html[data-theme] .crm-content .wh-page-heading p { font-size: 12px; }
+html[data-theme] .crm-content .wh-action-panel .wh-action-heading { margin: 0; padding: 0; border: 0; min-height: 0; background: transparent; }
+.wh-mode-tabs { display: flex; gap: 5px; padding: 4px; background: var(--surface-muted); border-radius: 9px; }
+html[data-theme] .crm-content .wh-mode-tabs button { display: inline-flex; align-items: center; gap: 7px; border: 0; border-radius: 6px; padding: 8px 12px; font-size: 12px; background: transparent; color: var(--text-secondary); box-shadow: none; }
+html[data-theme] .crm-content .wh-mode-tabs button[aria-pressed=true] { background: var(--surface); color: var(--primary); box-shadow: 0 1px 4px rgb(16 24 40 / 9%); }
+.wh-selected-count { color: var(--primary); font-size: 12px; }
+.wh-settings-forms .wh-primary { width: auto; margin: 22px 0 0; min-height: 40px; white-space: nowrap; }
+.wh-settings-forms label small { margin: 0; font-weight: 400; }
+.working-hours-settings .wh-action-note { margin: 8px 0 0; font-size: 11px; }
+.working-hours-settings .wh-roster { padding: 18px 20px; }
+.working-hours-settings .wh-roster h2 { font-size: 16px; }
+.working-hours-settings .wh-roster .wh-section-header p { margin-bottom: 0; font-size: 11px; }
+.working-hours-settings .wh-selection { margin: 10px 0; gap: 8px; }
+.working-hours-settings .wh-selection > span { margin-right: auto; }
+.wh-roster-list { max-height: clamp(200px, calc(100dvh - 500px), 600px); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding-right: 5px; }
+.wh-roster-list .wh-team-group:first-child { margin-top: 4px; }
+.wh-roster-list .wh-team-group h3 { padding-bottom: 8px; }
+.wh-roster-list th, .wh-roster-list td { padding: 10px 12px; }
+html[data-theme] .crm-content .working-hours-settings .wh-text-button { background: transparent; color: var(--primary); border: 0; border-radius: 0; padding: 5px 0 0; min-height: 0; font-size: 11px; box-shadow: none; }
+html[data-theme] .crm-content .wh-overview .wh-team-card { display: block; text-align: left; background: var(--surface); color: var(--text-primary); border: 1px solid var(--border-color); font-weight: inherit; }
+html[data-theme] .crm-content .wh-overview .wh-team-card[aria-pressed=true] { border-color: var(--primary); }
+.wh-team-card[aria-pressed=true] { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+.wh-team-card h3 { display: flex; gap: 8px; align-items: center; }
+.wh-team-card > strong { font-size: 25px; display: block; margin: 18px 0 10px; }
+.wh-team-card > span { display: flex; gap: 8px; align-items: center; justify-content: flex-end; color: var(--primary); font-size: 11px; margin-top: 16px; }
+.wh-team-card > small { color: var(--text-secondary); font-size: 11px; }
+.wh-overview progress { width: 100%; height: 7px; accent-color: var(--primary, #206450); border: 0; }
+.wh-overview progress::-webkit-progress-bar { background: var(--primary-light, #e9f4ef); border-radius: 8px; }
+.wh-overview progress::-webkit-progress-value { background: var(--primary, #206450); border-radius: 8px; }
+.wh-member-progress { display: flex; align-items: center; gap: 8px; min-width: 100px; margin-bottom: 7px; }
+.wh-status { font-size: 11px; color: var(--text-secondary); }
+.wh-status.complete { color: var(--primary); font-weight: 600; }
+.wh-note { font-size: 12px !important; }
+@media (max-width: 1100px) { .wh-team-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .wh-overview .crm-stat-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .wh-settings-forms, .wh-team-grid { grid-template-columns: minmax(0, 1fr); } .wh-overview .crm-stat-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } .working-hours-settings .card, .wh-overview .card { padding: 16px; } .wh-filters { width: 100%; } .wh-filters label { flex: 1; min-width: 130px; } .wh-section-header { align-items: flex-start; } }
+@media (max-width: 900px) {
+  .wh-settings-team-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wh-settings-forms fieldset, .wh-settings-forms form[aria-label="Daily attendance exception form"] fieldset { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .wh-settings-forms .wh-primary { align-self: end; margin: 0; }
+  .wh-exception-reason { grid-column: 1 / -1; }
+  .wh-roster-list { max-height: 50dvh; }
+}
+@media (max-width: 500px) {
+  .wh-settings-team-grid { grid-template-columns: minmax(0, 1fr); }
+  .working-hours-settings .wh-action-panel { top: 6px; padding: 12px; }
+  .wh-mode-tabs { gap: 0; padding: 3px; }
+  html[data-theme] .crm-content .wh-mode-tabs button { padding: 7px 8px; font-size: 11px; }
+  .wh-action-heading { gap: 8px; }
+  .wh-selected-count { font-size: 11px; }
+  .wh-settings-forms { margin-top: 12px; }
+  .wh-settings-forms label { font-size: 11px; }
+}

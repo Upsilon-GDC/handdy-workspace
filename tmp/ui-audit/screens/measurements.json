@@ -1,0 +1,1008 @@
+[
+  {
+    "name": "employees",
+    "route": "/admin/employees",
+    "viewport": {
+      "width": 1426,
+      "height": 754
+    },
+    "pageWidth": 1411,
+    "smallText": [
+      {
+        "tag": "A",
+        "size": "14px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "LABEL",
+        "size": "12px"
+      },
+      {
+        "tag": "LABEL",
+        "size": "12px"
+      },
+      {
+        "tag": "LABEL",
+        "size": "12px"
+      },
+      {
+        "tag": "TH",
+        "size": "11px"
+      },
+      {
+        "tag": "TH",
+        "size": "11px"
+      },
+      {
+        "tag": "TH",
+        "size": "11px"
+      },
+      {
+        "tag": "TH",
+        "size": "11px"
+      },
+      {
+        "tag": "TH",
+        "size": "11px"
+      },
+      {
+        "tag": "TH",
+        "size": "11px"
+      },
+      {
+        "tag": "TH",
+        "size": "11px"
+      },
+      {
+        "tag": "SMALL",
+        "size": "11px"
+      },
+      {
+        "tag": "SMALL",
+        "size": "11px"
+      },
+      {
+        "tag": "SMALL",
+        "size": "11px"
+      },
+      {
+        "tag": "SMALL",
+        "size": "11px"
+      },
+      {
+        "tag": "SMALL",
+        "size": "11px"
+      },
+      {
+        "tag": "SMALL",
+        "size": "11px"
+      },
+      {
+        "tag": "SMALL",
+        "size": "11px"
+      },
+      {
+        "tag": "SMALL",
+        "size": "11px"
+      },
+      {
+        "tag": "SMALL",
+        "size": "11px"
+      },
+      {
+        "tag": "SMALL",
+        "size": "11px"
+      },
+      {
+        "tag": "LABEL",
+        "size": "12px"
+      }
+    ],
+    "primaryActions": [
+      {
+        "text": "Add employee",
+        "height": 42
+      },
+      {
+        "text": "Search",
+        "height": 42
+      },
+      {
+        "text": "Edit",
+        "height": 34
+      },
+      {
+        "text": "Reset",
+        "height": 34
+      },
+      {
+        "text": "Delete",
+        "height": 34
+      },
+      {
+        "text": "Edit",
+        "height": 34
+      },
+      {
+        "text": "Reset",
+        "height": 34
+      },
+      {
+        "text": "Delete",
+        "height": 34
+      },
+      {
+        "text": "Edit",
+        "height": 34
+      },
+      {
+        "text": "Reset",
+        "height": 34
+      },
+      {
+        "text": "Delete",
+        "height": 34
+      },
+      {
+        "text": "Edit",
+        "height": 34
+      }
+    ]
+  },
+  {
+    "name": "projects",
+    "route": "/admin/projects",
+    "viewport": {
+      "width": 1426,
+      "height": 754
+    },
+    "pageWidth": 1411,
+    "smallText": [
+      {
+        "tag": "A",
+        "size": "14px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "LABEL",
+        "size": "12px"
+      },
+      {
+        "tag": "TH",
+        "size": "11px"
+      },
+      {
+        "tag": "TH",
+        "size": "11px"
+      },
+      {
+        "tag": "TH",
+        "size": "11px"
+      },
+      {
+        "tag": "TH",
+        "size": "11px"
+      }
+    ],
+    "primaryActions": [
+      {
+        "text": "Link clients & tasks",
+        "height": 36
+      },
+      {
+        "text": "+ Add New Project",
+        "height": 36
+      },
+      {
+        "text": "Search",
+        "height": 36
+      },
+      {
+        "text": "Edit",
+        "height": 36
+      },
+      {
+        "text": "Delete",
+        "height": 36
+      },
+      {
+        "text": "Edit",
+        "height": 36
+      },
+      {
+        "text": "Delete",
+        "height": 36
+      },
+      {
+        "text": "«",
+        "height": 36
+      },
+      {
+        "text": "‹",
+        "height": 36
+      },
+      {
+        "text": "›",
+        "height": 36
+      },
+      {
+        "text": "»",
+        "height": 36
+      }
+    ]
+  },
+  {
+    "name": "clients",
+    "route": "/admin/clients",
+    "viewport": {
+      "width": 1426,
+      "height": 754
+    },
+    "pageWidth": 1426,
+    "smallText": [
+      {
+        "tag": "A",
+        "size": "14px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "LABEL",
+        "size": "12px"
+      },
+      {
+        "tag": "TH",
+        "size": "11px"
+      },
+      {
+        "tag": "TH",
+        "size": "11px"
+      }
+    ],
+    "primaryActions": [
+      {
+        "text": "+ Add Client",
+        "height": 42
+      },
+      {
+        "text": "Edit",
+        "height": 34
+      },
+      {
+        "text": "Delete",
+        "height": 34
+      },
+      {
+        "text": "Edit",
+        "height": 34
+      },
+      {
+        "text": "Delete",
+        "height": 34
+      }
+    ]
+  },
+  {
+    "name": "tasks",
+    "route": "/admin/tasks",
+    "viewport": {
+      "width": 1426,
+      "height": 754
+    },
+    "pageWidth": 1426,
+    "smallText": [
+      {
+        "tag": "A",
+        "size": "14px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "LABEL",
+        "size": "12px"
+      },
+      {
+        "tag": "TH",
+        "size": "11px"
+      },
+      {
+        "tag": "TH",
+        "size": "11px"
+      },
+      {
+        "tag": "TH",
+        "size": "11px"
+      },
+      {
+        "tag": "TH",
+        "size": "11px"
+      },
+      {
+        "tag": "TH",
+        "size": "11px"
+      },
+      {
+        "tag": "TH",
+        "size": "11px"
+      },
+      {
+        "tag": "TH",
+        "size": "11px"
+      },
+      {
+        "tag": "LABEL",
+        "size": "12px"
+      }
+    ],
+    "primaryActions": [
+      {
+        "text": "Refresh",
+        "height": 36
+      },
+      {
+        "text": "Link multiple tasks",
+        "height": 36
+      },
+      {
+        "text": "Add New Task",
+        "height": 36
+      },
+      {
+        "text": "Task name↕",
+        "height": 36
+      },
+      {
+        "text": "Task type↕",
+        "height": 36
+      },
+      {
+        "text": "Assigned to↕",
+        "height": 36
+      },
+      {
+        "text": "",
+        "height": 38
+      },
+      {
+        "text": "",
+        "height": 38
+      },
+      {
+        "text": "«",
+        "height": 36
+      },
+      {
+        "text": "‹",
+        "height": 36
+      },
+      {
+        "text": "1",
+        "height": 36
+      },
+      {
+        "text": "›",
+        "height": 36
+      }
+    ]
+  },
+  {
+    "name": "teams",
+    "route": "/admin/team",
+    "viewport": {
+      "width": 1426,
+      "height": 754
+    },
+    "pageWidth": 1426,
+    "smallText": [
+      {
+        "tag": "A",
+        "size": "14px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "LABEL",
+        "size": "12px"
+      },
+      {
+        "tag": "TH",
+        "size": "11px"
+      },
+      {
+        "tag": "TH",
+        "size": "11px"
+      },
+      {
+        "tag": "TH",
+        "size": "11px"
+      },
+      {
+        "tag": "TH",
+        "size": "11px"
+      }
+    ],
+    "primaryActions": [
+      {
+        "text": "Add New Team",
+        "height": 36
+      },
+      {
+        "text": "Edit",
+        "height": 36
+      },
+      {
+        "text": "Delete",
+        "height": 36
+      },
+      {
+        "text": "«",
+        "height": 36
+      },
+      {
+        "text": "‹",
+        "height": 36
+      },
+      {
+        "text": "1",
+        "height": 36
+      },
+      {
+        "text": "›",
+        "height": 36
+      },
+      {
+        "text": "»",
+        "height": 36
+      }
+    ]
+  },
+  {
+    "name": "idle-settings",
+    "route": "/admin/settings",
+    "viewport": {
+      "width": 1426,
+      "height": 754
+    },
+    "pageWidth": 1426,
+    "smallText": [
+      {
+        "tag": "A",
+        "size": "14px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "A",
+        "size": "12px"
+      },
+      {
+        "tag": "LABEL",
+        "size": "14px"
+      },
+      {
+        "tag": "LABEL",
+        "size": "14px"
+      }
+    ],
+    "primaryActions": [
+      {
+        "text": "Save settings",
+        "height": 44
+      }
+    ]
+  }
+]

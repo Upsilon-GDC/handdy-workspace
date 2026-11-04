@@ -19,7 +19,7 @@ function Picker({ label, items, selected, onChange, nameField, search, onSearch,
   </section>;
 }
 
-export default function BatchActivityLinksForm({ data, onRefresh, onBusyChange, onReload, clientProjectsOnly = false }) {
+export default function BatchActivityLinksForm({ data, onRefresh, onBusyChange, onReload, onSaved, clientProjectsOnly = false }) {
   const clientsOnly = clientProjectsOnly;
   const [projectIds, setProjectIds] = useState([]), [clientIds, setClientIds] = useState([]), [taskIds, setTaskIds] = useState([]);
   const [searches, setSearches] = useState({ projects: '', clients: '', tasks: '' });
@@ -44,8 +44,11 @@ export default function BatchActivityLinksForm({ data, onRefresh, onBusyChange, 
       const response = await axiosInstance.post('/projects/activity-links/batch', { action: review, mode: clientsOnly ? 'clients' : 'tasks',
         projects: projects.map(project => ({ project: activityId(project), version: project.activityLinksVersion || 0 })), clientIds, taskIds: clientsOnly ? [] : taskIds });
       saved = true;
+      setProjectIds([]); setClientIds([]); setTaskIds([]);
+      setSearches({ projects: '', clients: '', tasks: '' }); setReview(null);
+      setMessage(response.data.message);
+      onSaved?.(response.data.history);
       await onRefresh();
-      setMessage(response.data.message); setTaskIds([]); setReview(null);
     } catch (reason) {
       if (saved || reason.response?.status === 409) setNeedsReload(true);
       setError(saved ? 'Changes were saved, but the refreshed list could not load. Reload links before saving again.' : getApiErrorMessage(reason, 'Unable to save this batch.'));

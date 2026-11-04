@@ -115,13 +115,17 @@ app.whenReady().then(async () => {
     assert.equal(geometry.scroll <= geometry.width + 1, true, `linking modal fits without horizontal scrolling: ${JSON.stringify(geometry)}`);
     fs.writeFileSync(screenshot, (await win.webContents.capturePage()).toPNG());
     await clickText('Review links'); await clickText('Confirm links');
-    await until(`!!document.querySelector('.activity-links-success')`);
+    await until(`!!document.querySelector('.activity-links-success') && !document.querySelector('.activity-links-fields').disabled`);
     assert.equal(requests.at(-1).taskIds.length, 125);
     assert.equal(requests.at(-1).action, 'link');
+    await evaluate(`document.querySelector('[aria-label="Select projects"] input[value="p1"]').click()`);
+    await evaluate(`document.querySelector('[aria-label="Select clients"] input[value="c1"]').click()`);
     await evaluate(`document.querySelector('[aria-label="Select tasks"]').closest('section').querySelector('button').click()`);
     await clickText('Review unlink'); await clickText('Confirm unlink');
-    await until(`!!document.querySelector('.activity-links-success')`);
+    await until(`!!document.querySelector('.activity-links-success') && !document.querySelector('.activity-links-fields').disabled`);
     assert.equal(requests.at(-1).action, 'unlink');
+    await evaluate(`document.querySelector('[aria-label="Select projects"] input[value="p1"]').click()`);
+    await evaluate(`document.querySelector('[aria-label="Select clients"] input[value="c1"]').click()`);
     await evaluate(`document.querySelector('[aria-label="Select tasks"]').closest('section').querySelector('button').click()`);
     forceConflict = true;
     await clickText('Review links'); await clickText('Confirm links');
@@ -216,7 +220,7 @@ app.whenReady().then(async () => {
     assert.equal(await evaluate(`[...document.querySelectorAll('button')].some(b=>/Enable linked selection|Restore legacy selection/.test(b.textContent))`), false);
     await evaluate(`document.querySelector('[aria-label="Select tasks"]').closest('section').querySelector('button').click()`);
     await clickText('Review links'); await clickText('Confirm links');
-    await until(`!!document.querySelector('.activity-links-success')`);
+    await until(`!!document.querySelector('.activity-links-success') && !document.querySelector('.activity-links-fields').disabled`);
     assert.equal(requests.at(-1).action, 'link');
     const delegatedScreenshot = path.join(__dirname, '../../backend/.local-repairs/activity-phase2/delegated-task-links.png');
     fs.writeFileSync(delegatedScreenshot, (await win.webContents.capturePage()).toPNG());

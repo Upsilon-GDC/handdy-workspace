@@ -8,7 +8,7 @@ Implemented 2 November 2026. This changes desktop startup; website login is unch
 2. On the first successful sign-in, enter email/password. Existing remembered-session behavior saves a revocable credential; this feature never stores a password.
 3. On subsequent launches, a valid existing session opens the timer screen. If an access session needs renewal, CRM automatically uses the remembered credential through the existing quick-login API.
 4. If the server confirms there is no active timer, CRM selects the unique active, accessible **No Project** record, its unique available **Upsilon** client, and the unique available **Break** task whose actual type is `break`. Names are matched exactly, ignoring case and surrounding spaces. Mapped projects require Break to be linked to that project/client and permitted for the employee.
-5. No timer starts automatically. The employee presses Start (or changes the activity first). Existing stopped-timer screen-lock policy still applies until Start. Existing connectivity, crash and shutdown recovery behavior remains in place.
+5. No timer starts automatically. The employee presses Start (or changes the activity first). Blank overlays cover the desktop on every monitor, while CRM stays visible for selecting and starting the timer. The overlay remains during the Start request and is removed only after the backend confirms a running timer. A refused start leaves it locked. Existing connectivity, crash and shutdown recovery behavior remains in place.
 
 An existing running or paused timer is restored with its actual project, client and task. Startup defaults do not interrupt it. Background refresh/reconnection does not repeatedly reset the employee's selection.
 

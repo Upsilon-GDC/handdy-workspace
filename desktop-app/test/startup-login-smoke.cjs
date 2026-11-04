@@ -7,6 +7,8 @@ const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
 const user = { _id: 'employee', fullName: 'Startup Employee', role: 'employee', team: 'team' };
 let active = null, starts = 0, quickLogins = 0;
+let pendingStart = null;
+const lockReports = [];
 const calls = [];
 const mockApi = async req => {
   const headers = { 'Access-Control-Allow-Origin': 'null', 'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Content-Type': 'application/json' };
@@ -39,7 +41,14 @@ const mockApi = async req => {
   if (url.pathname === '/api/tasks') body = { tasks: url.searchParams.get('taskType') === 'break' ? [] : [{ _id: 'task', taskName: 'Review', taskType: 'work', project: url.searchParams.get('project') }], totalPages: 1 };
   if (url.pathname === '/api/time-logs/active') body = { timeLog: active };
   if (url.pathname === '/api/time-logs/my') body = { timeLogs: [], totalPages: 1 };
-  if (url.pathname === '/api/time-logs/start') starts++;
+  if (url.pathname === '/api/time-logs/start') {
+    starts++;
+    if (pendingStart) await pendingStart;
+    active = { _id: 'manual-break', status: 'running', startedAt: new Date().toISOString(), pauses: [],
+      project: { _id: 'none', projectName: 'No Project' }, client: { _id: 'internal', clientName: 'Upsilon' }, task: { _id: 'break', taskName: 'Break', taskType: 'break' } };
+    body = { timeLog: active };
+  }
+  if (url.pathname === '/api/time-logs/stop') { body = { timeLog: { ...active, status: 'stopped', stoppedAt: new Date().toISOString(), totalWorkedSeconds: 0 } }; active = null; }
   return new Response(JSON.stringify(body), { headers });
 };
 let win;
@@ -60,6 +69,7 @@ app.whenReady().then(async () => {
     ipcMain.on('config:get-device-info', event => { event.returnValue = { deviceId: 'startup-test-device', clientType: 'desktop' }; });
     ipcMain.handle('system:get-idle-time', () => 0);
     ipcMain.handle('system:idle-defaults', () => require('../idle-policy-defaults.json'));
+    ipcMain.on('timer-lock:set', (_event, state) => { lockReports.push(state); });
     win = new BrowserWindow({ show: false, width: 1280, height: 1000, webPreferences: { preload: path.join(root, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false, partition: `startup-${Date.now()}` } });
     // Intercept HTTPS inside this isolated session. The real page CSP stays
     // enabled; no request can reach a production service or an occupied port.
@@ -76,6 +86,20 @@ app.whenReady().then(async () => {
     await evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
     const output = path.resolve(root, '../backend/.local-repairs/startup-review/timer-default.png');
     fs.mkdirSync(path.dirname(output), { recursive: true }); fs.writeFileSync(output, (await win.webContents.capturePage()).toPNG());
+    await until(`getTimerLockState() === 'locked'`);
+    assert.equal(lockReports.at(-1), 'locked', 'startup requires a manually started timer');
+    let confirmStart;
+    pendingStart = new Promise(resolve => { confirmStart = resolve; });
+    await evaluate(`document.querySelector('#startTimerButton').click()`);
+    await until(`document.querySelector('#timerStatus').textContent === 'Starting...'`);
+    assert.equal(await evaluate(`getTimerLockState()`), 'locked', 'pending Start keeps the desktop blank');
+    assert.equal(lockReports.at(-1), 'locked');
+    confirmStart(); pendingStart = null;
+    await until(`getTimerLockState() === 'running'`);
+    await delay(50); assert.equal(lockReports.at(-1), 'running');
+    assert.equal(starts, 1);
+    await evaluate(`document.querySelector('#stopBreakButton').click()`);
+    await until(`getTimerLockState() === 'locked' && !timerAction`);
     await evaluate(`(() => { const select = document.querySelector('#projectSelect'); select.value = 'audit'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`);
     await until(`!!document.querySelector('#clientSelect option[value="second"]')`);
     await evaluate(`(() => { const select = document.querySelector('#clientSelect'); select.value = 'external'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`);
@@ -89,7 +113,7 @@ app.whenReady().then(async () => {
     active = { _id: 'existing', status: 'running', startedAt: new Date().toISOString(), project: { _id: 'audit', projectName: 'Audit' }, client: { _id: 'external', clientName: 'WCPA' }, task: { _id: 'task', taskName: 'Review', taskType: 'work' }, pauses: [] };
     await openLogin();
     await until(`location.pathname.endsWith('dashboard.html') && document.querySelector('#projectSelect')?.value === 'audit' && document.querySelector('#clientSelect')?.value === 'external'`);
-    assert.equal(quickLogins, 1); assert.equal(starts, 0);
+    assert.equal(quickLogins, 1); assert.equal(starts, 1, 'restoring a running timer never starts a second one');
     await evaluate(`localStorage.removeItem('token'); localStorage.removeItem('user'); localStorage.setItem('desktopAutoLoginPaused','true');`);
     await openLogin();
     await delay(300); assert.equal(quickLogins, 1);

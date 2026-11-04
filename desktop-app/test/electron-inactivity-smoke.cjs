@@ -10,13 +10,15 @@ app.setPath("userData", fs.mkdtempSync(path.join(os.tmpdir(), "crm-idle-smoke-")
 process.env.HANDDY_API_URL = "http://127.0.0.1:5000/api";
 let idleSeconds = 0;
 let timer = null;
+let startDelayMs = 3000;
+let startCount = 0;
 const completedLogs = [];
 const actions = [];
 const user = { _id: "smoke-user", fullName: "Local test employee", role: "employee", isActive: true };
 const server = http.createServer((req, res) => {
   let body = "";
   req.on("data", chunk => { body += chunk; });
-  req.on("end", () => {
+  req.on("end", async () => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -29,6 +31,10 @@ const server = http.createServer((req, res) => {
     else if (req.url.startsWith("/api/time-logs/history")) data = { timeLogs: [...completedLogs, ...(timer ? [timer] : [])] };
     else if (req.url === "/api/time-logs/start") {
       const request = JSON.parse(body);
+      startCount += 1;
+      const wait = startDelayMs;
+      startDelayMs = 0;
+      if (wait) await delay(wait);
       timer = {
         _id: `smoke-timer-${completedLogs.length + 1}`,
         status: "running",
@@ -36,7 +42,7 @@ const server = http.createServer((req, res) => {
         pauses: [],
         project: { _id: "project", projectName: "Project" },
         client: { _id: request.client, clientName: request.client === "client-b" ? "XYZ LLC" : "ABC Company" },
-        task: { _id: request.task, taskName: request.task === "break-task" ? "Lunch" : "Task", taskType: request.task === "break-task" ? "break" : "work", idleLogout: true },
+        task: { _id: request.task, taskName: request.task === "break-task" ? "Lunch" : "Training", taskType: request.task === "break-task" ? "break" : "work", idleLogout: true },
       };
       data = { timeLog: timer };
     } else if (req.url === "/api/time-logs/pause") {
@@ -63,7 +69,7 @@ const server = http.createServer((req, res) => {
     else if (req.url.startsWith("/api/tasks")) data = {
       tasks: req.url.includes("taskType=break")
         ? [{ _id: "break-task", taskName: "Lunch", taskType: "break", project: null }]
-        : [{ _id: "task", taskName: "Task", taskType: "work", project: "project", idleLogout: true }],
+        : [{ _id: "task", taskName: "Training", taskType: "work", project: "project", idleLogout: true }],
       totalPages: 1,
     };
     else data = { timeLogs: [] };
@@ -118,12 +124,18 @@ app.whenReady().then(async () => {
     await evaluate(`document.getElementById("taskSelect").value = "task";
       document.getElementById("taskSelect").dispatchEvent(new Event("change"));
       document.getElementById("startTimerButton").click();`);
+    await until(() => evaluate("document.getElementById('timerStatus').textContent === 'Starting...'"));
+    await delay(2200);
+    assert.equal(await evaluate("document.getElementById('timerStatus').textContent"), "Starting...");
+    assert.equal(await evaluate("document.getElementById('timerDuration').textContent"), "00:00:00", "slow validation must not display seconds that then reset");
     await until(() => evaluate("document.getElementById('timerStatus').textContent === 'Working'"));
     assert.equal(await evaluate("document.getElementById('stopBreakButton').hidden"), true);
     assert.equal(timer.client._id, "client-b", "Timer payload must use the selected database ID");
     assert.equal(await evaluate("document.getElementById('clientSelect').selectedOptions[0].textContent"), "XYZ LLC");
-    await delay(1100);
+    await delay(3100);
     assert.notEqual(await evaluate("document.getElementById('timerDuration').textContent"), "00:00:00");
+    assert.equal(startCount, 1, "Training must keep the same confirmed timer instead of restarting");
+    assert.ok(await evaluate("calculateCurrentWorkSeconds(currentTimeLog) >= 3"));
     assert.equal(await evaluate("document.getElementById('breakTimerButton')"), null);
     await evaluate("document.getElementById('stopTimerButton').click()");
     await until(() => evaluate("document.getElementById('timerStatus').textContent === 'Stopped'"));

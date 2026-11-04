@@ -41,7 +41,7 @@ test('mapping validation rejects cross-project, cross-team and out-of-scope task
   assert.throws(() => validateTaskLinks(project, [], 1), /permissions/);
 });
 test('link routes require the dedicated permission, honor personal grants and revocations', () => {
-  for (const [path, method] of [['/activity-links', 'get'], ['/activity-links', 'post'], ['/activity-links/batch', 'post']]) {
+  for (const [path, method] of [['/activity-links', 'get'], ['/activity-links/history', 'get'], ['/activity-links', 'post'], ['/activity-links/batch', 'post']]) {
     const route = routes.stack.find(layer => layer.route?.path === path && layer.route.methods[method]).route;
     const users = [
       [{ role: 'employee' }, false],

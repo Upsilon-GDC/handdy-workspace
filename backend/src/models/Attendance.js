@@ -42,6 +42,13 @@ const attendanceSchema = new mongoose.Schema(
       enum: ["check_in", "timer"],
       default: "check_in",
     },
+    // Productivity-only exceptions. Timer-derived presence is never replaced.
+    workingHoursAdjustments: { type: [new mongoose.Schema({
+      type: { type: String, enum: ['normal', 'half_day', 'leave', 'absent'], required: true },
+      reason: { type: String, required: true, maxlength: 500 },
+      changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', required: true },
+      changedAt: { type: Date, required: true },
+    }, { _id: false })], default: undefined },
   },
   {
     timestamps: true,

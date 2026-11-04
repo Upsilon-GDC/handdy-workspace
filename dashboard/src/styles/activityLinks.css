@@ -91,11 +91,28 @@ html[data-theme] .crm-content .activity-batch-form .activity-action-secondary { 
 .activity-batch-form .activity-batch-list { height: 220px; max-height: 260px; }
 .activity-batch-form .activity-batch-list label.is-selected { background: color-mix(in srgb, var(--primary) 6%, var(--card-bg, #fff)) !important; }
 .activity-review-chip { display: inline-block; max-width: 100%; border: 1px solid var(--border-light, #e2e8f0); border-radius: 7px; padding: 5px 9px; background: var(--card-bg, #fff); font-size: 12px; overflow-wrap: anywhere; }
+.activity-links-history { padding: 22px 0 6px; margin-top: 12px; border-top: 1px solid var(--border-light, #e2e8f0); min-width: 0; }
+.activity-links-page .activity-links-history { padding: 24px 26px; margin-top: 0; }
+.activity-links-history header h3 { display: flex; align-items: center; gap: 9px; margin: 0; font-size: 15px; }
+.activity-links-history header p, .activity-history-empty { color: var(--text-secondary); font-size: 12px; line-height: 1.6; margin: 7px 0 16px; }
+.activity-history-table { max-width: 100%; overflow-x: auto; border: 1px solid var(--border-light, #e2e8f0); border-radius: 10px; }
+.activity-history-table table { width: 100%; border-collapse: collapse; min-width: 660px; text-align: left; }
+.activity-history-table th { background: var(--surface-soft, #f7f9fb); color: var(--text-secondary); font-size: 11px; font-weight: 600; }
+.activity-history-table :is(th,td) { padding: 12px; border-bottom: 1px solid var(--border-light, #e2e8f0); vertical-align: top; }
+.activity-history-table td { font-size: 12px; max-width: 240px; overflow-wrap: anywhere; }
+.activity-history-table time { white-space: nowrap; font-size: 11px; color: var(--text-secondary); }
+.activity-history-table tr:last-child td { border-bottom: 0; }
+.activity-history-table summary { cursor: pointer; color: var(--primary); }
+.activity-history-action { display: inline-block; padding: 3px 7px; border-radius: 6px; font-size: 11px; background: #eaf5ef; color: #176446; }
+.activity-history-action.unlink { background: #fff1e7; color: #94501c; }
+.activity-history-pagination { display: flex; gap: 14px; align-items: center; justify-content: flex-end; margin-top: 14px; font-size: 12px; }
+.activity-history-pagination button { padding: 7px 10px; }
 @media (max-width: 1100px) {
   .activity-batch-form .activity-batch-columns.has-tasks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .activity-batch-columns.has-tasks > .activity-batch-picker:last-child { grid-column: 1 / -1; }
 }
 @media (max-width: 700px) {
+  .activity-links-page .activity-links-history { padding: 20px 16px; }
   .activity-editor-heading { padding: 18px 16px 10px; gap: 10px; }
   .activity-editor-badge { display: none; }
   .activity-links-page .activity-batch-form { padding: 0 16px; }
