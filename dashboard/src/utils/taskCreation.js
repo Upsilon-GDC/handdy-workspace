@@ -1,4 +1,8 @@
 const id = value => String(value?._id || value || '');
+export function commonTaskProject(projects) {
+  if (!projects.length) return null;
+  return { ...projects[0], teams: (projects[0].teams || []).filter(team => projects.every(project => (project.teams || []).map(id).includes(id(team)))) };
+}
 export const clientsForTaskProject = (options, projectId) => {
   const project = options.projects.find(project => id(project) === projectId);
   return options.clients.filter(client => (project?.clientIds || []).includes(id(client)));

@@ -3,6 +3,7 @@ const Client = require('../models/Client');
 const Task = require('../models/Task');
 const Team = require('../models/Team');
 const { isAdminRole } = require('../utils/roles');
+const { taskProjectScope } = require('./projectTasks');
 const id = value => String(value?._id || value || '');
 const projectClientIds = project => [...new Set([...(project.clients || []), project.client].filter(Boolean).map(id))];
 async function buildEmployeeScope(employee) {
@@ -34,7 +35,7 @@ async function activityOptionsForEmployee(project, employee, { workOnly = false,
   const mappings = project.activityMappingEnabled ? await ActivityMapping.find({ project: project._id, client: { $in: clients.map(client => client._id) }, isActive: true }).select('client task').lean() : [];
   const tasks = await Task.find({ isActive: true, deletedAt: null, ...(workOnly ? { taskType: 'work' } : {}),
     ...(project.activityMappingEnabled ? { _id: { $in: mappings.map(mapping => mapping.task) } } : {}),
-    $and: [scope.taskScope, includeShared ? { $or: [{ project: project._id }, { project: null }] } : { project: project._id }],
+    $and: [scope.taskScope, taskProjectScope(project, { includeShared })],
   }).select('taskName taskCode taskType project idleLogout').sort('taskName').lean();
   return { clients, tasks: tasks.map(task => ({ ...task, project: project._id,
     ...(project.activityMappingEnabled ? { clientIds: [...new Set(mappings.filter(mapping => id(mapping.task) === id(task)).map(mapping => id(mapping.client)))] } : {}),

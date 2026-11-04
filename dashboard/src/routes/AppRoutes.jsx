@@ -441,6 +441,7 @@ function AppRoutes() {
       />
 
       <Route path="/admin/task-links" element={<AdminStaffOnly needs={["manage_activity_links"]} grants={["manage_activity_links"]}><AdminTaskLinksPage /></AdminStaffOnly>} />
+      <Route path="/admin/project-client-links" element={<AdminStaffOnly needs={["manage_activity_links"]} grants={["manage_activity_links"]}><AdminTaskLinksPage key="project-client-links" clientsOnly /></AdminStaffOnly>} />
 
       <Route
         path="/admin/projects"

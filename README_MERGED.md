@@ -30,6 +30,54 @@ This folder merges the useful work from the two project copies in the uploaded Z
 - Pause and Resume timer controls included.
 - Profile page preserved.
 - Team Lead and Employee dashboards preserved.
+
+### Reusing existing tasks across projects
+
+**Task Links → Link projects, clients and tasks** opens bulk selection. Choose
+multiple projects, clients and tasks, then review and confirm the combinations.
+Linking adds every selected client/task pair to every selected project, retaining
+other client links. Tasks must share a team with each selected project; task and
+employee assignments are never broadened. Saving uses one transaction with
+version checks on every project (up to 5,000 combinations). **Review unlink**
+soft-disables only the chosen client-specific mappings and preserves recorded
+time. The linking window opens directly to bulk selection, without a separate
+Project settings tab.
+
+Use **Task Linking → Project & client links** to add or remove client
+links across projects without selecting tasks. Adding clients creates no task
+mappings. Removing a client also disables that client's task mappings on those
+projects, while retaining task definitions, reusable task references, other
+client links and recorded time. Delegated users cannot remove client links
+that would affect another team's tasks.
+
+Both **Task Linking → Task links** and **Project & client links** open their
+editors directly on the page, without an introductory card or extra launch
+button. The client-only tab has no task selectors or task-setting controls.
+
+Task creation also supports multiple projects directly: use the single
+**Projects** section to select one or more projects and a client for each.
+Each task name is created once and reused across those projects.
+In **Tasks → Edit**, enable **Change project selections** to add or remove
+projects. Task fields and links save in one transaction; stale task or link
+changes require reloading the form. Existing client links on retained projects
+are preserved. Team Leads stay within their own team; automatic administrator
+assignment uses the teams common to every selected project.
+
+**Projects → Add New Project** and **Edit** contain project details and teams;
+they do not show a task picker or change existing task references. Manage task
+reuse under **Task Links** or through the task creation/editing project selector.
+
+Project links do not move or duplicate tasks, change their employee assignments,
+or rewrite historical time. Each new time entry records its selected project, so
+reports and billing keep the projects separate. Removing a reusable link affects
+future choices; existing tracked time remains intact. Projects with **Linked tasks
+only** enabled also need the desired task/client pairs configured under **Task
+links**. Existing primary-project and shared-task behavior remains supported.
+
+Deploy both the backend and dashboard for this feature. The desktop's existing
+activity-options flow reads the new links from the backend. Verification:
+`node --test integration/reusableProjectTasks.cjs` inside `backend`, and
+`npm run test:project-tasks` inside `desktop-app` after building the dashboard.
 - Removed the duplicate AdminDashboard/AdminSidebar copies that caused confusion.
 
 ### Desktop app

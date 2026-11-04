@@ -30,8 +30,13 @@ const Project = require("../../models/Project");
 const Team = require("../../models/Team");
 const Employee = require("../../models/Employee");
 const { getTaskCreationOptions, createLinkedTasks } = require('./linkedTaskController');
+const { getTaskProjectSelections, saveMultiProjectTask } = require('./multiProjectTaskController');
 
 router.get('/creation-options', protect, requirePermission('create_tasks'), getTaskCreationOptions);
+router.get('/project-options', protect, requirePermission('create_tasks', 'edit_tasks'), getTaskCreationOptions);
+router.get('/:id/project-selections', protect, requirePermission('edit_tasks'), getTaskProjectSelections);
+router.post('/multi-project', protect, requirePermission('create_tasks'), guardTaskAssignmentOnCreate, saveMultiProjectTask);
+router.put('/:id/multi-project', protect, requirePermission('edit_tasks'), guardTaskReassignment, saveMultiProjectTask);
 router.post('/linked', protect, requirePermission('create_tasks'), guardTaskAssignmentOnCreate, createLinkedTasks);
 
 // ==============================================

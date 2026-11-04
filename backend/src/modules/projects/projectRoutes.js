@@ -17,9 +17,19 @@ const Project = require("../../models/Project");
 const Client = require("../../models/Client");
 const Team = require("../../models/Team");
 const Employee = require("../../models/Employee");
-const { getActivityLinks, saveActivityLinks } = require('./activityLinkController');
+const { getActivityLinks, saveActivityLinks, saveBatchActivityLinks } = require('./activityLinkController');
 const { activityOptionsForEmployee } = require('../../services/activitySelection');
 const sendErrorResponse = require('../../utils/sendErrorResponse');
+const Task = require('../../models/Task');
+const { taskScope } = require('../../services/projectTasks');
+
+router.get('/task-options', protect, requirePermission('manage_projects'), requirePermission('manage_activity_links'), async (req, res) => {
+  try {
+    const tasks = await Task.find({ isActive: true, deletedAt: null, ...await taskScope(req.user) })
+      .select('taskName taskCode taskType project team teams').populate('project', 'projectName').sort('taskName').lean();
+    return res.json({ success: true, tasks });
+  } catch (error) { return sendErrorResponse(res, error, 'Unable to load existing tasks.'); }
+});
 
 router.get('/:id/activity-options', protect, async (req, res) => {
   try {
@@ -35,6 +45,7 @@ router.get('/:id/activity-options', protect, async (req, res) => {
 // users remain limited to their own task teams inside the controller.
 router.get('/activity-links', protect, requirePermission('manage_activity_links'), getActivityLinks);
 router.post('/activity-links', protect, requirePermission('manage_activity_links'), saveActivityLinks);
+router.post('/activity-links/batch', protect, requirePermission('manage_activity_links'), saveBatchActivityLinks);
 
 // All logged-in users can view projects
 router.get("/", protect, catalogCache([Project, Client, Team, Employee], { shared: true }), getAllProjects);

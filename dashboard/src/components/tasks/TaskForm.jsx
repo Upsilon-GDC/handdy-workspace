@@ -5,15 +5,15 @@ import { getAllEmployeeOptions, getAllMyTeamMembers } from "../../api/employeeAp
 import useAuth from "../../context/useAuth";
 import getApiErrorMessage from "../../utils/getApiErrorMessage";
 import PermissionNote from "../layout/PermissionNote";
-import { clientsForTaskProject, selectedCreationClient, creationTeamsForProject, automaticCreationTeamIds } from '../../utils/taskCreation';
+import { clientsForTaskProject, selectedCreationClient, creationTeamsForProject, automaticCreationTeamIds, commonTaskProject } from '../../utils/taskCreation';
 
 import "../../styles/adminAddTask.css";
 
 const toId = (value) => (typeof value === "string" ? value : value?._id) || "";
 
 // Shared Task Creation/Edit form used by Admin (full page + list-page edit
-// modal) and Team Lead (full page). New tasks share one project/client choice
-// per batch; editing preserves the existing project's identity and links.
+// modal) and Team Lead (full page). A batch can reuse each task across multiple
+// projects. Existing edit behavior is retained until project editing is enabled.
 function TaskForm({
   mode = "create",
   scope = "admin",
@@ -36,8 +36,11 @@ function TaskForm({
   const [taskName, setTaskName] = useState(initialTask?.taskName || "");
   const [additionalTaskNames, setAdditionalTaskNames] = useState([]);
   const [creationOptions, setCreationOptions] = useState({ projects: [], clients: [] });
-  const [projectId, setProjectId] = useState('');
-  const [clientId, setClientId] = useState('');
+  const [selectedProjectIds, setSelectedProjectIds] = useState([]);
+  const [projectClients, setProjectClients] = useState({});
+  const [editProjects, setEditProjects] = useState(false);
+  const [projectRevision, setProjectRevision] = useState('');
+  const [projectLinksRevision, setProjectLinksRevision] = useState('');
   const [optionsLoading, setOptionsLoading] = useState(mode === 'create');
   const [optionsError, setOptionsError] = useState('');
   const [optionsAttempt, setOptionsAttempt] = useState(0);
@@ -91,20 +94,30 @@ function TaskForm({
   }, [scope, mode]);
 
   useEffect(() => {
-    if (mode !== 'create') return;
+    if (mode !== 'create' && !editProjects) return;
     let active = true;
-    axiosInstance.get('/tasks/creation-options')
-      .then(({ data }) => {
+    Promise.all([
+      axiosInstance.get(mode === 'create' ? '/tasks/creation-options' : '/tasks/project-options'),
+      mode === 'edit' ? axiosInstance.get(`/tasks/${initialTask._id}/project-selections`) : Promise.resolve(null),
+    ]).then(([{ data }, selection]) => {
         if (!active) return;
         setCreationOptions({ projects: data.projects || [], clients: data.clients || [] });
         setTeamsOptions(data.teams || []); setOptionsError('');
         setAllEmployees((data.employees || []).map(employee => ({ ...employee, role: 'employee' })));
         setTeamMembers(data.employees || []);
+        if (selection) {
+          const rows = selection.data.projectSelections || [];
+          const primary = rows.find(row => row.project === toId(initialTask.project)) || rows[0];
+          setSelectedProjectIds(primary ? [primary.project, ...rows.filter(row => row.project !== primary.project).map(row => row.project)] : []);
+          setProjectClients(Object.fromEntries(rows.map(row => [row.project, row.client])));
+          setProjectRevision(initialTask.updatedAt || selection.data.expectedUpdatedAt);
+          setProjectLinksRevision(selection.data.expectedProjectLinks);
+        }
       })
       .catch(reason => { if (active) setOptionsError(getApiErrorMessage(reason, 'Unable to load projects and clients.')); })
       .finally(() => { if (active) setOptionsLoading(false); });
     return () => { active = false; };
-  }, [mode, optionsAttempt]);
+  }, [mode, optionsAttempt, editProjects, initialTask]);
 
   useEffect(() => {
     if (mode === 'create') return;
@@ -121,12 +134,15 @@ function TaskForm({
     return () => { active = false; };
   }, [scope, mode]);
 
+  const projectId = selectedProjectIds[0] || '';
   const creationProject = creationOptions.projects.find(project => toId(project) === projectId);
-  const creationClients = clientsForTaskProject(creationOptions, projectId);
-  const effectiveClientId = selectedCreationClient(creationClients, clientId);
-  const availableTeams = mode === 'create' ? creationTeamsForProject(teamsOptions, creationProject) : teamsOptions;
+  const commonProject = commonTaskProject(creationOptions.projects.filter(project => selectedProjectIds.includes(toId(project))));
+  const availableTeams = mode === 'create' ? creationTeamsForProject(teamsOptions, commonProject) : teamsOptions;
   const effectiveTeams = mode === 'create' && !overrideTeams
-    ? automaticCreationTeamIds(teamsOptions, creationProject, companyTaskScope) : teams;
+    ? automaticCreationTeamIds(teamsOptions, commonProject, companyTaskScope) : teams;
+  const projectSelections = selectedProjectIds.map(project => ({ project,
+    client: selectedCreationClient(clientsForTaskProject(creationOptions, project), projectClients[project] || '') }));
+  const effectiveClientId = projectSelections[0]?.client || '';
   const teamsKey = effectiveTeams.join(",");
 
   const availableEmployees = useMemo(() => {
@@ -143,15 +159,11 @@ function TaskForm({
 
   const myTeamName = teamsOptions.find(team => team._id === toId(user?.team))?.teamName || teamMembers[0]?.team?.teamName || "Your team";
 
-  const changeCreationProject = value => {
-    setProjectId(value); setClientId(''); setAssignedTo([]); setError('');
+  const toggleProject = value => {
+    setSelectedProjectIds(current => current.includes(value) ? current.filter(project => project !== value) : [...current, value]);
+    if (mode === 'create') setAssignedTo([]);
+    setError('');
     setOverrideTeams(false);
-    const project = creationOptions.projects.find(project => toId(project) === value);
-    const allowed = creationTeamsForProject(teamsOptions, project).map(toId);
-    if (scope === 'admin') setTeams(current => {
-      const retained = current.filter(team => allowed.includes(team));
-      return retained.length ? retained : allowed.length === 1 ? allowed : [];
-    });
   };
 
   const toggleTeam = (teamId) => {
@@ -172,7 +184,7 @@ function TaskForm({
     if (submittingRef.current) return;
     setError("");
 
-    if (mode === 'create' && (optionsLoading || optionsError || !creationProject || !effectiveClientId)) {
+    if ((mode === 'create' || editProjects) && (optionsLoading || optionsError || !creationProject || projectSelections.some(row => !row.client))) {
       setError(optionsError || 'Select a project and one of its linked clients before saving.');
       return;
     }
@@ -216,8 +228,12 @@ function TaskForm({
       setSaving(true);
       const response =
         mode === "edit"
-          ? await axiosInstance.put(`/tasks/${initialTask._id}`, payload)
-          : await axiosInstance.post('/tasks/linked', { ...payload, taskNames });
+          ? editProjects
+            ? await axiosInstance.put(`/tasks/${initialTask._id}/multi-project`, { ...payload, projectSelections, expectedUpdatedAt: projectRevision, expectedProjectLinks: projectLinksRevision, teams, taskNames })
+            : await axiosInstance.put(`/tasks/${initialTask._id}`, payload)
+          : selectedProjectIds.length > 1
+            ? await axiosInstance.post('/tasks/multi-project', { ...payload, taskNames, projectSelections })
+            : await axiosInstance.post('/tasks/linked', { ...payload, taskNames });
       onSaved(response.data.tasks || response.data.task);
     } catch (requestError) {
       setError(getApiErrorMessage(requestError, "Unable to save task."));
@@ -232,25 +248,27 @@ function TaskForm({
       {header}
       {error && <p ref={errorRef} className="admin-error-box" role="alert">{error}</p>}
 
-      {mode === 'create' && <section className="admin-task-project-selection" aria-label="Project and client">
+      {mode === 'edit' && <label><input type="checkbox" checked={editProjects} disabled={saving} onChange={event => { setEditProjects(event.target.checked); setOptionsLoading(event.target.checked); }} />Change project selections</label>}
+      {(mode === 'create' || editProjects) && <section className="admin-task-project-selection" aria-label="Project and client">
         {optionsLoading && <p role="status">Loading projects and clients…</p>}
         {optionsError && <div role="alert"><p>{optionsError}</p><button type="button" onClick={() => { setOptionsLoading(true); setOptionsAttempt(value => value + 1); }}>Retry loading options</button></div>}
-        <label htmlFor="task-creation-project">Project</label>
-        <select id="task-creation-project" value={projectId} disabled={saving || optionsLoading || Boolean(optionsError)} onChange={event => changeCreationProject(event.target.value)} required>
-          <option value="">Select project</option>
-          {creationOptions.projects.map(project => <option key={project._id} value={project._id}>{project.projectName} ({project.projectCode})</option>)}
-        </select>
+        <div className="admin-task-section-heading"><h3>Projects</h3><span>{selectedProjectIds.length} selected</span></div>
         {!optionsLoading && !optionsError && !creationOptions.projects.length && <p>No active projects are available for your team. Ask an administrator to configure them.</p>}
-        {projectId && <>
-          <label htmlFor="task-creation-client">Client</label>
-          <select id="task-creation-client" value={effectiveClientId} disabled={saving || creationClients.length <= 1 || Boolean(optionsError)} onChange={event => setClientId(event.target.value)} required>
-            <option value="">Select client</option>
-            {creationClients.map(client => <option key={client._id} value={client._id}>{client.clientName}</option>)}
-          </select>
-          {creationClients.length === 1 && <p>{creationClients[0].clientName} is selected automatically because it is the only linked client.</p>}
-          {!creationClients.length && <p role="status">This project has no active linked clients. Ask an administrator to save its clients on the Projects page first.</p>}
-        </>}
-        <p>Choose once for this batch. Every task name below will be linked to this project and client when saved.</p>
+        <div role="group" aria-label="Select projects">
+          <p>Select one or more projects and choose a client for each.</p>
+          {selectedProjectIds.filter(value => !creationOptions.projects.some(project => toId(project) === value)).map(value => <p key={value}>Previously linked project is unavailable. <button type="button" disabled={saving} onClick={() => toggleProject(value)}>Remove unavailable project</button></p>)}
+          {creationOptions.projects.map(project => {
+            const selected = selectedProjectIds.includes(toId(project));
+            const clients = clientsForTaskProject(creationOptions, toId(project));
+            return <div className="admin-task-extra-project" key={project._id}>
+              <label><input type="checkbox" name="taskProjects" value={project._id} aria-label={`Include project ${project.projectName}`} checked={selected} disabled={saving || optionsLoading || Boolean(optionsError)} onChange={() => toggleProject(toId(project))} />{project.projectName} ({project.projectCode})</label>
+              {selected && <div><label>Client for {project.projectName}<select aria-label={`Client for ${project.projectName}`} value={selectedCreationClient(clients, projectClients[project._id] || '')} disabled={saving || clients.length <= 1} onChange={event => setProjectClients(current => ({ ...current, [project._id]: event.target.value }))}>
+                <option value="">Select client</option>{clients.map(client => <option key={client._id} value={client._id}>{client.clientName}</option>)}
+              </select></label>{clients.length === 1 && <p>{clients[0].clientName} is selected automatically because it is the only linked client.</p>}{!clients.length && <span>This project has no active linked clients.</span>}</div>}
+            </div>;
+          })}
+        </div>
+        <p>Each task is saved once and linked to every selected project. {mode === 'edit' ? 'Deselecting a project removes future access through that link. Historical time and other client links on retained projects are preserved.' : 'All selected projects must allow the task teams.'}</p>
       </section>}
 
       <div className="admin-task-basics admin-task-name-list" style={{ gridTemplateColumns: "1fr" }}>
@@ -380,7 +398,7 @@ function TaskForm({
       ) : null}
 
       <p className="admin-task-project-empty">
-        {mode === 'create' ? 'Tasks and their project/client links are saved together. Existing tasks are not changed.' : 'Existing project and client links are retained. Use Link multiple tasks to manage additional links.'}
+        {mode === 'create' ? 'Tasks and their project/client links are saved together. Existing tasks are not changed.' : editProjects ? 'Task changes and project selections are saved together.' : 'Existing project and client links are retained. Enable Change project selections to choose multiple projects.'}
       </p>
 
       {(mode === "edit" || canReassign) && <div className="admin-task-assignees">
@@ -454,7 +472,7 @@ function TaskForm({
         <button type="button" className="admin-add-task-cancel" onClick={onCancel} disabled={saving}>
           Cancel
         </button>
-        <button type="submit" className="admin-add-task-save" disabled={saving || (mode === 'create' && (optionsLoading || Boolean(optionsError) || !creationProject || !effectiveClientId))}>
+        <button type="submit" className="admin-add-task-save" disabled={saving || ((mode === 'create' || editProjects) && (optionsLoading || Boolean(optionsError) || !creationProject || projectSelections.some(row => !row.client)))}>
           {saving
             ? "Saving..."
             : mode === "create" && additionalTaskNames.length > 0

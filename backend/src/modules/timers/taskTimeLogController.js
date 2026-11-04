@@ -284,6 +284,7 @@ const startTimer = async (req, res) => {
                 assignmentScope,
                 { $or: [
                     { project },
+                    ...((projectExists.linkedTasks || []).length ? [{ _id: { $in: projectExists.linkedTasks } }] : []),
                     { project: null, taskType: "work" },
                     { project: null, taskType: "break" },
                 ] },

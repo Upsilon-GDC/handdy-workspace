@@ -57,6 +57,8 @@ const projectSchema = new mongoose.Schema(
     activityLinksVersion: { type: Number, default: 0, min: 0 },
     // Explicit per-project rollout; removing the last mapping must not reopen legacy access.
     activityMappingEnabled: { type: Boolean, default: false },
+    // Reuse task IDs without moving tasks or rewriting historical time logs.
+    linkedTasks: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Task' }],
 
     // Projects can be shared by several teams. An empty array is retained for
     // legacy records and means the project has not yet been restricted.

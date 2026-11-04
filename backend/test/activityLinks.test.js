@@ -6,7 +6,7 @@ const Task = require('../src/models/Task');
 const Client = require('../src/models/Client');
 const ActivityMapping = require('../src/models/ActivityMapping');
 const Team = require('../src/models/Team');
-const { validateLinkRequest, validateTaskLinks, saveActivityLinks } = require('../src/modules/projects/activityLinkController');
+const { validateLinkRequest, validateTaskLinks, saveActivityLinks, validateBatchLinkRequest } = require('../src/modules/projects/activityLinkController');
 const routes = require('../src/modules/projects/projectRoutes');
 const ids = { project: '64b000000000000000000a01', client: '64b000000000000000000a02', task: '64b000000000000000000a03', team: '64b000000000000000000a04' };
 const input = overrides => ({ ...ids, taskIds: [ids.task], action: 'link', version: 0, ...overrides });
@@ -20,6 +20,19 @@ test('bulk input rejects malformed, empty and oversized requests before opening 
   assert.equal(validateLinkRequest(input({ taskIds: [ids.task, ids.task] })).selectedIds.length, 1);
   assert.deepEqual(validateLinkRequest(input({ action: 'clients', clientIds: [] })).selectedIds, []);
 });
+
+test('multi-project batch validation requires unique versioned projects and bounds the combination count', () => {
+  const body = { action: 'link', projects: [{ project: ids.project, version: 0 }], clientIds: [ids.client], taskIds: [ids.task] };
+  assert.equal(validateBatchLinkRequest({ ...body, clientIds: [ids.client, ids.client] }).clients.length, 1);
+  for (const change of [{ projects: [] }, { projects: [body.projects[0], body.projects[0]] }, { taskIds: [] }, { clientIds: ['bad'] }, { action: 'replace' }, { projects: [{ project: ids.project, version: -1 }] }]) assert.throws(() => validateBatchLinkRequest({ ...body, ...change }));
+  assert.throws(() => validateBatchLinkRequest({ ...body, clientIds: Array.from({ length: 100 }, () => String(new mongoose.Types.ObjectId())), taskIds: Array.from({ length: 51 }, () => String(new mongoose.Types.ObjectId())) }), /5,000/);
+});
+
+test('project/client-only batches accept no tasks and reject accidental task selections', () => {
+  const body = { mode: 'clients', action: 'link', projects: [{ project: ids.project, version: 0 }], clientIds: [ids.client] };
+  assert.deepEqual(validateBatchLinkRequest(body).tasks, []);
+  assert.throws(() => validateBatchLinkRequest({ ...body, taskIds: [ids.task] }), /must not include tasks/);
+});
 test('mapping validation rejects cross-project, cross-team and out-of-scope tasks', () => {
   const project = { _id: ids.project, teams: [ids.team] };
   assert.doesNotThrow(() => validateTaskLinks(project, [{ teams: [ids.team] }], 1));
@@ -28,8 +41,8 @@ test('mapping validation rejects cross-project, cross-team and out-of-scope task
   assert.throws(() => validateTaskLinks(project, [], 1), /permissions/);
 });
 test('link routes require the dedicated permission, honor personal grants and revocations', () => {
-  for (const method of ['get', 'post']) {
-    const route = routes.stack.find(layer => layer.route?.path === '/activity-links' && layer.route.methods[method]).route;
+  for (const [path, method] of [['/activity-links', 'get'], ['/activity-links', 'post'], ['/activity-links/batch', 'post']]) {
+    const route = routes.stack.find(layer => layer.route?.path === path && layer.route.methods[method]).route;
     const users = [
       [{ role: 'employee' }, false],
       [{ role: 'employee', permissionOverrides: { granted: ['manage_activity_links'] } }, true],

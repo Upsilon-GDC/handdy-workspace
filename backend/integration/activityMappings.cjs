@@ -12,7 +12,7 @@ const Employee = require('../src/models/Employee');
 const ActivityMapping = require('../src/models/ActivityMapping');
 const TaskTimeLog = require('../src/models/TaskTimeLog');
 const { ensureActivityMappingIndexes } = require('../src/services/activityMappings');
-const { saveActivityLinks } = require('../src/modules/projects/activityLinkController');
+const { saveActivityLinks, saveBatchActivityLinks } = require('../src/modules/projects/activityLinkController');
 const { createLinkedTasks } = require('../src/modules/tasks/linkedTaskController');
 const { getManualEntryOptions } = require('../src/modules/timers/manualTimeEntryController');
 const { validateActivitySelection, activityOptionsForEmployee } = require('../src/services/activitySelection');
@@ -83,6 +83,124 @@ const linkBody = (f, overrides = {}) => ({ project: String(f.project._id), clien
   taskIds: [String(f.task._id)], action: 'link', version: 0, ...overrides });
 const createBody = f => ({ project: String(f.project._id), client: String(f.client._id),
   taskNames: ['Preparation', 'Review'], teamAssignment: 'project' });
+
+async function batchFixture() {
+  const f = await fixture(); const tag = crypto.randomUUID();
+  const client = await Client.create({ clientName: tag, createdBy: user._id });
+  const project = await Project.create({ projectCode: tag, projectName: tag, teams: [f.team._id], clients: [f.client._id], createdBy: user._id });
+  const task = await Task.create({ taskCode: tag, taskName: 'Project-owned task', project: f.project._id, teams: [f.team._id], assignToAllEmployees: true, createdBy: user._id });
+  return { ...f, secondProject: project, secondClient: client, secondTask: task, body: { action: 'link',
+    projects: [f.project, project].map(project => ({ project: String(project._id), version: 0 })),
+    clientIds: [String(f.client._id), String(client._id)], taskIds: [String(f.task._id), String(task._id)] } };
+}
+
+test('batch linking saves all project/client/task combinations and reuses tasks without changing assignments', async () => {
+  const f = await batchFixture(); const before = await Task.findById(f.secondTask._id).lean();
+  const result = await invoke(saveBatchActivityLinks, f.body); assert.equal(result.code, 200, JSON.stringify(result.body));
+  assert.equal(result.body.combinationCount, 8);
+  assert.equal(await ActivityMapping.countDocuments({ project: { $in: [f.project._id, f.secondProject._id] }, isActive: true }), 8);
+  for (const reference of [f.project, f.secondProject]) {
+    const project = await Project.findById(reference._id).lean();
+    assert.deepEqual(project.clients.map(String).sort(), [...f.body.clientIds].sort());
+    assert.deepEqual(project.linkedTasks.map(String).sort(), [...f.body.taskIds].sort());
+    assert.equal(project.activityMappingEnabled, false);
+  }
+  assert.deepEqual(await Task.findById(f.secondTask._id).lean(), before);
+});
+
+test('batch unlink and repeated link retain mapping IDs and historical time', async () => {
+  const f = await batchFixture(); assert.equal((await invoke(saveBatchActivityLinks, f.body)).code, 200);
+  const initial = await ActivityMapping.find({ task: f.task._id }).lean();
+  const log = await TaskTimeLog.create({ employee: user._id, project: f.project._id, client: f.client._id, task: f.task._id,
+    startedAt: '2026-01-01T09:00:00Z', stoppedAt: '2026-01-01T10:00:00Z', status: 'stopped', isActiveTimer: false, totalWorkedSeconds: 3600 });
+  const before = await TaskTimeLog.findById(log._id).lean();
+  const next = { ...f.body, projects: f.body.projects.map(row => ({ ...row, version: 1 })) };
+  assert.equal((await invoke(saveBatchActivityLinks, next)).code, 200);
+  assert.equal(await ActivityMapping.countDocuments({ task: { $in: [f.task._id, f.secondTask._id] } }), 8);
+  assert.equal((await invoke(saveBatchActivityLinks, { ...next, action: 'unlink', projects: next.projects.map(row => ({ ...row, version: 2 })) })).code, 200);
+  assert.equal(await ActivityMapping.countDocuments({ task: { $in: [f.task._id, f.secondTask._id] }, isActive: true }), 0);
+  assert.deepEqual((await ActivityMapping.find({ task: f.task._id }).lean()).map(row => String(row._id)).sort(), initial.map(row => String(row._id)).sort());
+  assert.deepEqual(await TaskTimeLog.findById(log._id).lean(), before);
+});
+
+test('a stale project or inactive client rejects the entire batch', async () => {
+  const f = await batchFixture();
+  const stale = { ...f.body, projects: f.body.projects.map((row, i) => ({ ...row, version: i })) };
+  assert.equal((await invoke(saveBatchActivityLinks, stale)).code, 409);
+  assert.equal((await Project.findById(f.project._id)).activityLinksVersion, 0);
+  await Client.updateOne({ _id: f.secondClient._id }, { $set: { status: 'Inactive' } });
+  assert.equal((await invoke(saveBatchActivityLinks, f.body)).code, 400);
+  assert.equal(await ActivityMapping.countDocuments({ task: f.task._id }), 0);
+});
+
+test('simultaneous batches commit once and reject the stale writer', async () => {
+  const f = await batchFixture();
+  const results = await Promise.all([invoke(saveBatchActivityLinks, f.body), invoke(saveBatchActivityLinks, f.body)]);
+  assert.deepEqual(results.map(result => result.code).sort(), [200, 409]);
+});
+
+test('a Team Lead cannot batch-link a foreign-team project or task', async () => {
+  const f = await batchFixture(); const lead = { _id: new mongoose.Types.ObjectId(), role: 'team_lead', team: f.team._id };
+  await Team.updateOne({ _id: f.team._id }, { $set: { teamLead: lead._id } });
+  const other = await Team.create({ teamName: crypto.randomUUID(), createdBy: user._id });
+  await Project.updateOne({ _id: f.secondProject._id }, { $set: { teams: [other._id] } });
+  assert.equal((await invoke(saveBatchActivityLinks, f.body, lead)).code, 403);
+  assert.equal(await ActivityMapping.countDocuments({ task: f.task._id }), 0);
+});
+
+test('failed batch mapping writes roll back every project update', async t => {
+  const f = await batchFixture();
+  t.mock.method(ActivityMapping, 'bulkWrite', async () => { throw new Error('Synthetic batch failure'); });
+  assert.equal((await invoke(saveBatchActivityLinks, f.body)).code, 500);
+  for (const reference of [f.project, f.secondProject]) {
+    const project = await Project.findById(reference._id);
+    assert.equal(project.activityLinksVersion, 0); assert.equal(project.linkedTasks.length, 0);
+    assert.deepEqual(project.clients.map(String), [String(f.client._id)]);
+  }
+});
+
+test('project/client-only linking changes no tasks or task mappings', async () => {
+  const f = await batchFixture(); const before = await Task.findById(f.secondTask._id).lean();
+  const result = await invoke(saveBatchActivityLinks, { ...f.body, mode: 'clients', taskIds: [] });
+  assert.equal(result.code, 200, JSON.stringify(result.body)); assert.equal(result.body.combinationCount, 4);
+  for (const reference of [f.project, f.secondProject]) {
+    const project = await Project.findById(reference._id);
+    assert.deepEqual(project.clients.map(String).sort(), [...f.body.clientIds].sort());
+    assert.equal(project.linkedTasks.length, 0);
+  }
+  assert.equal(await ActivityMapping.countDocuments({ task: { $in: [f.task._id, f.secondTask._id] } }), 0);
+  assert.deepEqual(await Task.findById(f.secondTask._id).lean(), before);
+});
+
+test('project/client-only removal disables affected mappings while preserving other clients and history', async () => {
+  const f = await batchFixture(); assert.equal((await invoke(saveBatchActivityLinks, f.body)).code, 200);
+  const record = await TaskTimeLog.create({ employee: user._id, project: f.project._id, client: f.secondClient._id, task: f.task._id,
+    startedAt: '2026-01-01T09:00:00Z', stoppedAt: '2026-01-01T10:00:00Z', status: 'stopped', isActiveTimer: false, totalWorkedSeconds: 3600 });
+  const before = await TaskTimeLog.findById(record._id).lean();
+  const result = await invoke(saveBatchActivityLinks, { ...f.body, mode: 'clients', action: 'unlink', taskIds: [], clientIds: [String(f.secondClient._id)], projects: f.body.projects.map(row => ({ ...row, version: 1 })) });
+  assert.equal(result.code, 200, JSON.stringify(result.body));
+  for (const reference of [f.project, f.secondProject]) {
+    const project = await Project.findById(reference._id);
+    assert.deepEqual(project.clients.map(String), [String(f.client._id)]);
+    assert.equal(project.linkedTasks.length, 2);
+  }
+  assert.equal(await ActivityMapping.countDocuments({ task: f.task._id, client: f.secondClient._id, isActive: true }), 0);
+  assert.equal(await ActivityMapping.countDocuments({ task: f.task._id, client: f.client._id, isActive: true }), 2);
+  assert.deepEqual(await TaskTimeLog.findById(record._id).lean(), before);
+});
+
+test('delegated client removal cannot disable mappings for another team', async () => {
+  const f = await batchFixture();
+  const otherTeam = await Team.create({ teamName: crypto.randomUUID(), createdBy: user._id });
+  const otherTask = await Task.create({ taskCode: crypto.randomUUID(), taskName: 'Other team', teams: [otherTeam._id], createdBy: user._id });
+  await ActivityMapping.create({ project: f.project._id, client: f.client._id, task: otherTask._id });
+  const lead = { _id: new mongoose.Types.ObjectId(), role: 'team_lead' };
+  await Team.updateOne({ _id: f.team._id }, { $set: { teamLead: lead._id } });
+  const result = await invoke(saveBatchActivityLinks, { ...f.body, mode: 'clients', action: 'unlink', taskIds: [], clientIds: [String(f.client._id)] }, lead);
+  assert.equal(result.code, 403);
+  assert.equal((await Project.findById(f.project._id)).activityLinksVersion, 0);
+  assert.equal(await ActivityMapping.countDocuments({ task: otherTask._id, isActive: true }), 1);
+});
 
 test('mapping index initialization is repeatable and MongoDB rejects duplicate tuples', async () => {
   const f = await fixture();

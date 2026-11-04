@@ -502,10 +502,12 @@ const getAllTasks = async (req, res) => {
     }
 
     if (project) {
+      const selectedProject = await Project.findById(project).select('linkedTasks').lean();
       conditions.push({
         $or: [
           { project },
           { project: null, taskType: "work" },
+          ...((selectedProject?.linkedTasks || []).length ? [{ _id: { $in: selectedProject.linkedTasks } }] : []),
         ],
       });
     }

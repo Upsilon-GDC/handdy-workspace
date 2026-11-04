@@ -9,6 +9,7 @@ const { validateActivitySelection, activityOptionsForEmployee } = require('../..
 const sendErrorResponse = require("../../utils/sendErrorResponse");
 const { isAdminRole } = require("../../utils/roles");
 const { recordAttendanceActivity } = require("../../services/attendanceService");
+const { taskProjectScope } = require('../../services/projectTasks');
 
 const MAX_ENTRY_SECONDS = 24 * 60 * 60;
 const MIN_REASON_LENGTH = 5;
@@ -116,9 +117,9 @@ const getManualEntryOptions = async (req, res) => {
 
     const scope = await buildEmployeeScope(employee);
     const allProjects = await Project.find(scope.projectFilter)
-      .select("projectCode projectName client clients clientName teams activityMappingEnabled").sort("projectName").lean();
+      .select("projectCode projectName client clients clientName teams activityMappingEnabled linkedTasks").sort("projectName").lean();
     const candidateProjects = allProjects.filter((project) => projectAllowedForTeam(project, scope, employee));
-    if (candidateProjects.some(project => project.activityMappingEnabled)) {
+    if (candidateProjects.some(project => project.activityMappingEnabled || project.linkedTasks?.length)) {
       const results = await Promise.all(candidateProjects.map(project => activityOptionsForEmployee(project, employee, {
         workOnly: true, includeShared: project.activityMappingEnabled === true,
       })));
@@ -184,13 +185,13 @@ const createManualEntry = async (req, res) => {
 
     const scope = await buildEmployeeScope(employee);
     const project = await Project.findOne({ _id: value.project, ...scope.projectFilter })
-      .select("client clients teams activityMappingEnabled").lean();
+      .select("client clients teams activityMappingEnabled linkedTasks").lean();
     if (!project || !projectAllowedForTeam(project, scope, employee)) {
       return res.status(400).json({ success: false, message: "This project is not available to the selected employee." });
     }
     const task = await Task.findOne({
       _id: value.task, isActive: true, deletedAt: null, taskType: "work", ...scope.taskScope,
-      ...(project.activityMappingEnabled ? { $and: [{ $or: [{ project: value.project }, { project: null }] }] } : { project: value.project }),
+      $and: [taskProjectScope({ ...project, _id: value.project }, { includeShared: project.activityMappingEnabled === true })],
     }).select("_id").lean();
     if (!task) {
       return res.status(400).json({ success: false, message: "This task is not assigned to the employee or does not belong to the selected project." });

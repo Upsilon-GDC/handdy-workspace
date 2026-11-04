@@ -5,8 +5,10 @@ const { escapeRegExp, getPagination } = require("../../utils/requestUtils");
 const { isAdminRole } = require("../../utils/roles");
 const { userHasPermission } = require("../../services/permissionService");
 const sendErrorResponse = require("../../utils/sendErrorResponse");
+const { validateProjectTasks } = require('../../services/projectTasks');
 
 const handleProjectError = (res, error) => {
+  if (error.statusCode) return res.status(error.statusCode).json({ success: false, message: error.message });
   if (error.code === 11000) {
     return res.status(409).json({ success: false, message: "Project code already exists." });
   }
@@ -84,6 +86,7 @@ const createProject = async (req, res) => {
     const teamResolution = await resolveProjectTeams(payload.teams);
     if (teamResolution.error) return res.status(400).json({ success: false, message: teamResolution.error });
     payload.teams = teamResolution.ids;
+    if (payload.linkedTasks !== undefined) payload.linkedTasks = await validateProjectTasks(payload.linkedTasks, payload.teams, req.user);
     const project = await Project.create({
       ...payload,
       createdBy: req.user._id,
@@ -198,6 +201,7 @@ const updateProject = async (req, res) => {
       if (teamResolution.error) return res.status(400).json({ success: false, message: teamResolution.error });
       updates.teams = teamResolution.ids;
     }
+    if (updates.linkedTasks !== undefined) updates.linkedTasks = await validateProjectTasks(updates.linkedTasks, updates.teams || project.teams, req.user);
     const updatedProject = await Project.findByIdAndUpdate(
       req.params.id,
       updates,

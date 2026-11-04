@@ -29,7 +29,7 @@ async function getTimeEntryForEdit(req, res) {
     if (!employee) throw fail('The entry employee no longer exists.', 404);
     const projects = [], tasks = [], clientMap = new Map();
     if (employee.isActive) {
-      const candidates = await Project.find({ status: 'Active', deletedAt: null }).select('projectName projectCode teams client clients activityMappingEnabled').sort('projectName').lean();
+      const candidates = await Project.find({ status: 'Active', deletedAt: null }).select('projectName projectCode teams client clients activityMappingEnabled linkedTasks').sort('projectName').lean();
       const choices = await Promise.all(candidates.map(project => activityOptionsForEmployee(project, employee)));
       candidates.forEach((project, index) => {
         const options = choices[index];

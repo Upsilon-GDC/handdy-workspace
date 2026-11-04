@@ -52,6 +52,15 @@ const server = http.createServer(async (req, res) => {
     body = { success: true, task: createdTasks[0] };
   }
   if (url.pathname === '/api/teams') body = { teams: [{ _id: 'team', teamName: 'Audit team', isActive: true }] };
+  if (url.pathname === '/api/projects/activity-links/batch') {
+    let raw = ''; for await (const chunk of req) raw += chunk;
+    const input = JSON.parse(raw); requests.push(input);
+    if (forceConflict) { res.statusCode = 409; res.end(JSON.stringify({ message: 'Links changed. Close and reopen before saving.' })); return; }
+    assert.equal(input.projects[0].version, project.activityLinksVersion); project.activityLinksVersion++;
+    if (input.action === 'link') mappings = input.taskIds.map(task => ({ project: input.projects[0].project, client: input.clientIds[0], task }));
+    if (input.action === 'unlink') mappings = [];
+    body = { success: true, message: 'Changes saved.' };
+  }
   if (url.pathname === '/api/projects/activity-links') {
     if (req.method === 'POST') {
       let raw = ''; for await (const chunk of req) raw += chunk;
@@ -76,6 +85,10 @@ async function until(code) {
   throw new Error(`Timed out: ${code}`);
 }
 const choose = (selector, value) => evaluate(`(() => { const element = document.querySelector(${JSON.stringify(selector)}); element.value = ${JSON.stringify(value)}; element.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+const chooseProject = async value => {
+  await evaluate(`[...document.querySelectorAll('input[name="taskProjects"]:checked')].forEach(input => input.click())`);
+  await evaluate(`document.querySelector('input[name="taskProjects"][value="' + ${JSON.stringify(value)} + '"]').click()`);
+};
 const clickText = text => evaluate(`[...document.querySelectorAll('button')].find(button => button.textContent.trim() === ${JSON.stringify(text)}).click()`);
 const fill = (selector, value) => evaluate(`(() => { const input = document.querySelector(${JSON.stringify(selector)}); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(value)}); input.dispatchEvent(new Event('input', { bubbles: true })); })()`);
 app.whenReady().then(async () => {
@@ -88,21 +101,12 @@ app.whenReady().then(async () => {
     await win.loadURL(`${base}/admin/tasks`);
     await until(`document.body.textContent.includes('Link multiple tasks')`);
     await clickText('Link multiple tasks');
-    await until(`!!document.querySelector('#activity-project option[value="p1"]')`);
-    await choose('#activity-project', 'p1');
-    await until(`document.body.textContent.includes('Save project clients')`);
-    await evaluate(`document.querySelector('.activity-client-editor').open = true; void (window.confirm = () => true);`);
-    await until(`document.querySelector('.activity-client-list').textContent.includes('Inactive or missing client')`);
-    await evaluate(`[...document.querySelectorAll('.activity-client-list label')].find(label => label.textContent.includes('Inactive or missing client')).querySelector('input').click()`);
-    await evaluate(`document.querySelector('.activity-client-list input').click()`);
-    await clickText('Save project clients');
-    await until(`!!document.querySelector('#activity-client option[value="c1"]')`);
-    assert.deepEqual(project.clients, ['c1'], 'inactive client can be explicitly removed');
-    await choose('#activity-client', 'c1');
-    await until(`document.querySelectorAll('.activity-task-row').length === 125`);
-    assert.equal(await evaluate(`document.querySelector('.activity-task-list').textContent.includes('Wrong project task')`), false);
-    await clickText('Select all shown');
-    await until(`document.body.textContent.includes('125 selected')`);
+    await until(`!!document.querySelector('[aria-label="Select projects"] input[value="p1"]')`);
+    assert.equal(await evaluate(`[...document.querySelectorAll('button')].some(button => button.textContent.trim() === 'Project settings')`), false);
+    await evaluate(`document.querySelector('[aria-label="Select projects"] input[value="p1"]').click()`);
+    await evaluate(`document.querySelector('[aria-label="Select clients"] input[value="c1"]').click()`);
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Select tasks"] input[value="excluded"]').disabled`), true);
+    await evaluate(`document.querySelector('[aria-label="Select tasks"]').closest('section').querySelector('button').click()`);
     const screenshot = path.resolve(__dirname, '../../backend/.local-repairs/activity-phase2/activity-links.png');
     fs.mkdirSync(path.dirname(screenshot), { recursive: true });
     await delay(300); // Allow Chromium to paint the selected-state layout.
@@ -110,42 +114,38 @@ app.whenReady().then(async () => {
     const geometry = await evaluate(`(() => { const modal = document.querySelector('.activity-links-modal'); return { width: modal.clientWidth, scroll: modal.scrollWidth, overflowing: [...modal.querySelectorAll('*')].filter(element => element.getBoundingClientRect().right > modal.getBoundingClientRect().right).map(element => ({ tag: element.tagName, name: element.className, width: element.getBoundingClientRect().width })) }; })()`);
     assert.equal(geometry.scroll <= geometry.width + 1, true, `linking modal fits without horizontal scrolling: ${JSON.stringify(geometry)}`);
     fs.writeFileSync(screenshot, (await win.webContents.capturePage()).toPNG());
-    await clickText('Link selected tasks');
-    await until(`document.querySelectorAll('.activity-linked-badge').length === 125`);
+    await clickText('Review links'); await clickText('Confirm links');
+    await until(`!!document.querySelector('.activity-links-success')`);
     assert.equal(requests.at(-1).taskIds.length, 125);
     assert.equal(requests.at(-1).action, 'link');
-    await clickText('Enable linked selection');
-    await until(`document.body.textContent.includes('Linked tasks only')`);
-    assert.equal(project.activityMappingEnabled, true);
-    await clickText('Select all shown');
-    await clickText('Unlink selected tasks');
-    await until(`document.querySelectorAll('.activity-linked-badge').length === 0 && !document.querySelector('fieldset').disabled`);
+    await evaluate(`document.querySelector('[aria-label="Select tasks"]').closest('section').querySelector('button').click()`);
+    await clickText('Review unlink'); await clickText('Confirm unlink');
+    await until(`!!document.querySelector('.activity-links-success')`);
     assert.equal(requests.at(-1).action, 'unlink');
-    assert.equal(project.activityMappingEnabled, true, 'unlinking the last task does not restore legacy access');
-    await clickText('Select all shown');
+    await evaluate(`document.querySelector('[aria-label="Select tasks"]').closest('section').querySelector('button').click()`);
     forceConflict = true;
-    await clickText('Link selected tasks');
+    await clickText('Review links'); await clickText('Confirm links');
     await until(`document.querySelector('[role="alert"]')?.textContent.includes('Close and reopen')`);
-    await choose('#activity-project', 'p2');
-    assert.equal(await evaluate(`document.querySelector('#activity-client').value`), '');
+    await clickText('Reload links');
+    await until(`!!document.querySelector('[aria-label="Select projects"] input') && !document.querySelector('[role="alert"]')`);
     assert.equal(mappings.length, 0);
     await win.loadURL(`${base}/admin/tasks/new`);
-    await until(`!!document.querySelector('#task-creation-project option[value="p1"]')`);
-    await choose('#task-creation-project', 'p1');
-    assert.equal(await evaluate(`document.querySelector('#task-creation-client').value`), 'c1');
-    assert.equal(await evaluate(`document.querySelector('#task-creation-client').disabled`), true);
-    await choose('#task-creation-project', 'p3');
+    await until(`!!document.querySelector('input[name="taskProjects"][value="p1"]')`);
+    await chooseProject('p1');
+    assert.equal(await evaluate(`document.querySelector('.admin-task-extra-project select').value`), 'c1');
+    assert.equal(await evaluate(`document.querySelector('.admin-task-extra-project select').disabled`), true);
+    await chooseProject('p3');
     assert.equal(await evaluate(`document.querySelector('.admin-add-task-save').disabled`), true);
     assert.ok(await evaluate(`document.querySelector('.admin-task-project-selection').textContent.includes('no active linked clients')`));
-    await choose('#task-creation-project', 'p2');
-    assert.equal(await evaluate(`document.querySelector('#task-creation-client').value`), '', 'changing project clears the previous client');
+    await chooseProject('p2');
+    assert.equal(await evaluate(`document.querySelector('.admin-task-extra-project select').value`), '', 'changing project clears the previous client');
     assert.equal(await evaluate(`document.querySelector('.admin-task-team-grid')`), null, 'team picker is hidden by default');
     assert.equal(await evaluate(`document.querySelector('.admin-task-auto-access').textContent.includes('Second accounting team')`), true);
     assert.equal(await evaluate(`document.querySelector('.admin-task-auto-access').textContent.includes('Software')`), false);
     await clickText('Change team access');
     assert.equal(await evaluate(`document.querySelectorAll('.admin-task-team-option').length`), 2);
     await evaluate(`document.querySelectorAll('.admin-task-team-option')[1].click()`);
-    await choose('#task-creation-client', 'c2');
+    await choose('.admin-task-extra-project select', 'c2');
     await fill('.admin-task-name-list > label input', 'Audit review');
     await clickText('+ Add another task name');
     await fill('.admin-task-name-row input', 'Audit preparation');
@@ -172,9 +172,9 @@ app.whenReady().then(async () => {
     user.role = 'manager';
     await evaluate(`localStorage.setItem('user', ${JSON.stringify(JSON.stringify(user))})`);
     await win.loadURL(`${base}/admin/tasks/new`);
-    await until(`!!document.querySelector('#task-creation-project option[value="p2"]')`);
-    await choose('#task-creation-project', 'p2');
-    await choose('#task-creation-client', 'c1');
+    await until(`!!document.querySelector('input[name="taskProjects"][value="p2"]')`);
+    await chooseProject('p2');
+    await choose('.admin-task-extra-project select', 'c1');
     await fill('.admin-task-name-list > label input', 'Manager shared work');
     await evaluate(`document.querySelector('.admin-add-task-save').click()`);
     await until(`location.pathname === '/admin/tasks'`);
@@ -184,10 +184,10 @@ app.whenReady().then(async () => {
     user.role = 'team_lead'; user.team = 'team';
     await evaluate(`localStorage.setItem('user', ${JSON.stringify(JSON.stringify(user))})`);
     await win.loadURL(`${base}/team-lead/tasks/add`);
-    await until(`!!document.querySelector('#task-creation-project option[value="p1"]')`);
-    assert.equal(await evaluate(`!!document.querySelector('#task-creation-project option[value="p2"]')`), false);
-    await choose('#task-creation-project', 'p1');
-    assert.equal(await evaluate(`document.querySelector('#task-creation-client').value`), 'c1');
+    await until(`!!document.querySelector('input[name="taskProjects"][value="p1"]')`);
+    assert.equal(await evaluate(`!!document.querySelector('input[name="taskProjects"][value="p2"]')`), false);
+    await chooseProject('p1');
+    assert.equal(await evaluate(`document.querySelector('.admin-task-extra-project select').value`), 'c1');
     await fill('.admin-task-name-list > label input', 'Lead review');
     const creationScreenshot = path.resolve(__dirname, '../../backend/.local-repairs/activity-phase2/task-creation.png');
     await evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
@@ -210,14 +210,13 @@ app.whenReady().then(async () => {
     await win.loadURL(`${base}/admin/task-links`);
     await until(`!!document.querySelector('a[href="/admin/task-links"]') && document.body.textContent.includes('Link existing tasks')`);
     assert.equal(await evaluate(`!!document.querySelector('a[href="/admin/projects"]')`), false, 'linking does not grant project management');
-    await clickText('Link projects, clients and tasks');
-    await until(`!!document.querySelector('#activity-project option[value="p1"]')`);
-    await choose('#activity-project', 'p1');
-    await choose('#activity-client', 'c1');
+    await until(`!!document.querySelector('[aria-label="Select projects"] input[value="p1"]')`);
+    await evaluate(`document.querySelector('[aria-label="Select projects"] input[value="p1"]').click()`);
+    await evaluate(`document.querySelector('[aria-label="Select clients"] input[value="c1"]').click()`);
     assert.equal(await evaluate(`[...document.querySelectorAll('button')].some(b=>/Enable linked selection|Restore legacy selection/.test(b.textContent))`), false);
-    await clickText('Select all shown');
-    await clickText('Link selected tasks');
-    await until(`document.querySelectorAll('.activity-linked-badge').length === 125 && !document.querySelector('fieldset').disabled`);
+    await evaluate(`document.querySelector('[aria-label="Select tasks"]').closest('section').querySelector('button').click()`);
+    await clickText('Review links'); await clickText('Confirm links');
+    await until(`!!document.querySelector('.activity-links-success')`);
     assert.equal(requests.at(-1).action, 'link');
     const delegatedScreenshot = path.join(__dirname, '../../backend/.local-repairs/activity-phase2/delegated-task-links.png');
     fs.writeFileSync(delegatedScreenshot, (await win.webContents.capturePage()).toPNG());

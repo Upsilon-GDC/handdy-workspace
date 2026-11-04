@@ -4,7 +4,9 @@
   "description": "Employee Time & Attendance System Desktop App",
   "main": "main.js",
   "scripts": {
-    "test": "node --test --test-isolation=none test/*.test.js && npm run test:electron && npm run test:startup && npm run test:dashboard && npm run test:activity-links && npm run test:manual-entry && npm run test:entry-edit && npm run test:overview",
+    "test": "node --test --test-isolation=none test/*.test.js && npm run test:electron && npm run test:startup && npm run test:dashboard && npm run test:activity-links && npm run test:manual-entry && npm run test:entry-edit && npm run test:overview && npm run test:project-tasks && npm run test:batch-links",
+    "test:batch-links": "set \"ELECTRON_RUN_AS_NODE=\" && electron test/batch-activity-links-smoke.cjs",
+    "test:project-tasks": "set \"ELECTRON_RUN_AS_NODE=\" && electron test/project-tasks-smoke.cjs && electron test/multi-project-tasks-smoke.cjs",
     "test:overview": "set \"ELECTRON_RUN_AS_NODE=\" && electron test/admin-overview-smoke.cjs",
     "test:entry-edit": "set \"ELECTRON_RUN_AS_NODE=\" && electron test/time-entry-edit-smoke.cjs",
     "test:manual-entry": "set \"ELECTRON_RUN_AS_NODE=\" && electron test/manual-entry-report-smoke.cjs",

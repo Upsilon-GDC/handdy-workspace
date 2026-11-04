@@ -1,18 +1,12 @@
-import { useState } from 'react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
-import ActivityLinksModal from '../../components/tasks/ActivityLinksModal';
+import ActivityLinksEditor from '../../components/tasks/ActivityLinksEditor';
+import { Link2 } from 'lucide-react';
 
-export default function AdminTaskLinksPage() {
-  const [open, setOpen] = useState(false);
-  return <DashboardLayout title="Task links">
-    <section className="card" style={{ padding: 24 }}>
-      <p className="admin-eyebrow">PROJECTS, CLIENTS AND TASKS</p>
-      <h2>Link existing tasks</h2>
-      <p>Choose a project and client, then select tasks to link or unlink. Your available projects and tasks follow your team access.</p>
-      <p>To remove a link, open the controls below, select tasks marked Linked, then click Unlink selected tasks.</p>
-      <p>Existing timers and recorded time are preserved when links change.</p>
-      <button type="button" onClick={() => setOpen(true)}>Link projects, clients and tasks</button>
+export default function AdminTaskLinksPage({ clientsOnly = false }) {
+  return <DashboardLayout title={clientsOnly ? 'Project & client links' : 'Task links'}>
+    <section className="card activity-links-page" aria-label={clientsOnly ? 'Project and client links editor' : 'Task links editor'}>
+      <header className="activity-editor-heading"><span className="activity-heading-icon"><Link2 size={22} aria-hidden="true" /></span><div><p className="admin-eyebrow">{clientsOnly ? 'PROJECTS AND CLIENTS' : 'PROJECTS, CLIENTS AND TASKS'}</p><h2>{clientsOnly ? 'Manage project and client links' : 'Link existing tasks'}</h2></div><span className="activity-editor-badge">Bulk linking</span></header>
+      <ActivityLinksEditor key={clientsOnly ? 'clients' : 'tasks'} clientsOnly={clientsOnly} />
     </section>
-    {open && <ActivityLinksModal onClose={() => setOpen(false)} />}
   </DashboardLayout>;
 }

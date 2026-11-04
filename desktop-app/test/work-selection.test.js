@@ -61,15 +61,50 @@ test('mapped project with no active task mappings has no selectable legacy tasks
   await h.context.startTimer(); assert.equal(h.state.startRequests.length, 0);
 });
 
-test('startup selects the unique No Project and only its linked client without starting time', async () => {
+test('startup selects No Project / Upsilon / Break without starting time', async () => {
   const h = harness();
+  h.state.clients[1].clientName = ' UPsiLON ';
+  h.state.breakTasks = [{ _id: 'break', taskName: 'Break', taskType: 'break' }];
   h.state.projects.push({ _id: 'default', projectName: 'No Project', clients: [{ _id: 'client-b' }] });
   await h.context.loadClients(); await h.context.loadProjects();
   h.run('timerStateConfirmed = true; selectedProjectId = "p1"; selectedTaskId = "t1";');
   assert.equal(await h.context.applyStartupActivitySelection(), true);
-  assert.equal(h.project.value, 'default'); assert.equal(h.client.value, 'client-b'); assert.equal(h.task.value, '');
+  assert.equal(h.project.value, 'default'); assert.equal(h.client.value, 'client-b'); assert.equal(h.task.value, 'break');
   assert.deepEqual(h.client.options.map(option => option.value), ['', 'client-b']);
   assert.equal(h.state.startBodies.length, 0);
+});
+
+test('startup picks Upsilon among linked clients and only its mapped Break task', async () => {
+  const h = harness();
+  h.state.projects.push({ _id: 'default', projectName: 'No Project', clients: ['client-a', 'client-b'], activityMappingEnabled: true });
+  h.state.activityResponse = { mappingEnabled: true, clients: [
+    { _id: 'client-a', clientName: 'Other' }, { _id: 'client-b', clientName: 'Upsilon' },
+  ], tasks: [
+    { _id: 'other-break', taskName: 'Break', taskType: 'break', clientIds: ['client-a'] },
+    { _id: 'break', taskName: 'Break', taskType: 'break', clientIds: ['client-b'] },
+  ] };
+  await h.context.loadClients(); await h.context.loadProjects();
+  h.run('timerStateConfirmed = true;');
+  await h.context.applyStartupActivitySelection();
+  assert.equal(h.client.value, 'client-b'); assert.equal(h.task.value, 'break');
+  assert.equal(h.state.startBodies.length, 0);
+});
+
+test('startup refuses ambiguous clients and missing, duplicate or work-typed Break tasks', async () => {
+  for (const scenario of ['missing-client', 'duplicate-client', 'work-task', 'duplicate-task', 'missing-task']) {
+    const h = harness();
+    h.state.projects.push({ _id: 'default', projectName: 'No Project', clients: ['client-a', 'client-b'] });
+    if (scenario !== 'missing-client') h.state.clients[1].clientName = 'Upsilon';
+    if (scenario === 'duplicate-client') h.state.clients[0].clientName = 'Upsilon';
+    h.state.breakTasks = scenario === 'missing-task' ? [] : [{ _id: 'break', taskName: 'Break', taskType: scenario === 'work-task' ? 'work' : 'break' }];
+    if (scenario === 'duplicate-task') h.state.breakTasks.push({ _id: 'break-2', taskName: 'Break', taskType: 'break' });
+    await h.context.loadClients(); await h.context.loadProjects();
+    h.run('timerStateConfirmed = true;');
+    await h.context.applyStartupActivitySelection();
+    assert.equal(h.task.value, '', scenario);
+    if (scenario.includes('client')) assert.equal(h.client.value, '', scenario);
+    assert.equal(h.state.startBodies.length, 0);
+  }
 });
 
 test('startup preserves active timers and refuses to assume no timer after an outage', async () => {

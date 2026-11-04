@@ -959,14 +959,45 @@ async function applyStartupActivitySelection() {
   const matches = availableProjects.filter(project => String(project.projectName || '').trim().toLowerCase() === 'no project');
   if (matches.length !== 1) return false; // Do not guess between duplicate names.
   const project = matches[0];
+  const token = getToken();
   setSelectedProjectId(String(project._id), 'startup default activity');
-  setSelectedTaskId('', 'startup default requires employee task choice');
+  setSelectedTaskId('', 'startup default activity');
   selectedClientId = '';
   projectSelect.value = selectedProjectId;
   updateClientName(); // Auto-selects only a sole active client linked to No Project.
   saveWorkSelection();
+  const requestId = taskRequestId + 1;
   await loadTasks(selectedProjectId);
-  if (timerMessage && !selectedClientId) timerMessage.textContent = 'No Project is selected. Choose one of its linked clients, or ask an administrator to configure its clients.';
+  // Do not overwrite a restored timer, a new session, or a choice made while
+  // the activity request was in flight. Resolve IDs from permitted choices.
+  if (currentTimeLog || !timerStateConfirmed || token !== getToken() || logoutPending
+    || selectedProjectId !== String(project._id) || selectedTaskId || taskRequestId !== requestId) return false;
+  const clients = [...clientSelect.options].filter(option => option.value
+    && option.textContent.trim().toLowerCase() === 'upsilon');
+  if (clients.length !== 1) {
+    selectedClientId = '';
+    clientSelect.value = '';
+    if (activityCatalog?.project === selectedProjectId && activityCatalog.mappingEnabled) renderAvailableTasks([]);
+    saveWorkSelection();
+    timerMessage.textContent = 'Choose a client and task. Ask an administrator to link one active Upsilon client to No Project to enable the startup defaults.';
+    return true;
+  }
+  selectedClientId = clients[0].value;
+  updateClientName();
+  if (activityCatalog?.project === selectedProjectId) {
+    renderAvailableTasks(activityCatalog.tasks.filter(task => !activityCatalog.mappingEnabled
+      || task.clientIds.includes(selectedClientId)));
+  }
+  const breaks = [...taskSelect.options].filter(option => option.value
+    && option.dataset.taskType === 'break' && option.dataset.taskName?.trim().toLowerCase() === 'break');
+  if (!activitySelectionError && !taskSelect.disabled && breaks.length === 1) {
+    setSelectedTaskId(breaks[0].value, 'startup Break default');
+    taskSelect.value = selectedTaskId;
+    timerMessage.textContent = 'No Project / Upsilon / Break is selected. Press Start to begin your timer.';
+  } else {
+    timerMessage.textContent = 'No Project / Upsilon is selected. Choose a task, or ask an administrator to make one active Break task available.';
+  }
+  saveWorkSelection();
   return true;
 }
 
@@ -1083,6 +1114,7 @@ function renderAvailableTasks(tasks) {
           );
           option.dataset.idleLogout = String(task.idleLogout === true);
           option.dataset.taskType = task.taskType || "work";
+          option.dataset.taskName = task.taskName;
           return option;
         })
       );

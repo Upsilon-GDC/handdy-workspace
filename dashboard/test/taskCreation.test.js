@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { clientsForTaskProject, selectedCreationClient, creationTeamsForProject, automaticCreationTeamIds } from '../src/utils/taskCreation.js';
+import { clientsForTaskProject, selectedCreationClient, creationTeamsForProject, automaticCreationTeamIds, commonTaskProject } from '../src/utils/taskCreation.js';
 test('a project with one client selects it automatically without another user choice', () => {
   const data = { projects: [{ _id: 'p', clientIds: ['c'] }], clients: [{ _id: 'c' }, { _id: 'other' }] };
   const clients = clientsForTaskProject(data, 'p');
@@ -25,4 +25,10 @@ test('team buttons narrow to the project without changing existing assignments',
   const teams = [{ _id: 'a' }, { _id: 'b' }];
   assert.deepEqual(creationTeamsForProject(teams, { teams: ['a'] }), [{ _id: 'a' }]);
   assert.deepEqual(creationTeamsForProject(teams, { teams: [] }), teams);
+});
+
+test('multiple-project automatic assignment uses common teams and keeps unrelated teams separate', () => {
+  assert.deepEqual(commonTaskProject([{ teams: ['wcpa', 'renau'] }, { teams: ['wcpa'] }]).teams, ['wcpa']);
+  assert.deepEqual(commonTaskProject([{ teams: ['wcpa'] }, { teams: ['renau'] }]).teams, []);
+  assert.equal(commonTaskProject([]), null);
 });

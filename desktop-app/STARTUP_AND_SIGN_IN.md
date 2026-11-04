@@ -7,8 +7,8 @@ Implemented 2 November 2026. This changes desktop startup; website login is unch
 1. Install the updated Windows desktop application and open it once. Packaged CRM registers its installed executable to open when that Windows user signs in. Development Electron runs do not register themselves.
 2. On the first successful sign-in, enter email/password. Existing remembered-session behavior saves a revocable credential; this feature never stores a password.
 3. On subsequent launches, a valid existing session opens the timer screen. If an access session needs renewal, CRM automatically uses the remembered credential through the existing quick-login API.
-4. If the server confirms there is no active timer, CRM selects the unique active, accessible **No Project** record. Its sole active linked client is selected automatically. For example, if Upsilon is the project's only linked active client, the screen displays No Project / Upsilon.
-5. The task remains unselected and no timer is started. The employee chooses a task and presses Start. Existing stopped-timer screen-lock policy still applies.
+4. If the server confirms there is no active timer, CRM selects the unique active, accessible **No Project** record, its unique available **Upsilon** client, and the unique available **Break** task whose actual type is `break`. Names are matched exactly, ignoring case and surrounding spaces. Mapped projects require Break to be linked to that project/client and permitted for the employee.
+5. No timer starts automatically. The employee presses Start (or changes the activity first). Existing stopped-timer screen-lock policy still applies until Start. Existing connectivity, crash and shutdown recovery behavior remains in place.
 
 An existing running or paused timer is restored with its actual project, client and task. Startup defaults do not interrupt it. Background refresh/reconnection does not repeatedly reset the employee's selection.
 
@@ -31,7 +31,7 @@ The application must remain running and connected: existing server heartbeat/dis
 
 The startup default is resolved from the authenticated active project catalog by the exact normalized name `No Project`. Only a unique match is selected; missing/duplicate records are not created, merged, renamed or guessed. The database is not modified by startup.
 
-For No Project, client choices come from its actual `clients`/legacy `client` references intersected with the active client catalog. Inactive/missing references do not become choices. If several clients are linked, the employee chooses one; if none are available, configure them through the website's Project clients control. Upsilon is not hardcoded as a client ID or inferred from its display name.
+For No Project, client choices come from its actual `clients`/legacy `client` references intersected with the active client catalog, or the project's authenticated activity options. Inactive/missing references do not become choices. Upsilon is selected by its unique normalized name among those permitted choices; IDs are never hardcoded. Missing or duplicate Upsilon clients leave the client/task unselected with a configuration message. Missing, duplicate or work-typed Break tasks leave the task unselected. Configure records and activity links through the website; startup does not create database records.
 
 The desktop now loads project-specific activity choices. Projects with explicit client references show their active linked clients. Enabled mapped projects show only active tasks linked to the selected project/client pair and permitted for the employee; client changes clear the task choice. An administrator enables this policy per project after completing links and updating installed desktops. Legacy projects retain task selection compatibility until enabled. See [activity-link implementation and rollout](../CRM_ACTIVITY_LINKS_IMPLEMENTATION.md).
 

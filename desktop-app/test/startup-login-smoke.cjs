@@ -17,7 +17,7 @@ const mockApi = async req => {
   if (url.pathname.endsWith('/activity-options')) {
     const project = url.pathname.includes('/none/') ? 'none' : 'audit';
     const client = project === 'none' ? { _id: 'internal', clientName: 'UPSiLON', status: 'Active' } : { _id: 'external', clientName: 'WCPA', status: 'Active' };
-    body = project === 'none' ? { clients: [client], tasks: [{ _id: 'task', taskName: 'Review', taskType: 'work', project }], mappingEnabled: false }
+    body = project === 'none' ? { clients: [client], tasks: [{ _id: 'break', taskName: 'Break', taskType: 'break', project }], mappingEnabled: false }
       : { clients: [client, { _id: 'second', clientName: 'Second client', status: 'Active' }], tasks: [
         { _id: 'task', taskName: 'Review', taskType: 'work', project, clientIds: ['external'] },
         { _id: 'other-task', taskName: 'Review', taskType: 'work', project, clientIds: ['second'] },
@@ -70,7 +70,7 @@ app.whenReady().then(async () => {
     await openLogin();
     await until(`location.pathname.endsWith('dashboard.html') && document.querySelector('#projectSelect')?.value === 'none' && document.querySelector('#clientSelect')?.value === 'internal'`);
     assert.equal(quickLogins, 1); assert.equal(starts, 0);
-    assert.equal(await evaluate(`document.querySelector('#taskSelect').value`), '');
+    await until(`document.querySelector('#taskSelect').value === 'break'`);
     assert.equal(await evaluate(`localStorage.getItem('rememberedSessionToken')`), 'rotated');
     assert.equal(await evaluate(`!!document.querySelector('#clientSelect option[value="external"]')`), false);
     await evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
