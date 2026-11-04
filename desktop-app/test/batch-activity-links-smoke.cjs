@@ -8,7 +8,7 @@ const user = { _id: 'admin', role: 'admin', fullName: 'Admin' };
 const data = { projects: ['Review', 'Preparation'].map((name, i) => ({ _id: `p${i}`, projectName: name, projectCode: `P${i}`, teams: ['tax'], activityLinksVersion: 0, clients: [] })),
   clients: [{ _id: 'c1', clientName: 'WCPA' }, { _id: 'c2', clientName: 'Renau CPA' }],
   tasks: [{ _id: 't1', taskName: 'Tax Review', taskCode: 'T1', teams: ['tax'] }, { _id: 't2', taskName: 'Tax Preparation', taskCode: 'T2', teams: ['tax'] }, { _id: 'foreign', taskName: 'Other team task', taskCode: 'T3', teams: ['other'] }], mappings: [] };
-let writes = [];
+let writes = [], history = [];
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (!url.pathname.startsWith('/api/')) {
@@ -19,11 +19,18 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/auth/me') body = { user };
   if (url.pathname === '/api/permissions/me') body = { permissions: [] };
   if (url.pathname === '/api/projects/activity-links') body = data;
+  if (url.pathname === '/api/projects/activity-links/history') body = { history: history.filter(row => row.mode === url.searchParams.get('mode')), totalPages: 1 };
   if (url.pathname === '/api/projects/activity-links/batch') {
     let raw = ''; for await (const chunk of req) raw += chunk;
     const input = JSON.parse(raw); writes.push(input);
     input.projects.forEach(row => { const project = data.projects.find(project => project._id === row.project); assert.equal(project.activityLinksVersion, row.version); project.activityLinksVersion++; });
-    body = { success: true, message: 'Saved 8 selected combinations.' };
+    const entry = { _id: `history-${writes.length}`, mode: input.mode || 'tasks', action: input.action, actorName: 'Admin', createdAt: new Date().toISOString(),
+      projects: input.projects.map(row => ({ id: row.project, name: data.projects.find(project => project._id === row.project).projectName })),
+      clients: input.clientIds.map(id => ({ id, name: data.clients.find(client => client._id === id).clientName })),
+      tasks: input.taskIds.map(id => ({ id, name: data.tasks.find(task => task._id === id).taskName })),
+      combinationCount: input.projects.length * input.clientIds.length * (input.mode === 'clients' ? 1 : input.taskIds.length) };
+    history.unshift(entry);
+    body = { success: true, message: 'Saved selected combinations.', history: entry };
   }
   res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(body));
 });
@@ -70,11 +77,15 @@ app.whenReady().then(async () => {
     assert.equal(await evaluate(`document.querySelector('.activity-batch-review').textContent.includes('Tax Preparation')`), true, 'hidden selection survives search');
     const output = path.resolve(__dirname, '../../backend/.local-repairs/batch-activity-links-review.png'); fs.mkdirSync(path.dirname(output), { recursive: true });
     await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`); fs.writeFileSync(output, (await win.webContents.capturePage()).toPNG());
-    await click('Confirm links'); await until(`!!document.querySelector('.activity-links-success')`);
+    await click('Confirm links'); await until(`!!document.querySelector('.activity-links-success') && !document.querySelector('.activity-links-fields').disabled`);
     assert.equal(writes.length, 1); assert.deepEqual(writes[0].taskIds, ['t1', 't2']); assert.equal(writes[0].projects.length, 2); assert.equal(writes[0].clientIds.length, 2);
+    assert.equal(await evaluate(`document.querySelectorAll('.activity-batch-list input:checked').length`), 0);
+    assert.equal(await evaluate(`[...document.querySelectorAll('.activity-picker-search input')].every(input => input.value === '')`), true);
+    await until(`document.querySelectorAll('[aria-label="Link history"] tbody tr').length === 1`);
+    for (const group of ['projects', 'clients']) await evaluate(`document.querySelector('[aria-label="Select ${group}"]').closest('section').querySelector('button').click()`);
     await fill('[aria-label="Search tasks"]', '');
     await evaluate(`document.querySelector('[aria-label="Select tasks"]').closest('section').querySelector('button').click()`);
-    await click('Review unlink'); await click('Confirm unlink'); await until(`!!document.querySelector('.activity-links-success')`);
+    await click('Review unlink'); await click('Confirm unlink'); await until(`!!document.querySelector('.activity-links-success') && !document.querySelector('.activity-links-fields').disabled`);
     assert.equal(writes.length, 2); assert.equal(writes[1].action, 'unlink'); assert.ok(writes[1].projects.every(row => row.version === 1));
     await win.loadURL(`${base}/admin/project-client-links`);
     await until(`!!document.querySelector('[aria-label="Select projects"] input')`);
@@ -85,11 +96,13 @@ app.whenReady().then(async () => {
     const clientOnlyPreview = path.resolve(__dirname, '../../backend/.local-repairs/client-project-only-links.png');
     await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
     fs.writeFileSync(clientOnlyPreview, (await win.webContents.capturePage()).toPNG());
-    await click('Confirm links'); await until(`!!document.querySelector('.activity-links-success')`);
+    await click('Confirm links'); await until(`!!document.querySelector('.activity-links-success') && !document.querySelector('.activity-links-fields').disabled`);
     assert.equal(writes[2].mode, 'clients'); assert.deepEqual(writes[2].taskIds, []);
+    assert.equal(await evaluate(`document.querySelectorAll('.activity-batch-list input:checked').length`), 0);
+    for (const group of ['projects', 'clients']) await evaluate(`document.querySelector('[aria-label="Select ${group}"]').closest('section').querySelector('button').click()`);
     await click('Review unlink');
     assert.equal(await evaluate(`document.querySelector('.activity-batch-review').textContent.includes('task mappings on those projects will also be disabled')`), true);
-    await click('Confirm unlink'); await until(`!!document.querySelector('.activity-links-success')`);
+    await click('Confirm unlink'); await until(`!!document.querySelector('.activity-links-success') && !document.querySelector('.activity-links-fields').disabled`);
     assert.equal(writes[3].mode, 'clients'); assert.equal(writes[3].action, 'unlink');
     await win.loadURL(`${base}/admin/project-client-links`);
     await until(`!!document.querySelector('.crm-nav a[href="/admin/project-client-links"].active')`);
@@ -102,20 +115,24 @@ app.whenReady().then(async () => {
     const dedicatedPreview = path.resolve(__dirname, '../../backend/.local-repairs/project-client-links-tab.png');
     await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
     fs.writeFileSync(dedicatedPreview, (await win.webContents.capturePage()).toPNG());
-    await click('Review links'); await click('Confirm links'); await until(`!!document.querySelector('.activity-links-success')`);
+    await click('Review links'); await click('Confirm links'); await until(`!!document.querySelector('.activity-links-success') && !document.querySelector('.activity-links-fields').disabled`);
     assert.equal(writes[4].mode, 'clients'); assert.deepEqual(writes[4].taskIds, []);
     for (const [index, name] of ['Audit', 'Bookkeeping', 'FTC', 'No Project', 'Software'].entries()) data.projects.push({ _id: `extra-${index}`, projectName: name, projectCode: `PRJ-DEMO-${index}`, teams: ['tax'], activityLinksVersion: 0 });
     data.clients.push(...['KCPA', 'Unit 1', 'Upsilon'].map((clientName, index) => ({ _id: `extra-client-${index}`, clientName })));
     await win.loadURL(`${base}/admin/project-client-links`);
     await until(`document.querySelectorAll('[aria-label="Select projects"] input').length === 7`);
+    await until(`document.querySelectorAll('[aria-label="Link history"] tbody tr').length === 3`);
     await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
     fs.writeFileSync(path.resolve(__dirname, '../../backend/.local-repairs/linking-empty-ui.png'), (await win.webContents.capturePage()).toPNG());
+    await evaluate(`document.querySelector('[aria-label="Link history"]').scrollIntoView({block:'end'})`);
+    await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
+    fs.writeFileSync(path.resolve(__dirname, '../../backend/.local-repairs/link-history-ui.png'), (await win.webContents.capturePage()).toPNG());
     win.setSize(520, 900); await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
     assert.equal(await evaluate(`(() => { const editor=document.querySelector('.activity-links-page'); return editor.scrollWidth <= editor.clientWidth + 1; })()`), true);
     await evaluate(`document.querySelector('.activity-batch-footer').scrollIntoView({block:'end'})`);
     await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
     fs.writeFileSync(path.resolve(__dirname, '../../backend/.local-repairs/linking-mobile-ui.png'), (await win.webContents.capturePage()).toPNG());
-    console.log('PASS: bulk mode on Task Links; multiple projects, clients and tasks; team-incompatible tasks blocked; searched selections preserved; review before save; link/unlink versions; mobile layout. Local fixtures only.');
+    console.log('PASS: bulk linking; team boundaries; review and versions; selections/searches reset after save; history persists after reload; mobile layout. Local fixtures only.');
   } catch (error) { console.error(error); process.exitCode = 1; }
   finally { win?.destroy(); server.close(); app.exit(process.exitCode || 0); }
 });

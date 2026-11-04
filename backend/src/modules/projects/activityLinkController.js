@@ -3,6 +3,8 @@ const Project = require('../../models/Project');
 const Client = require('../../models/Client');
 const Task = require('../../models/Task');
 const ActivityMapping = require('../../models/ActivityMapping');
+const ActivityLinkChange = require('../../models/ActivityLinkChange');
+const { getPagination } = require('../../utils/requestUtils');
 const { ownTeamIds, teamTaskMatch } = require('../../services/teamScope');
 const { isAdminRole } = require('../../utils/roles');
 const sendErrorResponse = require('../../utils/sendErrorResponse');
@@ -130,6 +132,7 @@ function validateBatchLinkRequest(body = {}) {
 
 async function saveBatchActivityLinks(req, res) {
   let session;
+  let history;
   try {
     const input = validateBatchLinkRequest(req.body);
     const [scope, projectsScope] = await Promise.all([taskScope(req.user), projectScope(req.user)]);
@@ -174,9 +177,16 @@ async function saveBatchActivityLinks(req, res) {
       } else {
         await ActivityMapping.updateMany({ project: { $in: input.projects.map(row => row.project) }, client: { $in: input.clients }, task: { $in: input.tasks }, isActive: true }, { $set: { isActive: false, updatedBy: req.user._id } }, { session });
       }
+      [history] = await ActivityLinkChange.create([{ action: input.action, mode: input.mode, actor: req.user._id,
+        actorName: req.user.fullName || req.user.employeeId || 'User',
+        projects: projects.map(project => ({ id: project._id, name: project.projectName })),
+        clients: clients.map(client => ({ id: client._id, name: client.clientName })),
+        tasks: tasks.map(task => ({ id: task._id, name: task.taskName })),
+        combinationCount: input.projects.length * input.clients.length * (input.mode === 'clients' ? 1 : input.tasks.length),
+      }], { session });
     });
     const combinationCount = input.projects.length * input.clients.length * (input.mode === 'clients' ? 1 : input.tasks.length);
-    return res.json({ success: true, combinationCount, message: `Saved ${combinationCount} selected combinations.`, versions: input.projects.map(row => ({ project: row.project, version: row.version + 1 })) });
+    return res.json({ success: true, combinationCount, history, message: `Saved ${combinationCount} selected combinations.`, versions: input.projects.map(row => ({ project: row.project, version: row.version + 1 })) });
   } catch (error) {
     if (error.statusCode) return res.status(error.statusCode).json({ success: false, message: error.message });
     if (error.code === 11000) return res.status(409).json({ success: false, message: 'Links changed while saving. Reload before retrying.' });
@@ -184,4 +194,25 @@ async function saveBatchActivityLinks(req, res) {
   } finally { if (session) await session.endSession(); }
 }
 
-module.exports = { getActivityLinks, saveActivityLinks, validateLinkRequest, validateTaskLinks, saveBatchActivityLinks, validateBatchLinkRequest };
+async function getActivityLinkHistory(req, res) {
+  try {
+    if (!['tasks', 'clients'].includes(req.query.mode)) throw fail('Choose a link history type.');
+    const { page, limit, skip } = getPagination(req.query);
+    const filter = { mode: req.query.mode, ...(!elevated(req.user) ? { actor: req.user._id } : {}) };
+    const [history, totalRecords] = await Promise.all([
+      ActivityLinkChange.find(filter).sort({ createdAt: -1, _id: -1 }).skip(skip).limit(limit).lean(),
+      ActivityLinkChange.countDocuments(filter),
+    ]);
+    return res.json({ success: true, history, page, totalRecords, totalPages: Math.max(1, Math.ceil(totalRecords / limit)) });
+  } catch (error) {
+    if (error.statusCode) return res.status(error.statusCode).json({ success: false, message: error.message });
+    return sendErrorResponse(res, error, 'Unable to load linking history.');
+  }
+}
+
+async function ensureActivityLinkHistoryIndexes() {
+  await ActivityLinkChange.createCollection();
+  await ActivityLinkChange.createIndexes();
+}
+
+module.exports = { getActivityLinks, saveActivityLinks, validateLinkRequest, validateTaskLinks, saveBatchActivityLinks, validateBatchLinkRequest, getActivityLinkHistory, ensureActivityLinkHistoryIndexes };

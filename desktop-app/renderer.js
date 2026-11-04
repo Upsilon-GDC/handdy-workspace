@@ -133,7 +133,6 @@ let todayTimesheetReportDate = null;
 let timerStateConfirmed = false;
 let serverReachable = true;
 let timerLockActive = false;
-let timerStartInFlight = false;
 const IDLE_CHECK_INTERVAL_MS = 5000;
 const DATA_REFRESH_INTERVAL_MS = 30 * 1000;
 const API_REQUEST_TIMEOUT_MS = 10 * 1000;
@@ -362,9 +361,8 @@ function getTimerLockState() {
   if (isLoginPage || !getToken() || logoutPending || appClosePending) return "inactive";
   if (!timerStateConfirmed || !serverReachable) return "inactive";
   if (pendingIdleStop) return "locked";
-  // Lift the lock as soon as Start is sent rather than when the server
-  // answers (a few seconds); a failed start locks the screen again.
-  if (timerStartInFlight) return "running";
+  // A pending Start request is not a running timer. Keep the screen locked
+  // until the backend confirms the start; refused starts must never unlock it.
   return currentTimeLog?.status === "running" || isIntentionalBreak(currentTimeLog) ? "running" : "locked";
 }
 
@@ -2285,21 +2283,18 @@ async function startTimer() {
   }
 
   const previousStatus = timerStatus.textContent;
-  const pendingStart = Date.now();
   const isStartingBreak = taskSelect.selectedOptions[0]?.dataset.taskType === "break";
-  let pendingInterval = null;
   try {
     startTimerButton.disabled = true;
     timerStatus.textContent = "Starting...";
     timerMessage.textContent = "Starting timer...";
     if (!isStartingBreak) {
+      // Request/validation time is not recorded work. Wait for the server's
+      // startedAt instead of displaying a speculative clock that jumps back
+      // when a slow start request completes.
       timerDuration.textContent = "00:00:00";
-      pendingInterval = setInterval(() => {
-        timerDuration.textContent = formatDuration(Math.floor((Date.now() - pendingStart) / 1000));
-      }, 250);
     }
 
-    timerStartInFlight = true;
     syncTimerLock();
     const response = await fetch(
       `${API_BASE_URL}/time-logs/start`,
@@ -2385,8 +2380,6 @@ async function startTimer() {
     startTimerButton.disabled = false;
   } finally {
     // runTimerAction re-reports the lock from the confirmed state.
-    timerStartInFlight = false;
-    if (pendingInterval !== null) clearInterval(pendingInterval);
     if (!currentTimeLog) {
       timerStatus.textContent = previousStatus;
       timerDuration.textContent = "00:00:00";

@@ -89,7 +89,9 @@ app.whenReady().then(async () => {
     await win.loadURL(`${base}/admin/timesheets/detailed`);
     await until(`!!document.querySelector('.crm-nav a[href="/admin/time-entry-edits"]')`);
     await evaluate(`document.querySelectorAll('.crm-nav details').forEach(group=>group.open=false)`);
-    assert.equal(await evaluate(`document.querySelector('.crm-nav a[href="/admin/time-entry-edits"]').closest('details')===null`), true, 'Edit Entries stays directly accessible when other sidebar groups are collapsed');
+    assert.equal(await evaluate(`document.querySelector('.crm-nav a[href="/admin/time-entry-edits"]').closest('details').getAttribute('aria-label')`), 'Entry management');
+    await evaluate(`document.querySelector('.crm-nav details[aria-label="Entry management"] summary').click()`);
+    assert.equal(await evaluate(`document.querySelector('.crm-nav details[aria-label="Entry management"]').open`), true, 'Entry management expands through its heading');
     fs.writeFileSync(path.join(output, 'edit-entries-sidebar.png'), (await win.webContents.capturePage()).toPNG());
     await evaluate(`document.querySelector('.crm-nav a[href="/admin/time-entry-edits"]').click()`);
     await until(`location.pathname==='/admin/time-entry-edits' && document.querySelector('.admin-report-filter h2')?.textContent==='Edit Entries'`);

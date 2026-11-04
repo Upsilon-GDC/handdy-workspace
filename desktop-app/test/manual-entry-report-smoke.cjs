@@ -93,7 +93,7 @@ app.whenReady().then(async () => {
     await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
     fs.mkdirSync(outputRoot, { recursive: true });
     const base = `http://127.0.0.1:${server.address().port}`;
-    win = new BrowserWindow({ show: false, width: 1440, height: 1100, webPreferences: { partition: `manual-test-${Date.now()}`, backgroundThrottling: false, offscreen: true } });
+    win = new BrowserWindow({ show: false, width: 1440, height: 1100, webPreferences: { partition: `manual-test-${Date.now()}`, backgroundThrottling: false } });
     const runtimeErrors = [];
     win.webContents.on("console-message", (event) => { if (event.level === "error") runtimeErrors.push(event.message); });
     await win.loadURL(`${base}/login`);
@@ -174,7 +174,7 @@ app.whenReady().then(async () => {
     await until("document.body.textContent.includes('Add my entry')");
     await evaluate("document.querySelector('.crm-nav a[href=\"/admin/time-entry-add\"]').click()");
     await until("location.pathname === '/admin/time-entry-add' && !!document.querySelector('[data-team-id=team]')");
-    assert.equal(await evaluate("document.querySelector('.crm-nav a[href=\"/admin/time-entry-add\"]').closest('details')"), null, 'Add Entry is directly accessible in Entry management');
+    assert.equal(await evaluate("document.querySelector('.crm-nav a[href=\"/admin/time-entry-add\"]').closest('details').open"), true, 'Entry management expands for the current Add Entry page');
     assert.equal(await evaluate("document.querySelectorAll('.entry-member-card').length"), 0, 'Add Entry starts with team selection');
     await evaluate("document.querySelector('[data-team-id=team]').click()");
     await until("document.querySelectorAll('.entry-member-card').length===6");

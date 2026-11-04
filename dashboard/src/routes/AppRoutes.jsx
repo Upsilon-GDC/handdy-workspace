@@ -47,6 +47,7 @@ import AdminSettings
   from "../pages/admin/AdminSettings";
 import AdminPermissions
   from "../pages/admin/AdminPermissions";
+import WorkingHoursSettings from '../pages/admin/WorkingHoursSettings';
 
 // ==========================================
 // TEAM LEAD IMPORTS
@@ -597,6 +598,7 @@ function AppRoutes() {
           </AdminOnly>
         }
       />
+      <Route path="/admin/working-hours" element={<AdminOnly><WorkingHoursSettings /></AdminOnly>} />
 
       <Route
         path="/admin/permissions"

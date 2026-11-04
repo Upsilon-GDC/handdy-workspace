@@ -13,6 +13,7 @@ const apiModules = [
   ["/api/clients", require("./clients/clientRoutes")],
   ["/api/billing", require("./billing/billingRoutes")],
   ["/api/settings", require("./settings/settingsRoutes")],
+  ["/api/working-hours", require("./settings/workingHoursRoutes")],
   ["/api/permissions", require("./permissions/permissionRoutes")],
   ["/api/metrics", require("../monitoring/metricsRoutes")],
 ];

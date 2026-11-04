@@ -11,8 +11,9 @@ const Team = require('../src/models/Team');
 const Employee = require('../src/models/Employee');
 const ActivityMapping = require('../src/models/ActivityMapping');
 const TaskTimeLog = require('../src/models/TaskTimeLog');
+const ActivityLinkChange = require('../src/models/ActivityLinkChange');
 const { ensureActivityMappingIndexes } = require('../src/services/activityMappings');
-const { saveActivityLinks, saveBatchActivityLinks } = require('../src/modules/projects/activityLinkController');
+const { saveActivityLinks, saveBatchActivityLinks, getActivityLinkHistory, ensureActivityLinkHistoryIndexes } = require('../src/modules/projects/activityLinkController');
 const { createLinkedTasks } = require('../src/modules/tasks/linkedTaskController');
 const { getManualEntryOptions } = require('../src/modules/timers/manualTimeEntryController');
 const { validateActivitySelection, activityOptionsForEmployee } = require('../src/services/activitySelection');
@@ -53,6 +54,7 @@ before(async context => {
     await model.createIndexes();
   }
   await ensureActivityMappingIndexes();
+  await ensureActivityLinkHistoryIndexes();
   const hello = await mongoose.connection.db.admin().command({ hello: 1 });
   assert.ok(hello.setName, 'Transactions require an actual replica set');
   console.log(`Isolated MongoDB 7.0.24 / ${hello.setName}; no application URI loaded.`);
@@ -98,6 +100,8 @@ test('batch linking saves all project/client/task combinations and reuses tasks 
   const f = await batchFixture(); const before = await Task.findById(f.secondTask._id).lean();
   const result = await invoke(saveBatchActivityLinks, f.body); assert.equal(result.code, 200, JSON.stringify(result.body));
   assert.equal(result.body.combinationCount, 8);
+  assert.equal(result.body.history.action, 'link');
+  assert.equal(await ActivityLinkChange.countDocuments({ 'projects.id': f.project._id, mode: 'tasks' }), 1);
   assert.equal(await ActivityMapping.countDocuments({ project: { $in: [f.project._id, f.secondProject._id] }, isActive: true }), 8);
   for (const reference of [f.project, f.secondProject]) {
     const project = await Project.findById(reference._id).lean();
@@ -200,6 +204,31 @@ test('delegated client removal cannot disable mappings for another team', async 
   assert.equal(result.code, 403);
   assert.equal((await Project.findById(f.project._id)).activityLinksVersion, 0);
   assert.equal(await ActivityMapping.countDocuments({ task: otherTask._id, isActive: true }), 1);
+});
+
+test('history records client-only operations and restricts delegated users to their own actions', async () => {
+  const f = await batchFixture();
+  assert.equal((await invoke(saveBatchActivityLinks, { ...f.body, mode: 'clients', taskIds: [] })).code, 200);
+  const ownUser = { _id: new mongoose.Types.ObjectId(), role: 'employee' };
+  await ActivityLinkChange.create({ action: 'unlink', mode: 'clients', actor: ownUser._id, actorName: 'Own action',
+    projects: [{ id: f.project._id, name: f.project.projectName }], clients: [{ id: f.client._id, name: f.client.clientName }], combinationCount: 1 });
+  const own = await invoke(getActivityLinkHistory, {}, ownUser, { mode: 'clients' });
+  assert.equal(own.code, 200); assert.equal(own.body.totalRecords, 1); assert.equal(own.body.history[0].actorName, 'Own action');
+  const all = await invoke(getActivityLinkHistory, {}, user, { mode: 'clients', limit: '100' });
+  assert.ok(all.body.history.some(row => row.projects.some(project => String(project.id) === String(f.project._id)) && String(row.actor) === String(user._id)));
+  assert.ok(all.body.history.every(row => row.mode === 'clients'));
+});
+
+test('history insert failure rolls back the links and every project update', async t => {
+  const f = await batchFixture();
+  t.mock.method(ActivityLinkChange, 'create', async () => { throw new Error('Synthetic history failure'); });
+  assert.equal((await invoke(saveBatchActivityLinks, f.body)).code, 500);
+  assert.equal(await ActivityMapping.countDocuments({ task: f.task._id }), 0);
+  for (const reference of [f.project, f.secondProject]) {
+    const project = await Project.findById(reference._id);
+    assert.equal(project.activityLinksVersion, 0); assert.equal(project.linkedTasks.length, 0);
+  }
+  assert.equal(await ActivityLinkChange.countDocuments({ 'projects.id': f.project._id }), 0);
 });
 
 test('mapping index initialization is repeatable and MongoDB rejects duplicate tuples', async () => {

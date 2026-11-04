@@ -17,7 +17,7 @@ const Project = require("../../models/Project");
 const Client = require("../../models/Client");
 const Team = require("../../models/Team");
 const Employee = require("../../models/Employee");
-const { getActivityLinks, saveActivityLinks, saveBatchActivityLinks } = require('./activityLinkController');
+const { getActivityLinks, saveActivityLinks, saveBatchActivityLinks, getActivityLinkHistory } = require('./activityLinkController');
 const { activityOptionsForEmployee } = require('../../services/activitySelection');
 const sendErrorResponse = require('../../utils/sendErrorResponse');
 const Task = require('../../models/Task');
@@ -44,6 +44,7 @@ router.get('/:id/activity-options', protect, async (req, res) => {
 // Dedicated linking permission. Non-HR delegated
 // users remain limited to their own task teams inside the controller.
 router.get('/activity-links', protect, requirePermission('manage_activity_links'), getActivityLinks);
+router.get('/activity-links/history', protect, requirePermission('manage_activity_links'), getActivityLinkHistory);
 router.post('/activity-links', protect, requirePermission('manage_activity_links'), saveActivityLinks);
 router.post('/activity-links/batch', protect, requirePermission('manage_activity_links'), saveBatchActivityLinks);
 

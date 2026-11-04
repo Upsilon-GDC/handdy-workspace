@@ -131,6 +131,8 @@ test('startup does not guess a missing client or between duplicate No Project re
 });
 
 function harness({ role = "employee" } = {}) {
+  const intervals = new Map();
+  let intervalId = 0;
   const nodes = new Map([["projectSelect", new FakeSelect()], ["clientSelect", new FakeSelect()], ["taskSelect", new FakeSelect()]]);
   const values = new Map([["token", "test-only"]]);
   const localStorage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: (key) => values.delete(key) };
@@ -164,7 +166,8 @@ function harness({ role = "employee" } = {}) {
   const context = vm.createContext({
     console: { ...console, log() {}, trace() {}, debug() {}, warn() {} },
     AbortSignal, Date, Intl, JSON, localStorage, sessionStorage: localStorage,
-    setInterval: () => 1, clearInterval() {}, setTimeout, Option: FakeOption,
+    setInterval: (callback, delay) => { intervals.set(++intervalId, { callback, delay }); return intervalId; },
+    clearInterval: id => intervals.delete(id), setTimeout, Option: FakeOption,
     document: {
       body: { dataset: { page: "dashboard" } },
       getElementById(id) {
@@ -236,8 +239,29 @@ function harness({ role = "employee" } = {}) {
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../renderer.js"), "utf8"), context);
   localStorage.setItem("user", JSON.stringify({ _id: "test-user", role }));
-  return { state, context, project: nodes.get("projectSelect"), client: nodes.get("clientSelect"), task: nodes.get("taskSelect"), run: (source) => vm.runInContext(source, context) };
+  return { state, context, intervals, project: nodes.get("projectSelect"), client: nodes.get("clientSelect"), task: nodes.get("taskSelect"), run: (source) => vm.runInContext(source, context) };
 }
+
+test("Training waits for a confirmed start before counting, with no speculative clock to reset", async () => {
+  const h = harness();
+  h.state.tasks.p1[0].taskName = "Training";
+  await h.context.loadClients(); await h.context.loadProjects();
+  await h.project.choose("p1"); await h.client.choose("client-a"); await h.task.choose("t1");
+  let release;
+  h.state.pendingStart = new Promise(resolve => { release = resolve; });
+  const starting = h.context.startTimer();
+  assert.equal(h.run("timerStatus.textContent"), "Starting...");
+  assert.equal(h.run("timerDuration.textContent"), "00:00:00");
+  assert.equal(h.intervals.size, 0, "network wait must not start an unrecorded clock");
+  release(); await starting;
+  assert.equal(h.state.startRequests.length, 1);
+  assert.equal(h.run("timerStatus.textContent"), "Working");
+  assert.equal(h.intervals.size, 1);
+  assert.equal([...h.intervals.values()][0].delay, 1000);
+  const start = h.run("new Date(currentTimeLog.startedAt).getTime()");
+  assert.equal(h.context.calculateCurrentWorkSeconds(h.run("currentTimeLog"), start + 2000), 2);
+  assert.equal(h.context.calculateCurrentWorkSeconds(h.run("currentTimeLog"), start + 3000), 3);
+});
 
 test("desktop client selector uses all active clients and starts promptly", async () => {
   const h = harness();
