@@ -1,3 +1,6 @@
+import { Plus } from "lucide-react";
+import TeamIdentity from "../../components/teams/TeamIdentity";
+import CollectionHeading from "../../components/layout/CollectionHeading";
 import ModalFrame from "../../components/layout/ModalFrame";
 import { useEffect, useMemo, useState } from "react";
 import DashboardLayout from "../../components/layout/DashboardLayout";
@@ -151,11 +154,15 @@ function AdminTeams() {
 
   return (
     <DashboardLayout title="Team">
-      <section className="admin-card team-management-card">
+      <section className="admin-card team-management-card collection-panel">
         {error && <p className="admin-error-box" role="alert">{error}</p>}
         {missingTeamPermissions.length > 0 && <PermissionNote permissions={missingTeamPermissions}>
           {canCreate || canEdit ? "Some team actions are hidden." : "View only."}
         </PermissionNote>}
+        <CollectionHeading kind="teams" title="Team directory" description="Organize your people and give every team a clear point of contact."
+          detail={loading ? 'Loading teams...' : `${teams.length} team${teams.length === 1 ? '' : 's'} loaded`}>
+          {canCreate && <button type="button" className="team-add-button" onClick={openAddTeam}><Plus size={16} aria-hidden="true" />Add New Team</button>}
+        </CollectionHeading>
         <div className="team-toolbar">
           <div className="team-search-box">
             <label htmlFor="team-search">
@@ -172,13 +179,7 @@ function AdminTeams() {
             />
           </div>
 
-          {canCreate && <button
-            type="button"
-            className="team-add-button"
-            onClick={openAddTeam}
-          >
-            Add New Team
-          </button>}
+
         </div>
 
         <div className="team-table-wrapper">
@@ -227,7 +228,7 @@ function AdminTeams() {
                 filteredTeams.map((team) => (
                   <tr key={team.id}>
                     <td>
-                      {team.teamName}
+                      <TeamIdentity name={team.teamName} showService small={false} />
                     </td>
 
                     <td>{team.teamLead}</td>

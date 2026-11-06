@@ -1,16 +1,18 @@
 .admin-team-overview { display: grid; gap: 22px; }
 .crm-content .admin-team-overview .overview-toolbar { display: block; padding: 20px; }
-.overview-eyebrow { margin: 0 0 7px; font-size: 10px; letter-spacing: 1.2px; font-weight: 750; color: var(--primary); }
+.overview-eyebrow { margin: 0 0 7px; font-size: 10px; letter-spacing: 1.2px; font-weight: 750; color: var(--eyebrow); }
 .admin-team-overview h2 { margin: 0 0 8px; font-size: 21px; }
 .overview-toolbar > div > p:not(.overview-eyebrow),.overview-section-heading p:not(.overview-eyebrow) { margin: 4px 0; font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
 .crm-content .admin-team-overview .overview-range-controls { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 12px; margin-top: 16px; padding: 0; border: 0; background: transparent; }
 .overview-range-controls label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; }
 .overview-range-controls input { max-width: 160px; height: 40px; }
 .overview-presets { display: flex; gap: 6px; flex-wrap: wrap; }
-.crm-content .overview-presets button,.crm-content .overview-refresh { background: var(--surface); color: var(--text-primary); border: 1px solid var(--border-light); }
+/* Secondary buttons: set the shared button variables so hover and focus still work. */
+.crm-content :is(.overview-presets button,.overview-refresh) { --btn-bg: var(--surface); --btn-fg: var(--text-primary); --btn-border: var(--border-strong); --btn-shadow: var(--shadow-xs); }
+.crm-content :is(.overview-presets button,.overview-refresh):not(:disabled):hover { --btn-bg: var(--primary-50); --btn-fg: var(--primary); --btn-border: var(--primary-200); }
 .overview-range-controls button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; border-radius: 8px; padding: 8px 13px; font-size: 12px; }
 .overview-period-note { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; padding-top: 16px; margin-top: 18px; border-top: 1px solid var(--border-light); font-size: 11px; color: var(--text-secondary); }
-.overview-error { padding: 12px 16px; border: 1px solid #efb5ac; border-radius: 8px; background: #fff1ed; color: #9a3020; font-size: 13px; }
+.overview-error { padding: 12px 16px; border: 1px solid var(--danger-border); border-radius: 8px; background: var(--danger-bg); color: var(--danger); font-size: 13px; }
 .overview-section-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 18px; margin-bottom: 18px; }
 .overview-search { display: flex; align-items: center; gap: 9px; padding: 0 12px; border: 1px solid var(--border-light); border-radius: 8px; background: var(--surface); color: var(--text-secondary); }
 .crm-content .overview-search input { width: 260px; min-width: 0; max-width: 100%; height: 42px; border: 0; padding: 0; background: transparent; }
@@ -25,12 +27,20 @@
 .overview-team-hours { display: grid; gap: 5px; }
 .overview-team-hours > strong { font-size: 28px; letter-spacing: -1px; }
 .overview-team-hours > span { font-size: 11px; color: var(--text-secondary); }
-.overview-hours-bar { height: 5px; border-radius: 6px; background: var(--surface-soft); overflow: hidden; }
-.overview-hours-bar span { display: block; height: 100%; border-radius: inherit; background: var(--primary); }
+/* Working-hours completion for the productivity date, inside each team card. */
+.overview-team-productivity { display: grid; gap: 6px; padding: 12px 14px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-muted); }
+.overview-team-productivity > div { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; color: var(--text-secondary); font-size: 11.5px; font-weight: 600; }
+.overview-team-productivity > div strong { color: var(--text-heading); font-size: 18px; font-weight: 750; letter-spacing: -.02em; }
+.overview-team-productivity small { color: var(--text-secondary); font-size: 11px; line-height: 1.45; }
+/* Team details: member activity, then the team's employee working hours. */
+.overview-member-section > .wh-details:not(:first-child) { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--border-light); }
+.overview-member-section .wh-details > .wh-section-header { margin-bottom: 14px; }
+.overview-member-section .wh-details h3 { margin: 0 0 4px; }
+.overview-member-section .wh-details header p { margin: 0; }
 .overview-live-counts { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; }
 .overview-live-counts > span { display: inline-flex; align-items: center; gap: 4px; padding: 4px 6px; border-radius: 5px; background: var(--surface-soft); }
-.overview-live-counts .working { color: #146147; background: #e7f5ee; }
-.overview-live-counts .break { color: #8a5e0a; background: #fff4db; }
+.overview-live-counts .working { color: var(--success); background: var(--success-bg); }
+.overview-live-counts .break { color: var(--warning); background: var(--warning-bg); }
 .overview-team-time { display: flex; gap: 16px; font-size: 11px; color: var(--text-secondary); }
 .overview-team-time strong { color: var(--text-primary); margin-left: 4px; }
 .overview-current-projects { display: flex; align-items: flex-start; gap: 6px; margin: 0; padding-top: 14px; border-top: 1px solid var(--border-light); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
@@ -45,12 +55,8 @@
 .overview-member-table td strong { display: block; font-size: 12px; }
 .overview-member-table td small { display: block; margin-top: 5px; color: var(--text-secondary); font-size: 11px; }
 .overview-status { display: inline-block; white-space: nowrap; font-size: 11px; padding: 5px 8px; border-radius: 20px; color: var(--text-secondary); background: var(--surface-soft); }
-.overview-status.working { color: #146147; background: #e7f5ee; }.overview-status.break { color: #8a5e0a; background: #fff4db; }.overview-status.idle { color: #9e3d36; background: #fceeea; }
+.overview-status.working { color: var(--success); background: var(--success-bg); }.overview-status.break { color: var(--warning); background: var(--warning-bg); }.overview-status.idle { color: var(--danger); background: var(--danger-bg); }
 .overview-empty { display: grid; place-items: center; gap: 10px; text-align: center; padding: 30px; color: var(--text-secondary); font-size: 13px; }
 .overview-empty h3,.overview-empty p { margin: 0; }
-.overview-bottom { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px; }
-.overview-bottom p { margin: 0; max-width: 720px; font-size: 11px; line-height: 1.6; color: var(--text-secondary); }
-.overview-bottom > div { display: flex; gap: 16px; flex-wrap: wrap; }
-.overview-bottom a { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--primary); }
 @media (max-width: 1120px) { .overview-team-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media (max-width: 650px) { .overview-team-grid { grid-template-columns: 1fr; } .overview-section-heading { align-items: stretch; } .overview-search,.crm-content .overview-search input { width: 100%; box-sizing: border-box; } .overview-range-controls input { max-width: 100%; width: 100%; } .overview-range-controls label { flex: 1; min-width: 130px; } }

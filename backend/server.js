@@ -18,6 +18,7 @@ const { ensureActivityMappingIndexes } = require('./src/services/activityMapping
 const { ensureTimeEntryEditIndexes } = require('./src/modules/timers/timeEntryEditController');
 const { ensureActivityLinkHistoryIndexes } = require('./src/modules/projects/activityLinkController');
 const { ensureWorkingHoursIndexes } = require('./src/modules/settings/workingHoursController');
+const { initializeClientAccess } = require('./src/services/clientAccess');
 const { startTimerSweep } = require("./src/jobs/timerSweep");
 const { PERMISSION_VERSION_HEADER, refreshPermissionOverrides } = require("./src/services/permissionService");
 const trafficMetrics = require("./src/monitoring/trafficMetrics");
@@ -224,6 +225,7 @@ const startServer = async () => {
     await ensureTimeEntryEditIndexes();
     await ensureActivityLinkHistoryIndexes();
     await ensureWorkingHoursIndexes();
+    await initializeClientAccess();
     await refreshPermissionOverrides();
     const timerSweep = await startTimerSweep();
 

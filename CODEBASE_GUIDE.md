@@ -62,13 +62,13 @@ All three live in one repository and are deployed as:
 │   ├── src/
 │   │   ├── main.jsx, App.jsx Entry point and top-level providers
 │   │   ├── routes/           AppRoutes.jsx (all URLs), ProtectedRoute.jsx (guards)
-│   │   ├── context/          AuthProvider (session), ThemeContext (palettes)
+│   │   ├── context/          AuthProvider (session)
 │   │   ├── api/              One module per API area, all on axiosInstance
 │   │   ├── pages/            Screens, grouped by role: admin/, teamLead/, employee/, shared/, auth/, profile/
 │   │   ├── components/       Reusable pieces: layout/, tasks/, reports/, employees/…
 │   │   ├── hooks/            useDataRefresh (polling)
 │   │   ├── utils/            Report building, exports, dates, validation
-│   │   └── styles/           Plain CSS per page + themes.css / workspace.css
+│   │   └── styles/           workspace.css (Shift Console theme) + plain CSS per page
 │   ├── scripts/              audit-routes.mjs (route checker), review-ui.cjs (screenshots)
 │   ├── test/                 node:test unit tests for utils, navigation, report loading (10 files)
 │   └── ui-review/            Screenshots written by UI smoke tests
@@ -521,16 +521,16 @@ billable totals.
 
 ### 6.7 Caching and incremental sync
 
-Polling is frequent (desktop every 5–30 s, dashboard every 30 s), so several
+Desktop background requests remain frequent; dashboard data polls every 5 minutes. Several
 layers keep load down:
 
 | Layer | File | What it does |
 |---|---|---|
 | Auth cache | `services/authCache.js` | Skips two DB reads per request for 15 s |
 | Revisions | `services/readRevisions.js` | Per-collection fingerprint (count, latest and sum of `updatedAt`), cached 5 s and invalidated on every write by a Mongoose plugin |
-| Catalog cache | `middleware/catalogCache.js` | For `/clients`, `/projects`, `/tasks`: keyed by caller scope + revisions; in-memory copy for 60 s and an **ETag/304** for up to 5 min |
-| Report sync | `services/reportSync.js` | With `?sync=true` a report returns a `sync` marker; the next request sends it back and receives only **changed rows + `removedIds`** (delta), within 5 minutes and if nothing structural changed |
-| Report fingerprint | `services/reportSync.js` (`reportChecksum`) | With `?checksum=true` a delta also carries the complete report's row count and sum of change-seconds; the dashboard compares it with its merged copy and skips the 5-minute full reload while they match (hourly reload kept) |
+| Catalog cache | `middleware/catalogCache.js` | Client/project/task/employee/team lists and project activity choices: private caller scope + revisions, with allowed-client scope for activity choices; bounded in-memory copy for 60 s and revalidated **ETag/304**, with hourly fallback rollover |
+| Report sync | `services/reportSync.js` | With `?sync=true` a report returns a `sync` marker; the next request sends it back and receives only **changed rows + `removedIds`** (delta), within 15 minutes and if nothing structural changed |
+| Report fingerprint | `services/reportSync.js` (`reportChecksum`) | With `?checksum=true` a delta also carries the complete report's row count and sum of change-seconds; the dashboard compares it with its merged copy. Unverified copies reload after 10 minutes; verified copies retain the hourly full reload |
 | Long-poll wake-ups | `services/loginNotifications.js` | "Another device" long-polls read MongoDB once and then wait for an in-process change notification instead of re-reading every 5 s |
 
 Clients that support sync: the desktop timesheet (`loadAllPages` in
@@ -636,7 +636,7 @@ React 19, React Router 7, Vite 8, axios, lucide-react icons, ExcelJS and jsPDF
 
 ```text
 main.jsx → <BrowserRouter> → <AuthProvider> → App.jsx
-App.jsx → <ThemeProvider> → <ErrorBoundary> → <AppShell><AppRoutes/></AppShell> + <ThemeSelector/>
+App.jsx → <ErrorBoundary> → <AppShell><AppRoutes/></AppShell>
 ```
 
 - **`AppShell`** (`components/layout/AppShell.jsx`): the sidebar, top bar,
@@ -746,12 +746,17 @@ navigation target, including every sidebar entry, is a registered route.
 | Permissions | `pages/admin/AdminPermissions.jsx` | Per-role switches with descriptions, role availability, search/filter, sensitive-change confirmation |
 | Profile | `pages/profile/ProfilePage.jsx` | Own details and password |
 
-**Polling**: `hooks/useDataRefresh.js` re-runs a page's loader every 30 s while
+**Polling**: `hooks/useDataRefresh.js` re-runs a page's loader every 5 minutes while
 the tab is visible, and on focus or coming back online.
+Device-approval long-polls in `AppShell` retain their normal cadence; failures
+retry after 2, 4, 8, 16, then at most 30 seconds. Success resets the delay;
+unmount/logout cancels the pending wait. Authorization failures stop the loop.
 
-**Styling**: plain CSS files in `styles/` (one per page or area), with
-`themes.css` holding the palettes chosen with the floating Theme button
-(`ThemeContext`, saved per device).
+**Styling**: one fixed theme, Shift Console (navy sidebar, signal-blue accent).
+`styles/workspace.css` defines its tokens (`:root` custom properties) and the
+shared look of the shell, cards, tables, buttons, fields, pills, tabs and
+modals. The per-page CSS files in `styles/` add page layout and detail, and take
+their colours from those tokens rather than hard-coded values.
 
 ---
 
@@ -803,9 +808,20 @@ running on the server is always restored from `/time-logs/active`.
 |---|---|---|
 | 5 s | `checkSystemIdleState` | Read OS idle time, idle stop and auto-logout, re-report lock state |
 | 20 s | `sendTimerHeartbeat` | Keep the server lease; a 404 means the server closed the timer, so it reloads |
-| 30 s | `refreshDesktopData` (also on focus/online/visible) | Session check (`/auth/me`), today's timesheet, clients/projects/tasks |
+| 30 s | `refreshDesktopData` (also on focus/online/visible) | Visible windows only; profile and timesheet have separate five-minute budgets; idle timer selections revalidate clients/projects/tasks |
 | 60 s | `loadIdlePolicy` | Pick up idle-policy changes |
 | long-poll | `monitorDeviceLoginRequests` | Show "another device wants to sign in" |
+
+Desktop 2.0.5 pauses nonessential profile/timesheet/catalog reads while hidden.
+Failures stop further reads in that refresh and delay automatic retries by
+30, 60, 120, 240, then at most 300 seconds. Focus events respect that delay;
+reconnection, a new session or a successful refresh resets it. Manual timesheet
+refresh and timer actions bypass the automatic retry gate. Device-approval
+failures retry separately after 2, 4, 8, 16, then at most 30 seconds and reset
+after success. Healthy approval polling continues while minimized. Heartbeats,
+OS idle monitoring and idle-policy refresh retain their existing schedules.
+These changes reduce eligible requests; production MB savings require new
+Render metrics after installing the desktop and deploying the dashboard.
 
 ### 8.4 Idle detection and auto-logout
 

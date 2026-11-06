@@ -135,7 +135,27 @@ let serverReachable = true;
 let timerLockActive = false;
 const IDLE_CHECK_INTERVAL_MS = 5000;
 const DATA_REFRESH_INTERVAL_MS = 30 * 1000;
+const PROFILE_TIMESHEET_REFRESH_MS = 5 * 60_000;
+const REPORT_UNVERIFIED_RELOAD_MS = 10 * 60_000;
+const REPORT_FULL_RELOAD_MS = 60 * 60_000;
+let profileRefreshed = null;
+let timesheetRefreshed = null;
+let backgroundRetry = { token: null, failures: 0, after: 0 };
 const API_REQUEST_TIMEOUT_MS = 10 * 1000;
+
+function retryDelay(failures, base = 2000, cap = 30000) {
+  return Math.min(cap, base * 2 ** Math.min(10, Math.max(0, failures - 1)));
+}
+
+// Resolves on cancellation as well as timeout, so logout leaves no retry timer.
+function waitForRetry(ms, signal) {
+  return new Promise((resolve) => {
+    if (signal.aborted) return resolve();
+    const done = () => { clearTimeout(timer); signal.removeEventListener('abort', done); resolve(); };
+    const timer = setTimeout(done, ms);
+    signal.addEventListener('abort', done, { once: true });
+  });
+}
 
 const showTimerView = (viewName) => {
   timerViewPanels.forEach((panel) => {
@@ -224,12 +244,13 @@ async function loadAllPages(endpoint, collectionKey, token, { isCurrent, reportS
   let response;
   const cacheKey = JSON.stringify([token, endpoint, collectionKey]);
   const previous = reportSync ? reportSnapshots.get(cacheKey) : null;
-  const marker = !force && previous && Date.now() - previous.loadedAt < 5 * 60_000 ? previous.data.sync : null;
+  const marker = !force && previous && Date.now() - previous.verifiedAt < REPORT_UNVERIFIED_RELOAD_MS
+    && Date.now() - previous.loadedAt < REPORT_FULL_RELOAD_MS ? previous.data.sync : null;
   let firstPage;
 
   do {
     const separator = endpoint.includes("?") ? "&" : "?";
-    const syncQuery = reportSync ? `&sync=true${page === 1 && marker
+    const syncQuery = reportSync ? `&sync=true&checksum=true${page === 1 && marker
       ? `&syncSince=${encodeURIComponent(marker.since)}&syncScope=${encodeURIComponent(marker.scope)}&syncReferences=${encodeURIComponent(marker.references)}` : ""}` : "";
     response = await fetch(`${endpoint}${separator}page=${page}&limit=100${syncQuery}`, {
       method: "GET",
@@ -266,7 +287,16 @@ async function loadAllPages(endpoint, collectionKey, token, { isCurrent, reportS
     if (firstPage.sync && items.length <= 50_000) {
       reportSnapshots.delete(cacheKey);
       while (reportSnapshots.size >= 12) reportSnapshots.delete(reportSnapshots.keys().next().value);
-      reportSnapshots.set(cacheKey, { data, items: [...items], loadedAt: firstPage.delta ? previous.loadedAt : Date.now() });
+      const activeIds = new Set((firstPage.checksum?.activeIds || []).map(String));
+      const settled = items.filter(row => !activeIds.has(String(row._id)));
+      const seconds = settled.reduce((sum, row) => {
+        const changedAt = Date.parse(row.updatedAt);
+        return sum + (Number.isFinite(changedAt) ? Math.floor(changedAt / 1000) : 0);
+      }, 0);
+      const verified = !firstPage.delta || (firstPage.checksum
+        && settled.length === firstPage.checksum.count && seconds === firstPage.checksum.seconds);
+      reportSnapshots.set(cacheKey, { data, items: [...items], loadedAt: firstPage.delta ? previous.loadedAt : Date.now(),
+        verifiedAt: verified ? Date.now() : previous.verifiedAt });
     } else reportSnapshots.delete(cacheKey);
   }
 
@@ -382,6 +412,8 @@ function noteServerResponse(response) {
 function clearSessionLoops() {
   syncTimerLock("inactive");
   reportSnapshots.clear();
+  profileRefreshed = timesheetRefreshed = null;
+  backgroundRetry = { token: null, failures: 0, after: 0 };
   deviceApprovalAbortController?.abort();
   deviceApprovalAbortController = null;
   deviceApprovalMonitorActive = false;
@@ -807,8 +839,11 @@ function updateClientName() {
   const selectedProject = availableProjects.find(project => String(project._id) === selectedProjectId);
   const isDefaultProject = String(selectedProject?.projectName || '').trim().toLowerCase() === 'no project';
   const linkedIds = [...(selectedProject?.clients || []), selectedProject?.client].filter(Boolean).map(value => String(value?._id || value));
-  const clients = !hasProject ? [] : activityCatalog?.project === selectedProjectId ? activityCatalog.clients
-    : (isDefaultProject || linkedIds.length) ? activeClients.filter(client => linkedIds.includes(client._id)) : activeClients;
+  const catalogClients = activityCatalog?.project === selectedProjectId ? activityCatalog.clients : activeClients;
+  // A cached/older activity response must not widen the project's saved
+  // client links. Apply the project restriction to either catalog source.
+  const clients = !hasProject ? [] : (isDefaultProject || linkedIds.length)
+    ? catalogClients.filter(client => linkedIds.includes(String(client._id))) : catalogClients;
   const placeholder = !hasProject ? "Select project first"
     : !clientsLoaded ? clientLoadFailed ? "Unable to load clients" : "Loading clients..."
       : clients.length ? "Select client" : "No clients available";
@@ -1053,12 +1088,12 @@ async function loadTasks(projectId, { background = false } = {}) {
     if (cancelled || requestId !== taskRequestId || projectId !== selectedProjectId) return;
 
     if (!response.ok) {
-      if (keepExistingTasks) return;
+      if (keepExistingTasks) return false;
       renderTaskPlaceholder("Unable to load tasks");
       workSelectionMessage.textContent =
         data.message || "Unable to load tasks.";
 
-      return;
+      return false;
     }
 
     // Break tasks can be assigned without a project. Show those alongside
@@ -1071,10 +1106,10 @@ async function loadTasks(projectId, { background = false } = {}) {
     );
     if (breakResult.cancelled || requestId !== taskRequestId || projectId !== selectedProjectId) return;
     if (!breakResult.response.ok) {
-      if (keepExistingTasks) return;
+      if (keepExistingTasks) return false;
       renderTaskPlaceholder("Unable to load tasks");
       workSelectionMessage.textContent = breakResult.data.message || "Unable to load break tasks.";
-      return;
+      return false;
     }
     const tasks = [...new Map([
       ...projectTasks,
@@ -1088,6 +1123,7 @@ async function loadTasks(projectId, { background = false } = {}) {
     if (!keepExistingTasks) renderTaskPlaceholder("Unable to load tasks");
     taskSelect.disabled = true;
     workSelectionMessage.textContent = error.message || 'Unable to reach the backend server.';
+    return false;
   }
 }
 
@@ -1201,13 +1237,14 @@ async function monitorDeviceLoginRequests() {
   deviceApprovalAbortController?.abort();
   const controller = new AbortController();
   deviceApprovalAbortController = controller;
-  while (deviceApprovalMonitorActive && getToken() && !logoutPending) {
+  let failures = 0;
+  while (!controller.signal.aborted && deviceApprovalMonitorActive && getToken() && !logoutPending) {
     try {
       const response = await fetch(`${API_BASE_URL}/auth/login-requests/pending`, {
         headers: { Authorization: `Bearer ${getToken()}` },
         signal: AbortSignal.any([controller.signal, AbortSignal.timeout(25_000)]),
       });
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       if (controller.signal.aborted) return;
       if ([401, 403].includes(response.status)) {
         endRevokedDeviceSession(data.message);
@@ -1218,10 +1255,12 @@ async function monitorDeviceLoginRequests() {
         deviceApprovalMonitorActive = false;
         return;
       }
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    } catch (error) {
+      if (!response.ok) throw new Error('Device approval check unavailable');
+      failures = 0;
+      await waitForRetry(1000, controller.signal);
+    } catch {
       if (controller.signal.aborted) return;
-      if (error.name !== "TimeoutError") await new Promise((resolve) => setTimeout(resolve, 2000));
+      await waitForRetry(retryDelay(++failures), controller.signal);
     }
   }
 }
@@ -1257,6 +1296,7 @@ async function decideDeviceLogin(decision) {
 async function refreshCurrentUser() {
   const token = getToken();
   if (!token || isLoginPage || logoutPending) return true;
+  if (profileRefreshed?.token === token && Date.now() - profileRefreshed.at < PROFILE_TIMESHEET_REFRESH_MS) return true;
   try {
     const response = await fetch(API_BASE_URL + "/auth/me", {
       cache: "no-store",
@@ -1264,24 +1304,27 @@ async function refreshCurrentUser() {
       signal: AbortSignal.timeout(10000),
     });
     noteServerResponse(response);
+    if (getToken() !== token || logoutPending) return false;
     if ([401, 403].includes(response.status)) {
       const data = await response.json().catch(() => ({}));
       endRevokedDeviceSession(data.message);
       return false;
     }
     syncTimerLock();
-    if (!response.ok) return true;
+    if (!response.ok) return false;
     const data = await response.json();
+    if (getToken() !== token || logoutPending) return false;
     const user = data.user || data;
     localStorage.setItem("user", JSON.stringify(user));
     // Background refresh: update the header/profile only. showLoggedInView
     // would also force the Timer tab every refresh.
     updateUserDetails(user);
+    if (getToken() === token && !logoutPending) profileRefreshed = { token, at: Date.now() };
     return true;
   } catch {
     serverReachable = false;
     syncTimerLock();
-    return true;
+    return false;
   }
 }
 
@@ -1300,21 +1343,47 @@ function refreshDesktopData() {
 }
 
 async function runDesktopRefresh() {
-  if (isLoginPage || !getToken() || logoutPending) return;
-  if (!(await refreshCurrentUser())) return;
-  // Session validity is still checked while hidden; the heavier lists wait
-  // until the window is visible again (the visibilitychange handler refreshes).
+  if (isLoginPage || !getToken() || logoutPending || document.visibilityState === "hidden") return;
+  const token = getToken();
+  if (backgroundRetry.token !== token) backgroundRetry = { token, failures: 0, after: 0 };
+  if (Date.now() < backgroundRetry.after) return;
+  try {
+    const success = await refreshVisibleDesktopData();
+    if (getToken() !== token || logoutPending) return;
+    if (success === false) {
+      backgroundRetry.after = Date.now() + retryDelay(++backgroundRetry.failures, 30000, 300000);
+    } else {
+      backgroundRetry = { token, failures: 0, after: 0 };
+    }
+  } catch {
+    if (getToken() === token && !logoutPending) {
+      backgroundRetry.after = Date.now() + retryDelay(++backgroundRetry.failures, 30000, 300000);
+    }
+  }
+}
+
+function reconnectDesktopData() {
+  backgroundRetry = { token: getToken(), failures: 0, after: 0 };
+  return refreshDesktopData();
+}
+
+async function refreshVisibleDesktopData() {
+  if (!(await refreshCurrentUser())) return false;
+  // Profile/timesheet downloads have separate five-minute budgets, including
+  // focus events. Security long-polls and heartbeats keep their own schedules.
+  // The heavier lists wait until the window is visible again.
   if (document.visibilityState === "hidden") return;
-  await loadTodayTimesheet();
+  if (await loadTodayTimesheet({ background: true }) === false) return false;
   // An active timer owns the project/task display; it is restored from the
   // backend by loadActiveTimer, not by the background refresh.
-  if (currentTimeLog) return;
+  if (currentTimeLog || document.visibilityState === "hidden" || logoutPending || !getToken()) return;
 
-  await loadClients();
-  if (currentTimeLog) return;
-  await loadProjects();
-  if (currentTimeLog) return;
-  await loadTasks(selectedProjectId, { background: true });
+  if (!(await loadClients())) return false;
+  if (currentTimeLog || document.visibilityState === "hidden" || logoutPending || !getToken()) return;
+  if (!(await loadProjects())) return false;
+  if (currentTimeLog || document.visibilityState === "hidden" || logoutPending || !getToken()) return;
+  const tasksResult = await loadTasks(selectedProjectId, { background: true });
+  return tasksResult !== false;
 }
 
 function getRememberedUser() {
@@ -1632,12 +1701,17 @@ function renderTodayTimesheet(timeLogs, reportDate) {
   });
 }
 
-async function loadTodayTimesheet({ force = false } = {}) {
+async function loadTodayTimesheet({ background = false, force = !background } = {}) {
   const token = getToken();
 
   if (!token) {
     return;
   }
+
+  const now = new Date();
+  const localDateKey = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
+  if (background && !force && timesheetRefreshed?.token === token && timesheetRefreshed.date === localDateKey
+    && Date.now() - timesheetRefreshed.at < PROFILE_TIMESHEET_REFRESH_MS) return;
 
   timesheetMessage.textContent = "Loading today’s task time…";
   refreshTimesheetButton.disabled = true;
@@ -1645,12 +1719,6 @@ async function loadTodayTimesheet({ force = false } = {}) {
   try {
     // startDate/endDate keep this client compatible with servers deployed
     // before the company-timezone-aware `today=true` shortcut was added.
-    const now = new Date();
-    const localDateKey = [
-      now.getFullYear(),
-      String(now.getMonth() + 1).padStart(2, "0"),
-      String(now.getDate()).padStart(2, "0"),
-    ].join("-");
     const { response, data, items: todaysTimeLogs, cancelled } = await fetchAllPages(
       `${API_BASE_URL}/time-logs/history?today=true&startDate=${localDateKey}&endDate=${localDateKey}`,
       "timeLogs",
@@ -1665,15 +1733,18 @@ async function loadTodayTimesheet({ force = false } = {}) {
         data.message ||
         "Unable to load today’s timesheet.";
 
-      return;
+      return false;
     }
 
     renderTodayTimesheet(todaysTimeLogs, data.date);
+    if (getToken() === token && !logoutPending) timesheetRefreshed = { token, date: localDateKey, at: Date.now() };
     timesheetMessage.textContent = "";
+    return true;
   } catch (error) {
     if (getToken() !== token) return;
     timesheetMessage.textContent =
       "Unable to reach the backend server.";
+    return false;
   } finally {
     refreshTimesheetButton.disabled = false;
   }
@@ -2372,6 +2443,9 @@ async function startTimer() {
     projectSelect.disabled = true;
     if (clientSelect) clientSelect.disabled = true;
     taskSelect.disabled = true;
+    // Action-driven refresh bypasses the background budget, so a successful
+    // Start appears on the dashboard immediately rather than five minutes later.
+    void loadTodayTimesheet();
   } catch (error) {
     serverReachable = false;
     timerMessage.textContent =
@@ -2411,7 +2485,7 @@ taskSelect?.addEventListener("change", () => {
 });
 
 window.addEventListener("focus", refreshDesktopData);
-window.addEventListener("online", refreshDesktopData);
+window.addEventListener("online", reconnectDesktopData);
 window.addEventListener("offline", () => {
   serverReachable = false;
   syncTimerLock();
@@ -2655,6 +2729,7 @@ async function initializeApp() {
         return;
       }
       if (!response.ok) throw new Error("Session unavailable");
+      profileRefreshed = { token, at: Date.now() };
     } catch {
       // Monitoring still starts with safe defaults while connectivity recovers.
       timerMessage.textContent = "CRM could not refresh your session. Please check your connection.";

@@ -21,12 +21,12 @@
   min-height: 48px;
   padding: 0 22px;
 
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--border-strong);
   margin-right: -1px;
 
   background: transparent;
 
-  color: #10266f;
+  color: var(--primary-hover);
 
   font-size: 16px;
   font-weight: 600;
@@ -43,9 +43,9 @@
 }
 
 .schedule-main-tab.active {
-  background: var(--primary, #2563eb);
+  background: var(--primary);
   color: #ffffff;
-  border-color: var(--primary, #2563eb);
+  border-color: var(--primary);
 }
 
 /* =========================================
@@ -67,7 +67,7 @@
 .schedule-help {
   margin: 0 0 18px;
 
-  color: #ff0000;
+  color: var(--danger);
 
   font-size: 15px;
 }
@@ -116,13 +116,13 @@
 
   box-sizing: border-box;
 
-  border: 1px solid #b8c8df;
+  border: 1px solid var(--primary-200);
 
   border-radius: 5px;
 
   background: #ffffff;
 
-  color: #111827;
+  color: var(--text-heading);
 
   font-size: 16px;
 
@@ -133,7 +133,7 @@
 .schedule-filter-row input:focus,
 .schedule-add-filter-row select:focus,
 .schedule-add-filter-row input:focus {
-  border-color: var(--primary, #2563eb);
+  border-color: var(--primary);
 }
 
 /* =========================================
@@ -149,7 +149,7 @@
 
   border-radius: 4px;
 
-  background: var(--primary, #2563eb);
+  background: var(--primary);
 
   color: #ffffff ;
 
@@ -161,7 +161,7 @@
 }
 
 .schedule-go-btn:hover {
-  background: var(--primary-hover, #1d4ed8);
+  background: var(--primary-hover);
 }
 
 /* =========================================
@@ -183,7 +183,7 @@
 
   padding: 13px 20px;
 
-  background: var(--primary, #2563eb);
+  background: var(--primary);
 
   color: #ffffff ;
 
@@ -195,7 +195,7 @@
 }
 
 .schedule-new-btn:hover {
-  background: var(--primary-hover, #1d4ed8);
+  background: var(--primary-hover);
 }
 
 /* =========================================
@@ -218,17 +218,17 @@
 
 .schedule-table th,
 .schedule-table td {
-  border: 1px solid #d8e0ee;
+  border: 1px solid var(--border);
 
   padding: 14px 7px;
 
-  color: #10266f;
+  color: var(--text-primary);
 
   text-align: left;
 }
 
 .schedule-table th {
-  background: #eef0ff;
+  background: var(--surface-muted);
 
   font-size: 14px;
 
@@ -246,7 +246,7 @@
 .schedule-empty {
   text-align: center ;
 
-  color: #10266f ;
+  color: var(--text-primary) ;
 
   padding: 18px ;
 }
@@ -256,7 +256,7 @@
 
   background: transparent;
 
-  color: var(--primary, #2563eb);
+  color: var(--primary);
 
   cursor: pointer;
 }
@@ -280,13 +280,13 @@
 
   padding: 0 17px;
 
-  border: 1px solid #b8c8df;
+  border: 1px solid var(--primary-200);
 
   border-radius: 5px;
 
   background: #ffffff;
 
-  color: #10266f;
+  color: var(--primary-hover);
 
   font-size: 16px;
 
@@ -296,9 +296,9 @@
 }
 
 .schedule-view-btn.active {
-  background: var(--primary, #2563eb);
+  background: var(--primary);
 
-  border-color: var(--primary, #2563eb);
+  border-color: var(--primary);
 
   color: #ffffff;
 }
@@ -327,9 +327,9 @@
 
 .schedule-timeline th,
 .schedule-timeline td {
-  border: 1px solid #d8e0ee;
+  border: 1px solid var(--border);
 
-  color: #10266f;
+  color: var(--text-primary);
 
   text-align: center;
 }
@@ -337,7 +337,7 @@
 .schedule-timeline th {
   height: 46px;
 
-  background: #eef0ff;
+  background: var(--surface-muted);
 
   font-size: 14px;
 
@@ -367,9 +367,9 @@
 
   padding: 30px;
 
-  border: 1px solid #d8e0ee;
+  border: 1px solid var(--border);
 
-  color: #64748b;
+  color: var(--text-secondary);
 
   text-align: center;
 }
@@ -429,8 +429,8 @@
 
   border-radius: 6px;
 
-  background: #dcfce7;
-  color: #166534;
+  background: var(--success-bg);
+  color: var(--success);
 
   font-size: 14px;
 }
@@ -456,7 +456,7 @@
 
   margin-bottom: 8px;
 
-  color: #111827;
+  color: var(--text-heading);
 
   font-weight: 600;
 }
@@ -469,7 +469,7 @@
 
   padding: 0 14px;
 
-  border: 1px solid #b8c8df;
+  border: 1px solid var(--border-strong);
   border-radius: 5px;
 
   outline: none;

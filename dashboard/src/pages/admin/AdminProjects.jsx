@@ -1,3 +1,6 @@
+import { TeamList } from "../../components/teams/TeamIdentity";
+import { FolderPlus, Link2 } from "lucide-react";
+import CollectionHeading, { CollectionIdentity } from "../../components/layout/CollectionHeading";
 import ModalFrame from "../../components/layout/ModalFrame";
 import { useCallback, useEffect, useState } from "react";
 import DashboardLayout from "../../components/layout/DashboardLayout";
@@ -280,29 +283,13 @@ function AdminProjects() {
   return (
     <DashboardLayout title="Projects">
       {showLinks && <ActivityLinksModal onClose={() => setShowLinks(false)} />}
-      <section className="admin-card projects-card">
+      <section className="admin-card projects-card collection-panel">
 
-        <div className="projects-page-heading">
-          <div>
-            <p className="admin-eyebrow">
-              PROJECT MANAGEMENT
-            </p>
-
-            <h2>Projects</h2>
-            {!canManage && <PermissionNote permissions={["manage_projects"]} />}
-          </div>
-
-          <div className="activity-page-actions">
-          {canLink && <button type="button" className="add-project-button" onClick={() => setShowLinks(true)}>Link clients & tasks</button>}
-          {canManage && <button
-            className="add-project-button"
-            type="button"
-            onClick={() => setShowAddProject(true)}
-          >
-            + Add New Project
-          </button>}
-          </div>
-        </div>
+        <CollectionHeading kind="projects" title="Project directory" description="Bring teams, clients and their work together in one place."
+          detail={loading ? 'Loading projects...' : `${projects.length} project${projects.length === 1 ? '' : 's'} on this page`} notice={!canManage && <PermissionNote permissions={["manage_projects"]} />}>
+          {canLink && <button type="button" className="add-project-button" onClick={() => setShowLinks(true)}><Link2 size={15} aria-hidden="true" />Link clients & tasks</button>}
+          {canManage && <button className="add-project-button" type="button" onClick={() => setShowAddProject(true)}><FolderPlus size={16} aria-hidden="true" />Add New Project</button>}
+        </CollectionHeading>
 
         <div className="projects-toolbar">
 
@@ -375,11 +362,11 @@ function AdminProjects() {
                   <tr key={project._id}>
 
                     <td>
-                      {project.projectName || "-"}
+                      <CollectionIdentity kind="projects">{project.projectName || "-"}</CollectionIdentity>
                     </td>
 
                     <td>
-                      {(project.teams || []).map((team) => team.teamName || team).join(", ") || "All teams"}
+                      <TeamList teams={project.teams || []} />
                     </td>
 
                     <td>

@@ -29,6 +29,7 @@ const Task = require("../../models/Task");
 const Project = require("../../models/Project");
 const Team = require("../../models/Team");
 const Employee = require("../../models/Employee");
+const { workTeamIds, workProjectIds } = require('../../services/clientAccess');
 const { getTaskCreationOptions, createLinkedTasks } = require('./linkedTaskController');
 const { getTaskProjectSelections, saveMultiProjectTask } = require('./multiProjectTaskController');
 
@@ -66,7 +67,7 @@ router.post(
 router.get(
   "/",
   protect,
-  catalogCache([Task, Project, Team, Employee]),
+  catalogCache([Task, Project, Team, Employee], { scopeKey: req => [workTeamIds(req.user).sort(), workProjectIds(req.user).sort()] }),
   getAllTasks
 );
 

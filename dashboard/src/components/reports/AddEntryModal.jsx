@@ -56,7 +56,7 @@ export default function AddEntryModal({ employee, onClose, onSaved }) {
 
   const clientOptions = useMemo(() => (options?.clients || []).filter(client => {
     const project = options?.projects.find(project => project._id === form.project);
-    return !project || !(project.clientIds || []).length || project.clientIds.includes(client._id);
+    return !project || !Array.isArray(project.clientIds) || project.clientIds.includes(client._id);
   }).map((client) => ({ value: client._id, label: client.clientName })), [options, form.project]);
   const projectOptions = useMemo(() => projectsForClient(options, '')
     .map((project) => ({ value: project._id, label: `${project.projectName}${project.projectCode ? ` (${project.projectCode})` : ""}` })), [options]);

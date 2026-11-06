@@ -17,6 +17,10 @@ const { protect } = require("../../middleware/authMiddleware");
 const { authorizeRoles, authorizeAccess, authorizeRolesOrPermissions } = require("../../middleware/authorizeRoles");
 
 const router = express.Router();
+const catalogCache = require('../../middleware/catalogCache');
+const Employee = require('../../models/Employee');
+const Team = require('../../models/Team');
+const Project = require('../../models/Project');
 
 // Operational selectors need identity/team data, not account administration:
 // employee filters on company reports and team-lead choices on Teams.
@@ -26,6 +30,7 @@ router.get(
   authorizeRolesOrPermissions({ roles: ["hr"], permissions: [
     "create_employees", "edit_employees", "view_all_reports", "create_teams", "edit_teams", "assign_team_leads",
   ] }),
+  catalogCache([Employee, Team]),
   getEmployeeOptions
 );
 
@@ -34,6 +39,7 @@ router.get(
   "/",
   protect,
   authorizeAccess("create_employees", "edit_employees"),
+  catalogCache([Employee, Team, Project]),
   getAllEmployees
 );
 
@@ -45,6 +51,7 @@ router.get(
   "/my-team",
   protect,
   TEAM_MEMBERS,
+  catalogCache([Employee, Team, Project]),
   getMyTeam
 );
 

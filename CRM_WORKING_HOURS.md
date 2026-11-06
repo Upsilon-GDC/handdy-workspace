@@ -48,7 +48,7 @@ record and survives automatic attendance reconciliation.
 **Team Working Hours Overview** is a separate daily section of the existing
 Admin/Manager Overview. Its date and team filters are independent of the existing
 activity range. Team cards open employee requirements, tracked work, pending
-hours, progress and overtime. Data refreshes every 30 seconds and on window
+hours, progress and overtime. Data refreshes every 5 minutes and on window
 focus/reconnection. A failed refresh retains the last successful result with
 an error message. Teams use current employee membership.
 

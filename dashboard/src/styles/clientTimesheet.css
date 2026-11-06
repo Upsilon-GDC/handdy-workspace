@@ -1,12 +1,12 @@
 .client-timesheet { display:grid; gap:6px; }
-.client-timesheet-help { margin:0 0 4px; color:var(--text-secondary,#64748b); font-size:12px; line-height:1.5; }
+.client-timesheet-help { margin:0 0 4px; color:var(--text-secondary); font-size:12px; line-height:1.5; }
 .client-timesheet details { border:1px solid var(--border-light); border-radius:6px; background:var(--surface); overflow:hidden; }
 .client-timesheet summary { display:flex; align-items:center; gap:8px; min-height:40px; box-sizing:border-box; padding:8px 12px; cursor:pointer; background:var(--surface-muted); }
-.client-timesheet summary::before { content:"›"; font-size:16px; line-height:1; color:var(--text-secondary,#64748b); }
+.client-timesheet summary::before { content:"›"; font-size:16px; line-height:1; color:var(--text-secondary); }
 .client-timesheet summary::-webkit-details-marker { display:none; }
 .client-timesheet details[open]>summary::before { transform:rotate(90deg); }
 .client-timesheet summary>span:first-of-type { min-width:0; flex:1; overflow-wrap:anywhere; font-size:13px; font-weight:600; }
-.client-timesheet summary small { display:inline-block; min-width:52px; margin-right:8px; font-size:10px; font-weight:500; color:var(--text-secondary,#64748b); }
+.client-timesheet summary small { display:inline-block; min-width:52px; margin-right:8px; font-size:10px; font-weight:500; color:var(--text-secondary); }
 .client-timesheet-totals { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:4px 14px; font-size:11px; font-variant-numeric:tabular-nums; }
 .client-timesheet-totals strong { color:var(--text-heading); }
 .client-timesheet-children { margin-left:15px; padding:0 0 0 9px; display:grid; gap:0; border-left:1px solid var(--border-light); }
@@ -20,9 +20,9 @@
 .client-timesheet-view-buttons { display:flex; gap:6px; margin:12px 0; }
 .crm-content .client-timesheet-view-buttons button { border:1px solid var(--border-light); border-radius:6px; min-height:32px; padding:6px 13px; color:var(--text-secondary); background:var(--surface); font-weight:600; }
 .crm-content .client-timesheet-view-buttons button[aria-pressed="true"] { color:var(--button-text); background:var(--primary); border-color:var(--primary); }
-.client-timesheet summary:focus-visible, .client-timesheet-view-buttons button:focus-visible { outline:3px solid #a9c5fa; outline-offset:-3px; }
+.client-timesheet summary:focus-visible, .client-timesheet-view-buttons button:focus-visible { outline:3px solid var(--primary-200); outline-offset:-3px; }
 .client-timesheet summary .client-timesheet-expand-all { flex-shrink:0; min-height:28px; padding:4px 9px; border:1px solid var(--border-light); border-radius:5px; background:var(--surface); color:var(--text-heading); font-size:11px; font-weight:600; cursor:pointer; }
-.client-timesheet-expand-all:focus-visible { outline:3px solid #a9c5fa; outline-offset:2px; }
+.client-timesheet-expand-all:focus-visible { outline:3px solid var(--primary-200); outline-offset:2px; }
 @media (max-width:650px) {
   .client-timesheet summary { flex-wrap:wrap; padding:8px 10px; }
   .client-timesheet-totals { flex-basis:100%; justify-content:flex-start; padding-left:14px; }

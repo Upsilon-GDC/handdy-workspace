@@ -57,14 +57,10 @@ app.whenReady().then(async()=>{
   fs.writeFileSync(path.join(root,'ui-review/project-modal.png'),(await win.webContents.capturePage()).toPNG());
   win.webContents.sendInputEvent({type:'keyDown',keyCode:'Escape'});win.webContents.sendInputEvent({type:'keyUp',keyCode:'Escape'});await delay(50);
   results.push({interaction:'project modal',opened:projectOpened,dialogVisible:projectModalOpen,escapeClosed:await win.webContents.executeJavaScript(`!document.querySelector('[role="dialog"]')`)});
-  await win.webContents.executeJavaScript(`document.querySelector('.theme-trigger')?.click()`);await delay(30);
-  const selectedTheme=await win.webContents.executeJavaScript(`(()=>{const option=[...document.querySelectorAll('[role="radio"]')].find(item=>!item.matches('[aria-checked="true"]'));if(!option)return false;option.click();return option.textContent.trim();})()`);
-  await delay(50);
-  const themeSelected=await win.webContents.executeJavaScript(`localStorage.getItem('app-theme')`);
-  await win.reload();await delay(500);
-  const themeState=await win.webContents.executeJavaScript(`(()=>{const styles=getComputedStyle(document.documentElement);const nav=document.querySelector('.crm-nav');const primaryButton=document.querySelector('.crm-content button:not([class*="close"]):not([class*="delete"])');return {stored:localStorage.getItem('app-theme'),applied:document.documentElement.getAttribute('data-theme'),primary:styles.getPropertyValue('--primary').trim(),sidebar:styles.getPropertyValue('--sidebar-bg').trim(),navBackground:nav?getComputedStyle(nav).backgroundColor:null,buttonBackground:primaryButton?getComputedStyle(primaryButton).backgroundColor:null};})()`);
-  const themePersisted=themeState.stored===themeState.applied;
-  results.push({interaction:'theme persistence',selectedTheme,themeSelected,themePersisted,themeState});
+  // Shift Console is the only theme: its tokens apply and no theme switcher is rendered.
+  const themeState=await win.webContents.executeJavaScript(`(()=>{const styles=getComputedStyle(document.documentElement);const nav=document.querySelector('.crm-nav');const primaryButton=document.querySelector('.crm-content button:not([class*="close"]):not([class*="delete"])');return {primary:styles.getPropertyValue('--primary').trim(),sidebar:styles.getPropertyValue('--sidebar-bg').trim(),navBackground:nav?getComputedStyle(nav).backgroundImage:null,buttonBackground:primaryButton?getComputedStyle(primaryButton).backgroundColor:null,switcherPresent:Boolean(document.querySelector('.theme-trigger'))};})()`);
+  const themeApplied=Boolean(themeState.primary)&&!themeState.switcherPresent;
+  results.push({interaction:'shift console theme',themeApplied,themeState});
   fs.writeFileSync(path.join(root,'ui-review/results.json'),JSON.stringify({results,errors},null,2));
   console.log(JSON.stringify({routes:results.filter(x=>x.route).length,routeFailures:results.filter(x=>x.route&&(!x.shell||x.overflow)),interactions:results.filter(x=>x.interaction),errors:errors.slice(0,8)},null,2));
  }catch(e){console.error(e);process.exitCode=1;}finally{win.destroy();app.exit(process.exitCode||0);}

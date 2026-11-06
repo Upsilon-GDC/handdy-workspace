@@ -94,7 +94,7 @@ async function editTimeEntry(req, res) {
         const options = await activityOptionsForEmployee(project, employee);
         const task = options?.tasks.find(task => id(task) === body.task);
         if (!task || (body.client && !options.clients.some(client => id(client) === body.client))) throw fail('This activity is not available to the employee.');
-        const selection = await validateActivitySelection(project, body.client, body.task);
+        const selection = await validateActivitySelection(project, body.client, body.task, employee);
         if (selection.error) throw fail(selection.error);
         mapping = selection.mapping || undefined;
       }

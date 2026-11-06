@@ -25,9 +25,9 @@ export function reportChecksum(rows, activeIds = []) {
 const sameChecksum = (local, remote) => local.count === remote.count && local.seconds === remote.seconds;
 
 // A delta copy is trusted while a recent delta proved it complete (matching
-// fingerprint). Without that proof it is fully reloaded after 5 minutes, as
-// before; with it, at the latest after an hour.
-const UNVERIFIED_RELOAD_MS = 5 * 60_000;
+// fingerprint). Allow a five-minute refresh plus scheduling/network delays
+// before retrying an unverified copy; always fully reload within an hour.
+const UNVERIFIED_RELOAD_MS = 10 * 60_000;
 const FULL_RELOAD_MS = 60 * 60_000;
 
 export function createReportLoader(fetchPage, getSessionKey = () => "") {

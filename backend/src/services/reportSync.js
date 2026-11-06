@@ -10,7 +10,9 @@ async function beginReportSync(req, filter, dependencies) {
   const scope = digest([String(req.user._id), req.user.role, filter, process.env.APP_TIMEZONE || "Asia/Kolkata"]);
   const previous = new Date(req.query.syncSince);
   const delta = Number.isFinite(previous.getTime()) && previous <= since
-    && since - previous < 5 * 60_000
+    // Allow five-minute dashboard polling plus scheduling/network delays.
+    // Scope and dependency checks still invalidate incompatible copies.
+    && since - previous < 15 * 60_000
     && req.query.syncScope === scope && req.query.syncReferences === references;
   return { marker: { since: since.toISOString(), scope, references }, delta, previous };
 }

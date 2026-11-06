@@ -56,6 +56,20 @@ test('an unmapped project keeps the active client catalog and task-assignment ru
   assert.equal(result.mappingEnabled, false);
 });
 
+test('Software team gets only linked Upsilon even when task mapping is disabled', async t => {
+  t.mock.method(Team, 'exists', async () => ({ _id: 'software-team' }));
+  t.mock.method(Client, 'find', filter => {
+    assert.deepEqual(filter, { status: 'Active', _id: { $in: ['upsilon'] } });
+    return query([{ _id: 'upsilon', clientName: 'Upsilon' }]);
+  });
+  t.mock.method(Task, 'find', () => query([]));
+  const options = await activityOptionsForEmployee(
+    { _id: 'software', teams: ['software-team'], clients: ['upsilon'], activityMappingEnabled: false },
+    { _id: 'employee', role: 'employee', team: 'software-team' });
+  assert.deepEqual(options.clients.map(client => client._id), ['upsilon']);
+  assert.equal(options.mappingEnabled, false);
+});
+
 test('legacy manual picker retains project-owned tasks in a mixed rollout', async t => {
   t.mock.method(Client, 'find', () => query([]));
   t.mock.method(Task, 'find', filter => {

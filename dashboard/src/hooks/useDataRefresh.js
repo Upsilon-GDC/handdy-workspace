@@ -1,14 +1,15 @@
 import { useEffect, useRef } from "react";
 
-// Management data should follow changes from the other client quickly without
-// turning every page into a continuous stream of API requests.
-const DEFAULT_REFRESH_MS = 30_000;
+// Refresh management data every five minutes while visible. Manual refresh,
+// returning to the tab and reconnecting can still request an earlier update.
+const DEFAULT_REFRESH_MS = 5 * 60_000;
 
-export default function useDataRefresh(refresh, intervalMs = DEFAULT_REFRESH_MS) {
+export default function useDataRefresh(refresh, intervalMs = DEFAULT_REFRESH_MS, enabled = true) {
   const refreshRef = useRef(refresh);
   useEffect(() => { refreshRef.current = refresh; }, [refresh]);
 
   useEffect(() => {
+    if (!enabled) return;
     // Guards against a timer/event tick that fires (or was already in
     // flight) right as the component unmounts — once unmounted, no new
     // invocation of the consumer's refresh callback is allowed, so it can
@@ -38,5 +39,5 @@ export default function useDataRefresh(refresh, intervalMs = DEFAULT_REFRESH_MS)
       window.removeEventListener("online", run);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [intervalMs]);
+  }, [intervalMs, enabled]);
 }

@@ -85,7 +85,7 @@
 .crm-content .employees-input-wrap input {
   width: 100%;
   min-width: 0;
-  padding-left: 39px;
+  --field-pad: 9px 12px 9px 39px;
 }
 
 .crm-content .employees-filter-field select,
