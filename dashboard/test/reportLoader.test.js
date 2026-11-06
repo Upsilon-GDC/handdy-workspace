@@ -96,12 +96,12 @@ test("concurrent background refreshes share a request and logout rejects late re
   assert.ok(result.every((item) => item.status === "rejected"));
 });
 
-test("five-minute reconciliation replaces delta caches to recover missed deletions", async (t) => {
+test("ten-minute reconciliation replaces unverified delta caches to recover missed deletions", async (t) => {
   t.mock.timers.enable({ apis: ["Date"], now: Date.now() });
   const requests = [];
   const load = createReportLoader(async (_path, params) => { requests.push(params); return { sync: marker, timeLogs: [] }; });
   await load("/reconcile", "timeLogs");
-  t.mock.timers.tick(5 * 60000);
+  t.mock.timers.tick(10 * 60000);
   await load("/reconcile", "timeLogs", {}, { force: false });
   assert.equal(requests[1].syncSince, undefined);
 });
@@ -143,7 +143,7 @@ test("a matching fingerprint keeps an open report on deltas past five minutes, w
   assert.equal(requests.at(-1).syncSince, undefined, "full reload after an hour");
 });
 
-test("a fingerprint mismatch falls back to the five-minute full reload", async (t) => {
+test("a fingerprint mismatch falls back to the ten-minute full reload", async (t) => {
   t.mock.timers.enable({ apis: ["Date"], now: Date.now() });
   const rows = [stamped("1", "2026-10-01T04:10:00.000Z")];
   const requests = [];
@@ -157,7 +157,26 @@ test("a fingerprint mismatch falls back to the five-minute full reload", async (
   t.mock.timers.tick(4 * 60_000);
   await load("/time-logs/admin", "timeLogs", {}, { force: false });
   assert.equal(requests.at(-1).syncSince, marker.since, "still a delta within five minutes");
-  t.mock.timers.tick(60_000);
+  t.mock.timers.tick(6 * 60_000);
   await load("/time-logs/admin", "timeLogs", {}, { force: false });
   assert.equal(requests.at(-1).syncSince, undefined, "unproven copy is fully reloaded as before");
+});
+
+test('five-minute refreshes retain incremental downloads despite modest scheduling delays', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
+  const requests = [];
+  const { reportChecksum } = await import('../src/utils/reportLoader.js');
+  const rows = [stamped('1', '2026-10-01T04:10:00.000Z')];
+  const load = createReportLoader(async (_path, params) => {
+    requests.push(params);
+    if (!params.syncSince) return { sync: marker, timeLogs: rows };
+    return { delta: true, sync: marker, timeLogs: [], checksum: { ...reportChecksum(rows), activeIds: [] } };
+  });
+  await load('/five-minute', 'timeLogs');
+  for (let n = 0; n < 4; n++) {
+    t.mock.timers.tick(5 * 60_000 + 500);
+    await load('/five-minute', 'timeLogs', {}, { force: false });
+    assert.equal(requests.at(-1).syncSince, marker.since);
+  }
+  assert.equal(requests.filter(row => !row.syncSince).length, 1);
 });

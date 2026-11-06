@@ -10,7 +10,6 @@ import PermissionNote from "../../components/layout/PermissionNote";
 import TaskForm from "../../components/tasks/TaskForm";
 import { TASK_CREATE_PERMISSIONS, missingTaskPermissions } from "../../utils/permissions";
 import "../../styles/adminTasks.css";
-import "../../styles/teamLeadSidebar.css";
 import "../../styles/teamLeadTasks.css";
 
 function TeamLeadTasks() {

@@ -24,7 +24,7 @@ const current = [closed,
   { ...closed, _id: 'lunch', employee: employees[1], status: 'running', isActiveTimer: true, startedAt: iso(-600000), stoppedAt: null, totalWorkedSeconds: 600, task: { taskName: 'Lunch', taskType: 'break' } },
   { ...closed, _id: 'alpha-log', employee: employees[3], totalWorkedSeconds: 999999 },
 ];
-let failNext = false;
+let failNext = false, failHours = false, legacyRoster = false;
 const calls = [];
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
@@ -38,9 +38,15 @@ const server = http.createServer((req, res) => {
   if (endpoint === '/permissions/me') body = { permissions: ['view_all_reports'] };
   if (endpoint.startsWith('/employees')) body = { employees, totalPages: 1 };
   if (endpoint === '/teams') body = { teams };
+  if (endpoint === '/working-hours/overview') {
+    if (failHours) { res.statusCode = 503; body = { message: 'Synthetic productivity outage' }; }
+    else body = { date: url.searchParams.get('date') || today, asOf: new Date().toISOString(), teams: [],
+      totals: { requiredSeconds: 0, completedSeconds: 0, pendingSeconds: 0, completionPercent: 0, overtimeSeconds: 0, presentCount: 0, unconfiguredCount: 0 },
+      ...(!legacyRoster && url.searchParams.get('includeRoster') === 'true' ? { roster: { employees: employees.filter(row => row.role !== 'alpha'), teams } } : {}) };
+  }
   if (endpoint === '/time-logs/admin') {
     if (failNext) { failNext = false; res.statusCode = 503; body = { message: 'Synthetic outage' }; }
-    else body = { timeLogs: url.searchParams.get('startDate') === today ? current : [{ ...closed, _id: 'historical', startedAt: `${yesterday}T04:00:00Z`, stoppedAt: `${yesterday}T06:00:00Z`, totalWorkedSeconds: 7200 }], totalPages: 1 };
+    else body = { timeLogs: url.searchParams.get('startDate') <= today && url.searchParams.get('endDate') >= today ? current : [{ ...closed, _id: 'historical', startedAt: `${yesterday}T04:00:00Z`, stoppedAt: `${yesterday}T06:00:00Z`, totalWorkedSeconds: 7200 }], totalPages: 1 };
   }
   res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(body));
 });
@@ -65,8 +71,21 @@ app.whenReady().then(async () => {
     await evaluate(`localStorage.setItem('token','fixture'); localStorage.setItem('user',${JSON.stringify(JSON.stringify(user))})`);
     await win.loadURL(`${base}/admin/dashboard`);
     await until(`document.querySelectorAll('.overview-team-card').length===3 && document.querySelector('.overview-refresh')?.textContent==='Refresh'`);
+    const count = endpoint => calls.filter(value => value === endpoint).length;
+    assert.equal(count('/employees/options'), 0, 'Shared roster avoids a separate employee list request');
+    assert.equal(count('/teams'), 0, 'Shared roster avoids a separate team list request');
+    assert.equal(count('/working-hours/overview'), 1, 'Concurrent initial consumers share one productivity request');
+    assert.equal(count('/time-logs/admin'), 1);
+    const beforeWeek = count('/time-logs/admin');
+    await click('This week');
+    await until(`document.querySelector('.overview-refresh')?.textContent==='Refresh' && document.querySelector('[aria-label="Overview from"]').value !== ''`);
+    assert.equal(count('/time-logs/admin'), beforeWeek + 1, 'Week containing today does not request a second live-status report');
+    await click('Today'); await until(`document.querySelector('.overview-refresh')?.textContent==='Refresh'`);
     assert.equal(await evaluate(`document.querySelectorAll('.report-timeline-row').length`), 0, 'Overview is no longer a detailed timesheet');
     assert.equal(await evaluate(`document.querySelector('.crm-stat-strip article').textContent.includes('1 / 3')`), true);
+    assert.equal(await evaluate(`document.querySelectorAll('.wh-combined-overview .crm-stat-strip article').length`), 6, 'Activity and daily targets share six cards');
+    assert.equal(await evaluate(`document.querySelectorAll('.admin-team-overview > .crm-stat-strip').length`), 0, 'No duplicate activity strip outside the combined overview');
+    assert.equal(await evaluate(`document.querySelectorAll('.crm-stat-strip article')[1].textContent.includes('Break') && document.querySelectorAll('.crm-stat-strip article')[1].textContent.includes('Idle')`), true, 'Tracked work retains break and idle totals');
     assert.equal(await evaluate(`document.body.textContent.includes('Hidden Alpha Account')`), false);
     assert.equal(await evaluate(`document.querySelector('[data-overview-team="wcpa"]').textContent.includes('1h 30m')`), true);
     await evaluate(`document.documentElement.style.scrollBehavior='auto'; window.scrollTo({top:0,behavior:'instant'}); new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
@@ -96,6 +115,16 @@ app.whenReady().then(async () => {
     await until(`document.querySelector('[role=alert]')?.textContent.includes('last successful update')`);
     assert.equal(await evaluate(`document.querySelectorAll('.crm-stat-strip article')[1].textContent.includes('2h 0m')`), true, 'An outage preserves previous totals instead of showing zero');
     await click('Refresh'); await until(`!document.querySelector('[role=alert]') && document.querySelector('.overview-refresh').textContent==='Refresh'`);
+    const beforeFallback = count('/employees/options');
+    failHours = true; await click('Refresh');
+    await until(`document.querySelector('.wh-overview [role=alert]')?.textContent.includes('last successful update') && document.querySelector('.overview-refresh')?.textContent==='Refresh'`);
+    assert.equal(count('/employees/options'), beforeFallback + 1, 'Productivity outage falls back to the employee catalog');
+    assert.equal(count('/teams'), 1, 'Productivity outage falls back to the team catalog');
+    assert.equal(await evaluate(`document.querySelectorAll('.crm-stat-strip article')[1].textContent.includes('2h 0m')`), true);
+    failHours = false; legacyRoster = true; await click('Refresh');
+    await until(`!document.querySelector('[role=alert]') && document.querySelector('.overview-refresh')?.textContent==='Refresh'`);
+    assert.equal(count('/teams'), 2, 'Older backend without roster retains the original compatible list reads');
+    legacyRoster = false;
     win.setSize(500, 900); await delay(200);
     await input('[aria-label="Search overview teams"]', '');
     assert.equal(await evaluate(`document.querySelector('.admin-team-overview').scrollWidth <= document.querySelector('.admin-team-overview').clientWidth+2`), true, 'Overview fits mobile width');
@@ -103,7 +132,7 @@ app.whenReady().then(async () => {
     fs.writeFileSync(path.join(output, 'overview-mobile.png'), (await win.webContents.capturePage()).toPNG());
     assert.deepEqual(errors.filter(error => !/Failed to load resource.*503/.test(error)), []);
     assert.ok(calls.includes('/time-logs/admin'));
-    console.log('PASS: team hours/status overview, member drill-down, Alpha exclusion, current projects/tasks, team/member search, status filter, independent historical range/current status, refresh-outage recovery and mobile layout. Local fixture API only.');
+    console.log('PASS: shared roster, deduplicated current-day/week reports, one productivity request, older-server/outage fallback, unchanged team totals and live status, drilldown, filters and mobile layout. Local fixture API only.');
   } catch (error) {
     code = 1; console.error(error);
     if (win && !win.isDestroyed()) fs.writeFileSync(path.join(output, 'failure.png'), (await win.webContents.capturePage()).toPNG());

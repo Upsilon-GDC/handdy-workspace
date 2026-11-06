@@ -148,7 +148,8 @@ app.whenReady().then(async () => {
     assert.equal(await evaluate(`document.querySelector('.wh-warning').textContent.includes('1 present employee has')`), true);
     await evaluate(`document.querySelector('[data-productivity-team="wcpa"]').click()`);
     await until(`document.querySelectorAll('.wh-details tbody tr').length === 2`);
-    assert.equal(await evaluate(`getComputedStyle(document.querySelector('[data-productivity-team]')).display`), 'block', 'Team card content stacks vertically');
+    assert.equal(await evaluate(`['block', 'grid'].includes(getComputedStyle(document.querySelector('[data-productivity-team]')).display)`), true, 'Team card content stacks vertically');
+    assert.equal(await evaluate(`document.querySelectorAll('.overview-team-card').length`), 2, 'Each team has one combined card');
     assert.equal(await evaluate(`document.querySelector('.wh-details').textContent.includes('Half day')`), true);
     assert.equal(await evaluate(`document.querySelector('.wh-details').textContent.includes('Completed')`), true);
     await delay(150);

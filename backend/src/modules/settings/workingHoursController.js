@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Employee = require('../../models/Employee');
+const Team = require('../../models/Team');
 const Attendance = require('../../models/Attendance');
 const TaskTimeLog = require('../../models/TaskTimeLog');
 const WorkingHoursPolicy = require('../../models/WorkingHoursPolicy');
@@ -20,8 +21,9 @@ function selectedEmployees(body) {
   if (new Set(values).size !== values.length) throw fail('Select each employee once.');
   return values;
 }
-async function employeesQuery(filter = {}) {
-  return Employee.find({ role: { $ne: 'alpha' }, ...filter }).select('employeeId fullName role team isActive').populate('team', 'teamName').sort('fullName').lean();
+async function employeesQuery(filter = {}, { populateTeam = true } = {}) {
+  const query = Employee.find({ role: { $ne: 'alpha' }, ...filter }).select('employeeId fullName role team isActive').sort('fullName').lean();
+  return populateTeam ? query.populate('team', 'teamName') : query;
 }
 async function getWorkingHoursSettings(req, res) {
   try {
@@ -94,16 +96,24 @@ async function getWorkingHoursOverview(req, res) {
     const team = req.query.team;
     if (team && team !== 'unassigned' && !mongoose.isObjectIdOrHexString(team)) throw fail('Choose a valid team.');
     const now = Date.now(), start = dateKeyToUtc(date, timezone), end = dateKeyToUtc(addDateKeyDays(date, 1), timezone);
-    const employees = await employeesQuery(team ? { team: team === 'unassigned' ? null : team } : {});
+    const includeRoster = req.query.includeRoster === 'true' && !team;
+    const employees = await employeesQuery(team ? { team: team === 'unassigned' ? null : team } : {}, { populateTeam: !includeRoster });
     const employeeIds = employees.map(row => row._id);
-    const [policies, attendance, logs] = await Promise.all([
+    const [policies, attendance, logs, teams] = await Promise.all([
       WorkingHoursPolicy.find({ employee: { $in: employeeIds } }).lean(),
       Attendance.find({ employee: { $in: employeeIds }, date }).select('employee status workingHoursAdjustments').lean(),
       TaskTimeLog.find({ employee: { $in: employeeIds }, startedAt: { $lt: end },
         $or: [{ stoppedAt: { $gt: start } }, { stoppedAt: null, status: { $in: ['running', 'paused'] } }],
         'manualEntry.deletedAt': null }).select('employee startedAt stoppedAt status desktopHeartbeatAt pauses task manualEntry.deletedAt').populate('task', 'taskType').lean(),
+      includeRoster ? Team.find({}).select('teamName isActive').sort('teamName').lean() : null,
     ]);
-    return res.json({ success: true, timezone, ...buildWorkingHoursOverview({ employees, policies, attendance, logs, date, start, end, now }) });
+    const teamById = new Map((teams || []).map(row => [id(row), row]));
+    const people = includeRoster ? employees.map(person => {
+      const definition = teamById.get(id(person.team));
+      return { ...person, team: definition ? { _id: definition._id, teamName: definition.teamName } : null };
+    }) : employees;
+    return res.json({ success: true, timezone, ...buildWorkingHoursOverview({ employees: people, policies, attendance, logs, date, start, end, now }),
+      ...(includeRoster ? { roster: { employees: people, teams } } : {}) });
   } catch (error) { return sendError(res, error); }
 }
 async function ensureWorkingHoursIndexes() {

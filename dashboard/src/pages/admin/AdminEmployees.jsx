@@ -1,3 +1,5 @@
+import TeamIdentity from "../../components/teams/TeamIdentity";
+import CollectionHeading from "../../components/layout/CollectionHeading";
 import ModalFrame from "../../components/layout/ModalFrame";
 import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -18,7 +20,6 @@ import {
   Search,
   Trash2,
   UserPlus,
-  UsersRound,
 } from "lucide-react";
 import useDataRefresh from "../../hooks/useDataRefresh";
 import useAuth from "../../context/useAuth";
@@ -459,37 +460,11 @@ function AdminEmployees() {
     <DashboardLayout title="Employees">
 
       {/* EMPLOYEE LIST */}
-      <section className="admin-card employees-card">
-        <div className="employees-page-heading">
-          <div className="employees-heading-copy">
-            <span className="employees-heading-icon" aria-hidden="true">
-              <UsersRound size={20} />
-            </span>
-            <div>
-            <p className="admin-eyebrow">
-              EMPLOYEE MANAGEMENT
-            </p>
-
-              <h2>Company directory</h2>
-              <p className="employees-heading-summary">
-                {totalEmployees} employee{totalEmployees === 1 ? "" : "s"} in this view
-              </p>
-            </div>
-          </div>
-
-          {canCreateEmployees && (
-            <button
-              className="add-employee-button"
-              type="button"
-              onClick={() =>
-                setShowAddEmployee(true)
-              }
-            >
-              <UserPlus size={17} aria-hidden="true" />
-              Add employee
-            </button>
-          )}
-        </div>
+      <section className="admin-card employees-card collection-panel">
+        <CollectionHeading kind="employees" title="Company directory" description="The people behind your work. Find employees, teams and account details."
+          detail={`${totalEmployees} employee${totalEmployees === 1 ? '' : 's'} in this view`}>
+          {canCreateEmployees && <button className="add-employee-button" type="button" onClick={() => setShowAddEmployee(true)}><UserPlus size={17} aria-hidden="true" />Add employee</button>}
+        </CollectionHeading>
 
         {/* SEARCH AND FILTER */}
         <div className="employees-toolbar">
@@ -623,7 +598,7 @@ function AdminEmployees() {
                       )}
                     </td>
 
-                    <td data-label="Team">{employee.team?.teamName || "—"}</td>
+                    <td data-label="Team">{employee.team?.teamName ? <TeamIdentity name={employee.team.teamName} /> : '—'}</td>
 
                     <td data-label="Project rates">
                       {employee.projectRates?.length

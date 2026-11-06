@@ -7,6 +7,8 @@ const { resolveTeamsProject } = require("../../utils/taskProjectResolution");
 const { isAdminRole } = require("../../utils/roles");
 const { userHasPermission } = require("../../services/permissionService");
 const { ownTeamIds, teamTaskMatch } = require("../../services/teamScope");
+const { buildEmployeeScope } = require('../../services/activitySelection');
+const { additionalWorkTeamIds, workProjectIds } = require('../../services/clientAccess');
 
 // Admin-level roles and HR work with every team's tasks; team leads and
 // employees given task duties work with their own team (services/teamScope.js).
@@ -184,20 +186,20 @@ const getTaskVisibility = async (user, { manage = false } = {}) => {
     // behind "has an active team" (as before) meant an employee with no
     // team, or whose team was deactivated, lost visibility into tasks
     // they were explicitly assigned to.
-    const hasActiveTeam = user.team
-      ? Boolean(await Team.exists({ _id: user.team, isActive: true }))
-      : false;
-    const teamMatch = { $or: [{ team: user.team }, { teams: user.team }] };
+    const workScope = await buildEmployeeScope(user);
     const managed = manage && canManageTasks(user) ? [teamTaskMatch(await ownTeamIds(user))] : [];
     return {
       $or: [
-        { assignedTo: user._id },
-        ...(hasActiveTeam ? [{ $and: [teamMatch, { assignToAllEmployees: true }] }] : []),
+        ...workScope.taskScope.$or,
         ...managed,
       ],
     };
   }
-  return teamTaskMatch(await ownTeamIds(user));
+  const own = teamTaskMatch(await ownTeamIds(user));
+  if (!additionalWorkTeamIds(user).length && !workProjectIds(user).length) return own;
+  const scope = await buildEmployeeScope(user);
+  const extra = scope.teamIds.filter(value => value !== String(user.team || ''));
+  return { $or: [own, ...(extra.length ? [{ $and: [teamTaskMatch(extra), { assignToAllEmployees: true }] }] : []), ...scope.projectTaskScopes] };
 };
 
 // Editing, archiving and deleting are limited to the person's own team unless

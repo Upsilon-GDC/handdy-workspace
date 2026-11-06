@@ -1,0 +1,37 @@
+﻿.client-access-page { padding: 24px; }
+.client-access-page > header { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.client-access-page p { line-height: 1.6; }
+.client-access-teams { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0; }
+.client-access-teams button { display: flex; align-items: center; gap: 8px; min-height: 48px; }
+.crm-content .client-access-page button[aria-pressed] { background: var(--surface, #fff); color: var(--text-primary, #17213b); border: 1px solid var(--border, #dce2ed); box-shadow: none; }
+.crm-content .client-access-page button[aria-pressed=true] { background: #edf2ff; color: #254edb; outline: 2px solid var(--primary, #254edb); outline-offset: 2px; }
+.client-access-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.client-access-columns > section { min-width: 0; border: 1px solid var(--border, #dce2ed); border-radius: 12px; padding: 20px; }
+.client-access-editor > label { display: grid; gap: 8px; }
+.client-access-page input:not([type=checkbox]), .client-access-page select { width: 100%; min-height: 42px; box-sizing: border-box; }
+.client-access-choices { max-height: 260px; overflow: auto; margin: 16px 0; border: 1px solid var(--border, #dce2ed); border-radius: 8px; }
+.client-access-choices label { display: flex; align-items: center; gap: 10px; padding: 12px; border-bottom: 1px solid var(--border, #dce2ed); }
+.client-access-choices input[type=checkbox] { flex: 0 0 auto; width: 18px; height: 18px; }
+.client-access-page small { display: block; margin-top: 4px; opacity: .75; }
+.client-access-member-list { max-height: 210px; overflow: auto; margin: 16px 0; display: grid; gap: 8px; padding: 3px; }
+.crm-content .client-access-member-list button { display: block; text-align: left; padding: 12px; }
+.client-access-members h3 { display: flex; gap: 8px; align-items: center; }
+.client-access-help { font-size: .875rem; }
+.client-access-page [role=alert] { color: #a52626; }
+@media (max-width: 760px) {
+  .client-access-columns { grid-template-columns: 1fr; }
+  .client-access-page { padding: 16px; }
+  .client-access-teams button { flex: 1 1 160px; }
+  .client-access-page > header { flex-wrap: wrap; }
+}
+.client-access-selection { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 16px 0; }
+.client-access-selection span { font-size: .875rem; }
+.client-access-member-list label { display: flex; align-items: center; gap: 12px; border: 1px solid var(--border, #dce2ed); border-radius: 8px; padding: 12px; cursor: pointer; }
+.client-access-member-list label.is-selected { background: #edf2ff; border-color: #254edb; }
+.client-access-member-list input { flex: 0 0 18px; height: 18px; }
+.client-access-history { border-top: 1px solid var(--border, #dce2ed); margin-top: 28px; padding-top: 20px; }
+.client-access-history-table { max-width: 100%; overflow: auto; }
+.client-access-history table { width: 100%; border-collapse: collapse; text-align: left; }
+.client-access-history :is(td,th) { padding: 12px; vertical-align: top; border-bottom: 1px solid var(--border, #dce2ed); }
+.client-access-history summary { cursor: pointer; }
+.client-access-history-pages { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; }

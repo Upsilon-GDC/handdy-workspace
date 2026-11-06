@@ -4,8 +4,11 @@ import { Building2, CalendarDays, ChevronLeft, ClipboardList, Clock3, LayoutDash
 import useAuth from "../../context/useAuth";
 import { navigationForRole, dutyNavigationFor } from "./workspaceNavigation";
 import { decideLoginRequest, getPendingLoginRequest } from "../../api/authApi";
+import { monitorLoginRequests } from "../../utils/backgroundRetry";
 
 const icons = { Workspace: LayoutDashboard, "Task linking": Link2, "Entry management": ClipboardList, "Time & attendance": Clock3, Finance: WalletCards, System: Settings2 };
+// Accent colour for each navigation group's icon chip (styled in workspace.css).
+const groupTones = { Workspace: "blue", "Task linking": "violet", "Entry management": "pink", "Time & attendance": "teal", Finance: "amber", System: "slate" };
 
 export default function AppShell({ children }) {
   const { user, isAuthenticated, isAuthLoading, logout, clearAuth, hasPermission } = useAuth();
@@ -28,27 +31,14 @@ export default function AppShell({ children }) {
   }, [mobileOpen]);
   useEffect(() => {
     if (!isAuthenticated || isAuthLoading || pendingLoginRequest) return undefined;
-    let active = true;
     const controller = new AbortController();
-    const monitor = async () => {
-      while (active) {
-        try {
-          const response = await getPendingLoginRequest(controller.signal);
-          if (active && response?.loginRequest) {
-            setPendingLoginRequest(response.loginRequest);
-            return;
-          }
-          // Hidden tabs only need revocation detection, not a fast re-poll.
-          await new Promise((resolve) => setTimeout(resolve, document.visibilityState === "hidden" ? 15000 : 1000));
-        } catch (error) {
-          if (!active || controller.signal.aborted) return;
-          if ([401, 403].includes(error?.response?.status)) return;
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-        }
-      }
-    };
-    void monitor();
-    return () => { active = false; controller.abort(); };
+    void monitorLoginRequests({
+      signal: controller.signal,
+      read: getPendingLoginRequest,
+      onRequest: setPendingLoginRequest,
+      hidden: () => document.visibilityState === "hidden",
+    });
+    return () => controller.abort();
   }, [isAuthenticated, isAuthLoading, pendingLoginRequest]);
   if (!isAuthenticated || isAuthLoading || /login|password/.test(location.pathname)) return children;
 
@@ -115,7 +105,7 @@ export default function AppShell({ children }) {
         <nav>
           {groups.map((group) => {
             const Icon = icons[group] || ClipboardList;
-            return <details key={group} aria-label={group} open={group === "Workspace" || group === "Time & attendance" || current?.group === group}>
+            return <details key={group} aria-label={group} data-tone={groupTones[group]} open={group === "Workspace" || group === "Time & attendance" || current?.group === group}>
               <summary title={group === "Time & attendance" ? "Time & reports" : group}><Icon size={15} /><span>{group === "Time & attendance" ? "Time & reports" : group}</span></summary>
               {navigation.filter((item) => item.group === group).map((item) => <NavLink key={item.path} to={item.path} end title={item.title} onClick={closeNavigation}><span className="crm-nav-dash" /><span>{item.title}</span></NavLink>)}
             </details>;

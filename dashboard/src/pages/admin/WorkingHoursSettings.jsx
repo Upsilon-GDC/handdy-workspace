@@ -1,5 +1,6 @@
+import { TeamLogo } from "../../components/teams/TeamIdentity";
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { RefreshCw, Search, Clock3, Users, ArrowRight, ArrowLeft } from 'lucide-react';
+import { RefreshCw, Search, Clock3, ArrowRight, ArrowLeft } from 'lucide-react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import useAuth from '../../context/useAuth';
 import axiosInstance from '../../api/axiosInstance';
@@ -64,11 +65,11 @@ function SettingsEditor() {
       {loading && <p role="status">Loading teams…</p>}
       {!loading && <div className="wh-settings-team-grid">{teams.map(([key, name]) => {
         const members = employees.filter(employee => (employee.team?._id || 'unassigned') === key);
-        return <button type="button" className="card wh-settings-team-card" data-working-hours-team={key} key={key} onClick={() => chooseTeam(key)}><span className="wh-settings-team-icon"><Users size={21} /></span><span><strong>{name}</strong><small>{members.length} {members.length === 1 ? 'employee' : 'employees'} · {members.filter(employee => employee.policy).length} configured</small></span><ArrowRight size={18} /></button>;
+        return <button type="button" className="card wh-settings-team-card" data-working-hours-team={key} key={key} onClick={() => chooseTeam(key)}><TeamLogo name={name} /><span><strong>{name}</strong><small>{members.length} {members.length === 1 ? 'employee' : 'employees'} · {members.filter(employee => employee.policy).length} configured</small></span><ArrowRight size={18} /></button>;
       })}</div>}
       {!loading && !teams.length && <div className="card wh-empty"><p>No employees are available.</p><button type="button" onClick={load}>Refresh teams</button></div>}
     </section> : <>
-    <div className="wh-chosen-team"><button type="button" disabled={busy} onClick={() => chooseTeam('')}><ArrowLeft size={15} />Change team</button><strong><Users size={17} />{teamName || 'Selected team'}</strong><span>{teamMembers.length} employees</span></div>
+    <div className="wh-chosen-team"><button type="button" disabled={busy} onClick={() => chooseTeam('')}><ArrowLeft size={15} />Change team</button><strong><TeamLogo name={teamName} small />{teamName || 'Selected team'}</strong><span>{teamMembers.length} employees</span></div>
     <section className="card wh-action-panel" aria-label="Working hours controls">
       <header className="wh-action-heading"><div className="wh-mode-tabs" role="group" aria-label="Working hours action"><button type="button" aria-pressed={mode === 'hours'} disabled={busy} onClick={openAssignment}><Clock3 size={16} />Working hours</button><button type="button" aria-pressed={mode === 'exception'} disabled={busy} onClick={() => setMode('exception')}>Daily exception</button></div><strong className="wh-selected-count" aria-live="polite">{selected.length} {selected.length === 1 ? 'employee' : 'employees'} selected</strong></header>
       <div className="wh-assignment-choice" role="group" aria-label="Assign to team or employees"><span>Assign to</span><button type="button" disabled={busy || loading || !ready} onClick={() => { setSelected(teamMembers.map(employee => employee._id)); setMessage(''); }}>Whole team ({teamMembers.length})</button><button type="button" disabled={busy || loading} onClick={() => { setSelected([]); setMessage(''); }}>Choose employees</button></div>

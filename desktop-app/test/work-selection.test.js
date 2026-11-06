@@ -31,6 +31,29 @@ class FakeSelect {
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
+test('Software keeps only its linked Upsilon client when an activity response contains the full catalog', async () => {
+  const h = harness();
+  h.state.projects[0] = { _id: 'p1', projectName: 'Software', clients: [{ _id: 'client-b' }] };
+  h.state.clients[1].clientName = 'Upsilon';
+  h.state.activityResponse = { mappingEnabled: false, clients: h.state.clients, tasks: h.state.tasks.p1 };
+  await h.context.loadClients(); await h.context.loadProjects(); await h.project.choose('p1');
+  assert.deepEqual(h.client.options.map(option => option.value), ['', 'client-b']);
+  assert.equal(h.client.value, 'client-b');
+  await h.context.refreshDesktopData();
+  assert.deepEqual(h.client.options.map(option => option.value), ['', 'client-b']);
+});
+
+test('refreshing project links narrows a previously shared activity catalog before task refresh completes', async () => {
+  const h = harness();
+  h.state.activityResponse = { mappingEnabled: false, clients: h.state.clients, tasks: h.state.tasks.p1 };
+  await h.context.loadClients(); await h.context.loadProjects(); await h.project.choose('p1');
+  await h.client.choose('client-a');
+  h.state.projects[0].clients = ['client-b'];
+  await h.context.loadProjects();
+  assert.deepEqual(h.client.options.map(option => option.value), ['', 'client-b']);
+  assert.equal(h.client.value, 'client-b');
+});
+
 test('mapped desktop clients filter tasks by exact client and clear the prior task on client switch', async () => {
   const h = harness();
   h.state.activityResponse = { mappingEnabled: true, clients: [
@@ -130,13 +153,14 @@ test('startup does not guess a missing client or between duplicate No Project re
   assert.equal(await h.context.applyStartupActivitySelection(), false);
 });
 
-function harness({ role = "employee" } = {}) {
+function harness({ role = "employee", clock } = {}) {
   const intervals = new Map();
   let intervalId = 0;
   const nodes = new Map([["projectSelect", new FakeSelect()], ["clientSelect", new FakeSelect()], ["taskSelect", new FakeSelect()]]);
   const values = new Map([["token", "test-only"]]);
   const localStorage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: (key) => values.delete(key) };
   const state = {
+    requests: [],
     projects: [{ _id: "p1", projectName: "Tax Preparation", clientName: "KCPA" }, { _id: "p2", projectName: "Audit", clientName: "Renau" }],
     clients: [
       { _id: "client-a", clientName: "Alpha", status: "Active" },
@@ -165,7 +189,10 @@ function harness({ role = "employee" } = {}) {
   };
   const context = vm.createContext({
     console: { ...console, log() {}, trace() {}, debug() {}, warn() {} },
-    AbortSignal, Date, Intl, JSON, localStorage, sessionStorage: localStorage,
+    AbortSignal, Date: clock ? class extends Date {
+      constructor(...args) { super(...(args.length ? args : [clock.now])); }
+      static now() { return clock.now; }
+    } : Date, Intl, JSON, localStorage, sessionStorage: localStorage,
     setInterval: (callback, delay) => { intervals.set(++intervalId, { callback, delay }); return intervalId; },
     clearInterval: id => intervals.delete(id), setTimeout, Option: FakeOption,
     document: {
@@ -179,6 +206,7 @@ function harness({ role = "employee" } = {}) {
     },
     window: { electronAPI: {}, location: { replace() {} }, addEventListener() {} },
     fetch: async (url, options = {}) => {
+      state.requests.push({ url, options });
       const json = (body, ok = true) => ({ ok, status: ok ? 200 : 500, json: async () => body });
       if (url.includes('/activity-options')) {
         if (state.activityFailure) return { ok: false, status: 500, json: async () => ({ message: 'Unavailable' }) };
@@ -233,7 +261,8 @@ function harness({ role = "employee" } = {}) {
         return json({ timeLogs: [] });
       }
       if (url.includes("/time-logs/active")) state.activeRequests += 1;
-      if (url.includes("/auth/me")) return json({ user: { _id: "test-user", fullName: "Test Employee", role } });
+      if (url.includes('/time-logs/history')) return json(typeof state.historyResponse === 'function' ? state.historyResponse(new URL(url)) : { timeLogs: [] }, !state.historyFailure);
+      if (url.includes("/auth/me")) return json({ user: { _id: "test-user", fullName: "Test Employee", role } }, !state.profileFailure);
       return json({ timeLogs: [] });
     },
   });
@@ -610,6 +639,150 @@ async function readyToStart(h) {
   await h.client.choose("client-b");
   await h.task.choose('t1');
 }
+
+const requestCount = (h, path) => h.state.requests.filter(row => new URL(row.url).pathname.endsWith(path)).length;
+test('profile and timesheet background requests run at five-minute intervals despite focus refreshes', async () => {
+  const clock = { now: +new Date('2026-11-06T06:00:00Z') }, h = harness({ clock });
+  h.run('currentTimeLog = { _id: "active", status: "running" }; document.visibilityState = "visible";');
+  await h.context.refreshDesktopData();
+  for (let n = 0; n < 9; n++) { clock.now += 30_000; await h.context.refreshDesktopData(); }
+  assert.equal(requestCount(h, '/auth/me'), 1);
+  assert.equal(requestCount(h, '/time-logs/history'), 1);
+  clock.now += 30_000; await h.context.refreshDesktopData();
+  assert.equal(requestCount(h, '/auth/me'), 2);
+  assert.equal(requestCount(h, '/time-logs/history'), 2);
+  h.context.startTimerHeartbeat();
+  assert.equal([...h.intervals.values()].find(row => row.delay === 20_000)?.delay, 20_000);
+});
+
+test('hidden windows skip all metadata downloads and resume when visible', async () => {
+  const clock = { now: +new Date('2026-11-06T06:00:00Z') }, h = harness({ clock });
+  h.run('currentTimeLog = { _id: "active" }; document.visibilityState = "hidden";');
+  h.state.profileFailure = true;
+  await h.context.refreshDesktopData(); clock.now += 30_000; await h.context.refreshDesktopData();
+  assert.equal(h.state.requests.length, 0);
+  assert.equal(requestCount(h, '/time-logs/history'), 0);
+  h.state.profileFailure = false; await h.context.refreshDesktopData();
+  h.run('document.visibilityState = "visible";'); await h.context.refreshDesktopData();
+  assert.equal(requestCount(h, '/auth/me'), 1);
+  assert.equal(requestCount(h, '/time-logs/history'), 1);
+});
+
+test('background failures back off to five minutes; reconnect and a new session reset the delay', async () => {
+  const clock = { now: +new Date('2026-11-06T06:00:00Z') }, h = harness({ clock });
+  h.state.profileFailure = true;
+  for (const delay of [30000, 60000, 120000, 240000, 300000, 300000]) {
+    const before = requestCount(h, '/auth/me');
+    await Promise.all([h.context.refreshDesktopData(), h.context.refreshDesktopData()]);
+    assert.equal(requestCount(h, '/auth/me'), before + 1);
+    assert.equal(requestCount(h, '/time-logs/history'), 0, 'failure stops downstream fan-out');
+    clock.now += delay - 1;
+    await h.context.refreshDesktopData();
+    assert.equal(requestCount(h, '/auth/me'), before + 1);
+    clock.now++;
+  }
+  h.state.profileFailure = false;
+  await h.context.reconnectDesktopData();
+  assert.equal(requestCount(h, '/time-logs/history'), 1);
+  h.run('localStorage.setItem("token", "new-session"); currentTimeLog = { _id: "active" };');
+  await h.context.refreshDesktopData();
+  assert.equal(requestCount(h, '/time-logs/history'), 2);
+});
+
+test('minimizing during a refresh prevents later catalog requests; heartbeats continue while hidden', async () => {
+  const h = harness(); let release;
+  h.state.clientPending = new Promise(resolve => { release = resolve; });
+  const pending = h.context.refreshDesktopData();
+  await flush();
+  assert.equal(h.state.clientRequests.length, 1);
+  h.run('document.visibilityState = "hidden";');
+  release(); await pending;
+  assert.equal(requestCount(h, '/projects'), 0);
+  h.run('currentTimeLog = { _id: "active", desktopHeartbeatAt: "2026-11-06T06:00:00Z" };');
+  h.context.startTimerHeartbeat();
+  await [...h.intervals.values()].find(row => row.delay === 20000).callback();
+  assert.equal(requestCount(h, '/time-logs/heartbeat'), 1);
+});
+
+test('history and catalog failures back off, while explicit timesheet refresh bypasses the delay', async () => {
+  const clock = { now: +new Date('2026-11-06T06:00:00Z') }, h = harness({ clock });
+  h.state.historyFailure = true;
+  await h.context.refreshDesktopData();
+  await h.context.refreshDesktopData();
+  assert.equal(requestCount(h, '/time-logs/history'), 1);
+  assert.equal(h.state.clientRequests.length, 0);
+  h.state.historyFailure = false;
+  await h.context.loadTodayTimesheet();
+  assert.equal(requestCount(h, '/time-logs/history'), 2);
+  h.state.clientFailure = true;
+  clock.now += 30000;
+  await h.context.refreshDesktopData();
+  await h.context.refreshDesktopData();
+  assert.equal(h.state.clientRequests.length, 1);
+  h.state.clientFailure = false;
+  await h.context.reconnectDesktopData();
+  assert.equal(h.state.clientRequests.length, 2);
+  assert.equal(h.run('backgroundRetry.failures'), 0);
+});
+
+test('failed timesheets retry promptly and manual refresh bypasses a recent successful refresh', async () => {
+  const clock = { now: +new Date('2026-11-06T06:00:00Z') }, h = harness({ clock });
+  h.state.historyFailure = true;
+  await h.context.loadTodayTimesheet({ background: true });
+  h.state.historyFailure = false;
+  await h.context.loadTodayTimesheet({ background: true });
+  await h.context.loadTodayTimesheet({ background: true });
+  assert.equal(requestCount(h, '/time-logs/history'), 2);
+  await h.context.loadTodayTimesheet({ force: true });
+  assert.equal(requestCount(h, '/time-logs/history'), 3);
+});
+
+test('timer Start and Stop update the timesheet immediately even inside the five-minute budget', async () => {
+  const h = harness(); await readyToStart(h);
+  await h.context.loadTodayTimesheet({ background: true });
+  const before = requestCount(h, '/time-logs/history');
+  await h.context.startTimer();
+  assert.ok(requestCount(h, '/time-logs/history') > before);
+  const afterStart = requestCount(h, '/time-logs/history');
+  await h.context.stopTimer();
+  assert.ok(requestCount(h, '/time-logs/history') > afterStart);
+});
+
+test('midnight bypasses a recent timesheet budget and a new token cannot reuse old refresh budgets', async () => {
+  const clock = { now: +new Date(2026, 10, 6, 23, 59, 30) }, h = harness({ clock });
+  h.run('currentTimeLog = { _id: "active" };');
+  await h.context.refreshDesktopData();
+  clock.now += 60_000; await h.context.refreshDesktopData();
+  assert.equal(requestCount(h, '/time-logs/history'), 2);
+  h.run('localStorage.setItem("token", "new-session");');
+  await h.context.refreshDesktopData();
+  assert.equal(requestCount(h, '/auth/me'), 2);
+  assert.equal(requestCount(h, '/time-logs/history'), 3);
+});
+
+test('five-minute desktop polls use verified deltas and retain the hourly full reconciliation', async () => {
+  const clock = { now: +new Date('2026-11-06T06:00:00Z') }, h = harness({ clock });
+  const sync = { since: '2026-11-06T06:00:00.000Z', scope: 'same', references: 'same' };
+  h.state.historyResponse = url => ({ timeLogs: [], sync, ...(url.searchParams.has('syncSince') ? { delta: true, checksum: { count: 0, seconds: 0, activeIds: [] } } : {}) });
+  for (let n = 0; n <= 12; n++) {
+    await h.context.loadTodayTimesheet({ background: true });
+    clock.now += 5 * 60_000;
+  }
+  const requests = h.state.requests.filter(row => row.url.includes('/time-logs/history')).map(row => new URL(row.url));
+  assert.equal(requests.length, 13);
+  assert.equal(requests.filter(url => !url.searchParams.has('syncSince')).length, 2);
+  assert.ok(requests.every(url => url.searchParams.get('checksum') === 'true'));
+});
+
+test('older servers without checksums still receive bounded full timesheet reconciliations', async () => {
+  const clock = { now: +new Date('2026-11-06T06:00:00Z') }, h = harness({ clock });
+  const sync = { since: '2026-11-06T06:00:00.000Z', scope: 'same', references: 'same' };
+  h.state.historyResponse = url => ({ timeLogs: [], sync, ...(url.searchParams.has('syncSince') ? { delta: true } : {}) });
+  for (let n = 0; n < 3; n++) { await h.context.loadTodayTimesheet({ background: true }); clock.now += 5 * 60_000; }
+  const requests = h.state.requests.filter(row => row.url.includes('/time-logs/history')).map(row => new URL(row.url));
+  assert.equal(requests[1].searchParams.has('syncSince'), true);
+  assert.equal(requests[2].searchParams.has('syncSince'), false);
+});
 
 test("a start retried after a lost response reuses its operation ID; the next start gets a new one", async () => {
   const h = harness();
