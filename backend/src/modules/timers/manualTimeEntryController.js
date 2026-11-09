@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const crypto = require('node:crypto');
+const { withEmployeeTimeWrite } = require('../../services/timeEntryWrites');
 const TaskTimeLog = require("../../models/TaskTimeLog");
 const Project = require("../../models/Project");
 const Task = require("../../models/Task");
@@ -148,10 +150,14 @@ const getManualEntryOptions = async (req, res) => {
 };
 
 // POST /api/time-logs/manual
-const createManualEntry = async (req, res) => {
+const createManualEntry = async (req, res) => withEmployeeTimeWrite(req.body?.employee, async () => {
   try {
     const { value, error } = validateManualEntryInput(req.body);
     if (error) return res.status(400).json({ success: false, message: error });
+    const operationId = req.body?.operationId;
+    if (operationId !== undefined && (typeof operationId !== 'string' || !/^[A-Za-z0-9_-]{8,100}$/.test(operationId))) {
+      return res.status(400).json({ success: false, message: 'Invalid operation ID.' });
+    }
 
     const employee = await loadTargetEmployee(value.employee);
     if (!employee || !employee.isActive) {
@@ -159,6 +165,16 @@ const createManualEntry = async (req, res) => {
     }
     if (!await canActOnEmployee(req.user, employee)) {
       return res.status(403).json({ success: false, message: "You cannot add entries for this employee." });
+    }
+
+    const requestHash = crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
+    if (operationId) {
+      const previous = await TaskTimeLog.findOne({ employee: employee._id, 'manualEntry.createdBy': req.user._id, manualOperationId: operationId }).lean();
+      if (previous) {
+        if (previous.manualRequestHash !== requestHash) return res.status(409).json({ success: false, code: 'OPERATION_ID_REUSED', message: 'This request ID was already used for a different entry.' });
+        if (previous.manualEntry?.deletedAt) return res.status(409).json({ success: false, code: 'ENTRY_DELETED', message: 'This entry was already created and later deleted. Refresh before adding another entry.' });
+        return res.status(200).json({ success: true, replayed: true, message: 'Manual entry already added.', timeLog: await populateManualEntry(previous._id) });
+      }
     }
 
     const scope = await buildEmployeeScope(employee, { projectId: value.project });
@@ -217,6 +233,7 @@ const createManualEntry = async (req, res) => {
       note: `Manual entry: ${value.reason}`.slice(0, 2000),
       entrySource: "manual",
       manualEntry: { createdBy: req.user._id, createdAt, reason: value.reason },
+      ...(operationId ? { manualOperationId: operationId, manualRequestHash: requestHash } : {}),
     });
     await recordAttendanceActivity(employee._id, value.startedAt);
 
@@ -224,7 +241,15 @@ const createManualEntry = async (req, res) => {
       log: String(timeLog._id), employee: String(employee._id), by: String(req.user._id), seconds: value.seconds,
     }));
 
-    const populated = await TaskTimeLog.findById(timeLog._id)
+    const populated = await populateManualEntry(timeLog._id);
+
+    return res.status(201).json({ success: true, message: "Manual entry added.", timeLog: populated });
+  } catch (error) {
+    return sendErrorResponse(res, error, "Unable to add the manual entry.");
+  }
+});
+
+const populateManualEntry = timeLogId => TaskTimeLog.findById(timeLogId)
       .populate({
         path: "project",
         select: "projectCode projectName serviceType clientName client clients",
@@ -235,12 +260,6 @@ const createManualEntry = async (req, res) => {
       .populate("employee", "employeeId fullName email department designation")
       .lean();
 
-    return res.status(201).json({ success: true, message: "Manual entry added.", timeLog: populated });
-  } catch (error) {
-    return sendErrorResponse(res, error, "Unable to add the manual entry.");
-  }
-};
-
 // DELETE /api/time-logs/manual/:id. Retain the entry and its authorship as an
 // audit record, but remove its hours from reports and billing. Timer records
 // can never be deleted through this endpoint.
@@ -250,7 +269,7 @@ const deleteManualEntry = async (req, res) => {
       return res.status(400).json({ success: false, message: "Select a valid manual entry." });
     }
     const entry = await TaskTimeLog.findOne({ _id: req.params.id, entrySource: "manual", "manualEntry.deletedAt": null })
-      .select("employee status isActiveTimer startedAt").lean();
+      .select("employee status isActiveTimer startedAt updatedAt").lean();
     if (!entry) return res.status(404).json({ success: false, message: "Manual entry not found." });
     const employee = await loadTargetEmployee(toId(entry.employee));
     if (!employee || !await canActOnEmployee(req.user, employee)) {
@@ -259,15 +278,18 @@ const deleteManualEntry = async (req, res) => {
     if (entry.status !== "stopped" || entry.isActiveTimer) {
       return res.status(409).json({ success: false, message: "Only completed manual entries can be deleted." });
     }
-    const deleted = await TaskTimeLog.findOneAndUpdate({
-      _id: entry._id, employee: employee._id, entrySource: "manual", status: "stopped", isActiveTimer: false,
-      "manualEntry.deletedAt": null,
-    }, { $set: { "manualEntry.deletedAt": new Date(), "manualEntry.deletedBy": req.user._id } },
-    { returnDocument: "after", projection: { _id: 1 } });
-    if (!deleted) return res.status(409).json({ success: false, message: "This manual entry has already changed. Refresh the report." });
-    await recordAttendanceActivity(employee._id, entry.startedAt);
-    console.info("[manual-entry] deleted", JSON.stringify({ log: toId(deleted), employee: toId(employee), by: toId(req.user) }));
-    return res.status(200).json({ success: true, message: "Manual entry deleted.", timeLogId: deleted._id });
+    return await withEmployeeTimeWrite(employee._id, async () => {
+      const deleted = await TaskTimeLog.findOneAndUpdate({
+        _id: entry._id, employee: employee._id, entrySource: "manual", status: "stopped", isActiveTimer: false,
+        "manualEntry.deletedAt": null,
+        updatedAt: entry.updatedAt,
+      }, { $set: { "manualEntry.deletedAt": new Date(), "manualEntry.deletedBy": req.user._id } },
+      { returnDocument: "after", projection: { _id: 1 } });
+      if (!deleted) return res.status(409).json({ success: false, message: "This manual entry has already changed. Refresh the report." });
+      await recordAttendanceActivity(employee._id, entry.startedAt);
+      console.info("[manual-entry] deleted", JSON.stringify({ log: toId(deleted), employee: toId(employee), by: toId(req.user) }));
+      return res.status(200).json({ success: true, message: "Manual entry deleted.", timeLogId: deleted._id });
+    });
   } catch (error) {
     return sendErrorResponse(res, error, "Unable to delete the manual entry.");
   }
@@ -280,4 +302,11 @@ module.exports = {
   deleteManualEntry,
   getManualEntryOptions,
   validateManualEntryInput,
+  ensureManualEntryIndexes: async () => {
+    await TaskTimeLog.createCollection();
+    await TaskTimeLog.collection.createIndex(
+      { employee: 1, 'manualEntry.createdBy': 1, manualOperationId: 1 },
+      { name: 'manual_entry_operation', unique: true, partialFilterExpression: { manualOperationId: { $type: 'string' } } }
+    );
+  },
 };

@@ -1,8 +1,10 @@
 # Deploy and roll back
 
 Two separate routes: **server + dashboard** go live on Render when code reaches `main`; the **desktop
-app** goes out through a GitHub Release. Always deploy the server first: new servers accept old
-desktop apps, and new desktop apps work with the old server too.
+app** goes out through a GitHub Release. Deploy the server first after the compatibility checks in
+the Phase 2/4 notes: supported clients must send timer heartbeats, and legacy attendance writes now
+return 410. Pause time writes during deployment handoff so old/new processes do not concurrently
+serve writers protected only by the Phase 3 process queue.
 
 ## Server and dashboard (Render)
 
@@ -36,14 +38,15 @@ Changing a value restarts the service; no code change needed.
 - **One fix misbehaving:** set its `OPT_…` variable to `false` instead of rolling everything back.
 - **Permanently:** revert the commit in GitHub Desktop (History → right-click → Revert) and push.
 
-No database migration is needed for these changes: new fields are optional and old records stay as
-they are, so a rollback needs no data change.
+Phase 3 adds the `manual_entry_operation` unique partial index at startup; verify it before rollout.
+Historical rows are not backfilled. A rollback can reintroduce fixed authorization/concurrency bugs
+and the legacy attendance write path; review compatibility and pause writers before rollback.
 
 ## Desktop app (GitHub Releases)
 
 1. In `desktop-app/package.json` raise `version` (e.g. `2.0.1` → `2.0.2`); it must be higher than
    the last release.
-2. `cd desktop-app`, then `npm test`, then `npm run build`.
+2. `cd desktop-app`, then `npm test`, then `npm run build:signed` with the publisher certificate configured. Unsigned local builds are not approved release artifacts.
 3. GitHub → **Releases** → **Draft a new release** → tag `v2.0.2` on `main` → title `CRM 2.0.2` →
    attach the 3 files from `desktop-app/dist`: `CRM-2.0.2-Windows-x64.exe`,
    `CRM-2.0.2-Windows-x64.exe.blockmap`, `latest.yml` → **Publish release** (not draft).
@@ -63,17 +66,29 @@ normal auto-update.
 
 With a Windows code-signing certificate (OV or EV, from a certificate authority):
 
-1. In the terminal used for building only: set `CSC_LINK` (path to the `.pfx`) and
-   `CSC_KEY_PASSWORD`. Never store them in the repository.
+1. In the terminal used for building only: set `CSC_LINK` (path to the `.pfx`),
+   `CSC_KEY_PASSWORD`, and `CRM_PUBLISHER_NAME` (the exact publisher name on that certificate).
+   Never store certificate credentials in the repository. No certificate was provisioned by Phase 6.
 2. Build with `npm run build:signed` (fails if signing does not work), or use `npm run publish` with
    `GH_TOKEN` to create a signed draft release.
-3. After the first signed release, sign **every** release with the same certificate.
+3. Run `powershell -NoProfile -File scripts/verify-installer.ps1 -Installer dist/CRM-<version>-Windows-x64.exe`.
+   It requires a valid Windows signature and the configured publisher and outputs SHA-256. Verify
+   installer size/version/SHA-512 against `latest.yml` and its blockmap as a separate release check.
+4. After the first signed release, sign **every** release with the same publisher certificate policy.
+   Existing unsigned installations need a staging upgrade test to the first signed release.
 
-## First release after the optimization phases
+## Automated quality checks
 
-1. Push all code → Render deploys → run the checks above.
-2. Let it run a working day; look at the `[metrics]` lines and `/health`.
-3. Build and publish desktop **2.0.1** (operation IDs, list caching, permission refusal, screen lock lifts as soon as Start is pressed). Installed
-   1.2.32 apps update themselves automatically.
-4. After 2–3 working days, compare Render's daily bandwidth with the October numbers
-   (`docs/OPTIMIZATION_FINAL_REPORT.md`).
+`.github/workflows/quality.yml` adds backend unit/integration recovery tests and dashboard tests,
+lint, route audit and build on Linux, plus the desktop suite on Windows. It requests read-only
+repository permissions and does not deploy, publish or use signing secrets. The workflow has been
+prepared locally; GitHub execution and branch-protection required checks must be verified/configured
+after an authorized push. CI success does not itself approve a production recovery or release.
+
+## Release after the readiness phases
+
+1. Finish Phase 7 verification and review the phase-specific compatibility/recovery notes before an authorized push or rollout.
+2. Confirm CI on GitHub and configure required checks; local workflow creation does not enable branch protection.
+3. During the authorized backend deployment, pause time writers across handoff, verify startup indexes, then check health, permissions, live timers, attendance and reports in staging/production as appropriate.
+4. For the desktop release, choose a stable version higher than the current public version. Build and verify the signed artifact set, including a staging upgrade from the previously installed unsigned client.
+5. Publish/distribute only after the release has been reviewed and authorized. Monitor application errors and comparable traffic metrics after rollout. No push, deployment, publication or employee installation was performed by the local readiness phases.

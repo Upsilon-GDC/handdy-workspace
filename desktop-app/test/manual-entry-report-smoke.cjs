@@ -32,6 +32,8 @@ const makeLog = (id, employee, projectIndex = 0) => ({ _id: id, employee,
   status: "stopped", isActiveTimer: false, totalWorkedSeconds: 3600, totalIdleSeconds: 0, pauses: [], entrySource: "timer" });
 let logs = [...people.map((person, index) => makeLog(`timer-${index}`, person)), makeLog("timer-second", people[0], 1)];
 let createdPayload;
+const manualRequests = [];
+let loseFirstManualResponse = true;
 let deleteCalls = 0;
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://localhost");
@@ -63,11 +65,19 @@ const server = http.createServer((req, res) => {
     };
     if (endpoint === "/time-logs/manual" && req.method === "POST") {
       createdPayload = JSON.parse(input);
+      manualRequests.push(createdPayload);
+      const previous = logs.find(log => log.manualOperationId === createdPayload.operationId && log.employee._id === createdPayload.employee);
       const log = { ...makeLog("64b000000000000000000b01", people.find((person) => person._id === createdPayload.employee)),
         startedAt: createdPayload.startedAt, stoppedAt: createdPayload.stoppedAt, totalWorkedSeconds: 1800,
+        manualOperationId: createdPayload.operationId,
         entrySource: "manual", manualEntry: { reason: createdPayload.reason, createdBy: actor._id } };
-      logs.push(log);
-      body = { success: true, timeLog: log };
+      if (!previous) logs.push(log);
+      body = { success: true, replayed: Boolean(previous), timeLog: previous || log };
+      if (loseFirstManualResponse) {
+        loseFirstManualResponse = false;
+        res.statusCode = 500;
+        body = { success: false, message: 'Synthetic response failure after saving.' };
+      }
     }
     if (endpoint.startsWith("/time-logs/manual/") && req.method === "DELETE") {
       deleteCalls += 1;
@@ -151,7 +161,15 @@ app.whenReady().then(async () => {
     await clickText("Review entry");
     await until("document.body.textContent.includes('Confirm and save')");
     await clickText("Confirm and save");
+    await until("document.body.textContent.includes('The server could not complete the request.') && !!document.querySelector('#entry-reason')");
+    await clickText('Review entry');
+    await until("document.body.textContent.includes('Confirm and save')");
+    await clickText('Confirm and save');
     await until("!document.querySelector('[role=dialog]') && document.body.textContent.includes('Manual entries (1)')");
+    assert.equal(manualRequests.length, 2, 'lost response offers a retry');
+    assert.match(manualRequests[0].operationId, /^[A-Za-z0-9_-]{8,100}$/);
+    assert.equal(manualRequests[0].operationId, manualRequests[1].operationId, 'retry reuses the original operation ID');
+    assert.equal(logs.filter(log => log.entrySource === 'manual').length, 1, 'retry does not duplicate the saved entry');
     assert.equal(createdPayload.employee, people[0]._id);
     assert.equal(createdPayload.project, "p1");
     assert.equal(createdPayload.task, "t1");

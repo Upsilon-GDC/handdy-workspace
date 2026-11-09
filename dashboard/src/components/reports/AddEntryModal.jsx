@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import ModalFrame from "../layout/ModalFrame";
 import SearchableSelect from "./SearchableSelect";
@@ -25,6 +25,8 @@ export default function AddEntryModal({ employee, onClose, onSaved }) {
   const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const pendingSave = useRef(null);
+  const saveInFlight = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -74,16 +76,23 @@ export default function AddEntryModal({ employee, onClose, onSaved }) {
   };
 
   const save = async () => {
+    if (saveInFlight.current || !result.payload) return;
+    saveInFlight.current = true;
     setSaving(true);
     setSubmitError("");
     try {
-      const response = await createManualEntry(result.payload);
+      const fingerprint = JSON.stringify(result.payload);
+      if (pendingSave.current?.fingerprint !== fingerprint) {
+        pendingSave.current = { fingerprint, operationId: crypto.randomUUID() };
+      }
+      const response = await createManualEntry({ ...result.payload, operationId: pendingSave.current.operationId });
       onSaved?.(response.timeLog, form);
       onClose();
     } catch (error) {
       setConfirming(false);
       setSubmitError(getApiErrorMessage(error, "Unable to save the entry."));
     } finally {
+      saveInFlight.current = false;
       setSaving(false);
     }
   };

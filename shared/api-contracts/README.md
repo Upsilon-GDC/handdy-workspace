@@ -39,6 +39,10 @@ Body: `project`, `task`, optional `client`, `note`, `clientType: "desktop"`, **`
 
 Desktop rule: reuse an `operationId` only to retry the **same selection** after a lost or 5xx response; make a new one after any other answer.
 
+Server lease policy (9 November 2026): every newly created live timer receives a server-generated `desktopHeartbeatAt` equal to `startedAt`. Omitted or altered `clientType`, session client labels, and supplied heartbeat timestamps cannot opt out. Older requests without `clientType` or `operationId` remain accepted. All API clients that start live timers, including web-session callers, must send heartbeats to keep them running; the dashboard does not start live timers. The server does not treat a client label as proof of a native application.
+
+Existing null-heartbeat records are not backfilled or silently closed. An operation replay returns its original record without renewing it. See [Phase 2 rollout](../../docs/TIMER_LEASE_PHASE_2.md) for the required legacy-record review and client checks.
+
 ### `POST /time-logs/stop`
 Body: optional `idleSeconds` (whole seconds, max 12 h), `logoutReason: "inactivity" | "manual"`, **`operationId`**, **`timeLogId`** (desktop 2.0.1+).
 
@@ -53,6 +57,24 @@ The stop is a single conditional update: it never overwrites a stop made at the 
 
 ### `POST /time-logs/heartbeat`
 Every 20 s while a desktop timer runs. 200 `{ timeLogId }` extends the lease; 404 means the timer is gone (the server closed it at its last heartbeat after 90 s of silence). **The 20 s / 90 s / 30 s timings belong together; change none of them alone.**
+
+## Retired attendance writes
+
+From Phase 4 (9 November 2026), authenticated `POST /attendance/check-in` and `POST /attendance/check-out` return **410** `{ success: false, code: "ATTENDANCE_TIMER_MANAGED", message }`. They do not read or modify attendance or time records. Unauthenticated requests still receive 401. This is a deliberate retirement of the old successful-write contract, not an optional feature flag; clients using those writes must migrate to timer start/stop before rollout. Current dashboard/desktop screens do not call these endpoints.
+
+Attendance reads remain available under their existing permissions. Presence and checkout are derived from time entries, including authorized manual entries/corrections. Historical `source: "check_in"` rows are not rewritten by the retired endpoints. See [Phase 4 rollout](../../docs/ATTENDANCE_CONSISTENCY_PHASE_4.md) for legacy-client and open-row review.
+
+## Manual entry retries
+
+`POST /time-logs/manual` accepts optional `operationId` (8–100 characters, letters/digits/underscore/hyphen). Use one ID per submitted payload and reuse it after response loss or a 5xx failure. The server scopes it to the actor and target employee and stores the normalized original payload hash with the entry.
+
+- First save: 201 with `timeLog`.
+- Same request retried: 200 with `replayed: true` and the current saved entry, including later corrections; no insertion or overwrite.
+- Same ID with different content: 409 `OPERATION_ID_REUSED`.
+- Original entry subsequently deleted: 409 `ENTRY_DELETED`; no resurrection.
+- Malformed operation ID: 400. Omitted ID remains accepted for older clients, with overlap protection but without replay identification.
+
+Current permission and target-employee authorization still apply to replay. Manual-create identities remain on soft-deleted/corrected records. The Add Entry modal retains an ID for unchanged retry content while open and generates a new ID when the submitted content changes. Closing/reopening the modal starts a new action.
 
 ## Reports: delta sync (dashboard, desktop timesheet)
 
@@ -79,6 +101,10 @@ Answers carry `ETag` and `Cache-Control: private, no-cache`. A client that sends
 | `POST /auth/login-requests/:id/wait` | 20 s (or the request's expiry) | The decision for a waiting second PC. |
 
 The server reads MongoDB once per long-poll and again only when something changed on this server (single instance; see `render.yaml`). Clients start the next long-poll after each answer.
+
+## Login throttling
+
+Password and quick login share a 100-attempt IP budget per 15 minutes. Password login also limits normalized email to 20 attempts across IPs and IP/email pairs to 10. Quick login applies the same 20/10 limits per remembered credential and IP/credential pair; supplying an email does not replace the credential identity. The first exhausted budget returns the existing 429 JSON message with `Retry-After` in seconds. Successful attempts also consume budgets; denied attempts do not extend a fixed window. Stores are bounded and new identities can receive 429 when capacity is full. See [Phase 5 details](../../docs/LOGIN_PROTECTION_PHASE_5.md) for expiry, capacity, and the single-process limitation.
 
 ## Monitoring
 

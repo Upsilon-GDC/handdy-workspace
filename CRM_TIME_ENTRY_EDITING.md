@@ -43,7 +43,7 @@ API routes (authenticated; controller-enforced Admin/Alpha/Manager role checks):
 
 ### Concurrency scope
 
-The new editor serializes **administrative corrections** with each other. Existing legacy manual-create and desktop-start flows do not use the new employee edit lock. Their previously audited cross-writer overlap race is not solved by this increment; in particular, a concurrent new manual/start request can race the editor's overlap query. This is not a global interval-locking system across all time-log writers. Stop active work and avoid simultaneous manual creation while making historical corrections until that separate audit issue is addressed.
+As of Phase 3 (9 November 2026), administrative corrections, manual creation/deletion, and live starts/stops share a per-employee process queue in `timeEntryWrites`. The existing correction transaction and employee-document version are retained. Overlap checks run after preceding queued writes commit; touching boundaries remain valid. Lease sweeps only shorten an open interval and retain their conditional updates. This protection requires one API process, including during deployments; it does not coordinate multiple servers or direct database/script writes. See [Phase 3 implementation and rollout](docs/TIME_ENTRY_INTEGRITY_PHASE_3.md).
 
 This feature does not edit live timers, employee identity, attendance manually, task definitions or billing rates. Attendance is derived from corrected logs. Large edits are bounded to 200 segments and a 31-day entry duration; notes/reasons are bounded to 2,000/500 characters.
 

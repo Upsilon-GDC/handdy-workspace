@@ -419,7 +419,7 @@ All paths are under `/api`. "Auth" means a valid session (`protect`).
 | GET | `/time-logs/admin` | `view_all_reports` | Company-wide sessions |
 | GET | `/time-logs/live` | admin, team_lead | Timers running right now |
 | GET / POST / DELETE | `/time-logs/manual/options`, `/manual`, `/manual/:id` | `add_manual_entries` | Back-filled entries (see [6.5](#65-the-timer-engine)) |
-| POST | `/attendance/check-in`, `/attendance/check-out` | auth | Older manual check-in/out; no screen calls them (attendance is automatic) |
+| POST | `/attendance/check-in`, `/attendance/check-out` | auth | Retired: 410 `ATTENDANCE_TIMER_MANAGED`; no attendance reads or writes |
 | GET | `/attendance/today`, `/attendance/history` | auth | Own attendance |
 | GET | `/attendance/team/today`, `/team/history` | team_lead, or `view_team_timesheets` | Own team's attendance |
 | GET | `/attendance/admin/history` | admin, hr, manager, or `view_all_reports` | Company attendance |
@@ -1080,7 +1080,7 @@ an admin.
    Tasks tables show the column only when old data has it. It is kept
    read-only so historical records stay readable; nothing writes it.
 5. **Single-instance assumptions.** Rate limits, auth/catalog/permission
-   caches, the timer sweep coordination, attendance updates and the task
+   caches, the timer sweep coordination, per-employee time-write queues, attendance updates and the task
    duplicate-check queue live in process memory. `render.yaml` pins
    `numInstances: 1`. Running more than one backend instance needs a shared
    store, a database unique index for task duplicates (after cleaning existing

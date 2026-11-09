@@ -2,6 +2,7 @@ const path = require("node:path");
 const semver = require("semver");
 const { build, Platform, Arch } = require("electron-builder");
 const pkg = require("../package.json");
+const { signingConfiguration } = require('./build-signed.cjs');
 
 async function validateRelease({ packageInfo = pkg, token = process.env.GH_TOKEN, request = fetch } = {}) {
   if (!token) throw new Error("Set GH_TOKEN in this build terminal only. Never place it in application files.");
@@ -40,6 +41,7 @@ async function validateRelease({ packageInfo = pkg, token = process.env.GH_TOKEN
 }
 
 async function publish() {
+  const config = signingConfiguration();
   await validateRelease();
   // Environment overrides must not turn the requested draft into a live release.
   process.env.EP_DRAFT = "true";
@@ -48,7 +50,7 @@ async function publish() {
   await build({
     projectDir: path.resolve(__dirname, ".."),
     targets: Platform.WINDOWS.createTarget(["nsis"], Arch.x64),
-    config: { forceCodeSigning: true },
+    config,
     publish: "always",
   });
   console.log(`Draft v${pkg.version} uploaded. Review installer, blockmap and latest.yml before publishing the draft on GitHub.`);

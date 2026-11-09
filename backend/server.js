@@ -16,6 +16,7 @@ const { verifyEmailTransport } = require("./src/utils/mailer");
 const { ensureAuthSessionIndexes } = require("./src/services/authSessionService");
 const { ensureActivityMappingIndexes } = require('./src/services/activityMappings');
 const { ensureTimeEntryEditIndexes } = require('./src/modules/timers/timeEntryEditController');
+const { ensureManualEntryIndexes } = require('./src/modules/timers/manualTimeEntryController');
 const { ensureActivityLinkHistoryIndexes } = require('./src/modules/projects/activityLinkController');
 const { ensureWorkingHoursIndexes } = require('./src/modules/settings/workingHoursController');
 const { initializeClientAccess } = require('./src/services/clientAccess');
@@ -223,6 +224,7 @@ const startServer = async () => {
     await ensureAuthSessionIndexes();
     await ensureActivityMappingIndexes();
     await ensureTimeEntryEditIndexes();
+    await ensureManualEntryIndexes();
     await ensureActivityLinkHistoryIndexes();
     await ensureWorkingHoursIndexes();
     await initializeClientAccess();

@@ -22,7 +22,7 @@
     "start": "set \"ELECTRON_RUN_AS_NODE=\" && electron .",
     "build": "electron-builder --win nsis --x64 --publish never",
     "build:win": "electron-builder --win nsis --x64 --publish never",
-    "build:signed": "electron-builder --win nsis --x64 --publish never --config.forceCodeSigning=true",
+    "build:signed": "node scripts/build-signed.cjs",
     "publish": "node scripts/publish-release.cjs",
     "test:updater": "node --test --test-isolation=none test/app-updater.test.js test/release-config.test.js test/updater-close.test.js"
   },

@@ -105,6 +105,8 @@ const taskTimeLogSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Set by the server for every new live start. Null remains valid for
+    // historical records and completed manual entries; do not backfill it.
     desktopHeartbeatAt: { type: Date, default: null },
     stopReason: { type: String, enum: ["desktop_disconnected"], default: null },
 
@@ -142,6 +144,10 @@ const taskTimeLogSchema = new mongoose.Schema(
     // instead of acting twice. Absent on older records and older clients.
     startOperationId: { type: String, default: undefined },
     stopOperationId: { type: String, default: undefined },
+    // Immutable identity of a manual-create request, retained through edits
+    // and soft deletion so a lost-response retry cannot create another entry.
+    manualOperationId: { type: String, default: undefined },
+    manualRequestHash: { type: String, default: undefined },
   },
   {
     timestamps: true,
@@ -168,6 +174,10 @@ taskTimeLogSchema.index(
 );
 
 taskTimeLogSchema.index({ employee: 1, status: 1, startedAt: 1, stoppedAt: 1 });
+taskTimeLogSchema.index(
+  { employee: 1, 'manualEntry.createdBy': 1, manualOperationId: 1 },
+  { name: 'manual_entry_operation', unique: true, partialFilterExpression: { manualOperationId: { $type: 'string' } } }
+);
 taskTimeLogSchema.index({ isActiveTimer: 1, desktopHeartbeatAt: 1 });
 taskTimeLogSchema.index({ employee: 1, updatedAt: 1 });
 taskTimeLogSchema.index({ updatedAt: 1 });

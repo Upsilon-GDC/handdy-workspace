@@ -43,7 +43,22 @@ test("the live database name is read from the address so restores can refuse it"
 test("--keep removes only the oldest dated backup folders", (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "crm-backups-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  for (const name of ["2026-10-24T18-00-00Z", "2026-10-25T18-00-00Z", "2026-10-26T18-00-00Z", "notes"]) fs.mkdirSync(path.join(root, name));
+  for (const name of ["2026-10-24T18-00-00Z", "2026-10-25T18-00-00Z", "2026-10-26T18-00-00Z", "notes"]) {
+    fs.mkdirSync(path.join(root, name));
+    fs.writeFileSync(path.join(root, name, 'manifest.json'), JSON.stringify({ formatVersion: 2, complete: true }));
+  }
+  fs.mkdirSync(path.join(root, '2026-10-23T18-00-00Z')); // Incomplete exports are never pruned.
   assert.deepEqual(oldBackups(root, 2).map((folder) => path.basename(folder)), ["2026-10-24T18-00-00Z"]);
   assert.deepEqual(oldBackups(root, 5), []);
+});
+
+test('backup streams reject cursor, output and corrupt gzip failures', async t => {
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'crm-backup-errors-'));
+  t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+  async function* broken() { yield { _id: 1 }; throw Error('cursor failed'); }
+  await assert.rejects(writeCollection(broken(), path.join(folder, 'broken.gz')), /cursor failed/);
+  async function* valid() { yield { _id: 1 }; }
+  await assert.rejects(writeCollection(valid(), path.join(folder, 'missing', 'output.gz')), /ENOENT/);
+  const invalid = path.join(folder, 'invalid.gz'); fs.writeFileSync(invalid, 'not gzip');
+  await assert.rejects(async () => { for await (const _row of readCollection(invalid)) {} });
 });

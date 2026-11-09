@@ -10,6 +10,7 @@ const Team = require("../src/models/Team");
 const Client = require("../src/models/Client");
 const TaskTimeLog = require("../src/models/TaskTimeLog");
 const attendance = require("../src/modules/attendance/attendanceController");
+const attendanceRoutes = require('../src/modules/attendance/attendanceRoutes');
 const timers = require("../src/modules/timers/taskTimeLogController");
 const { protect } = require("../src/middleware/authMiddleware");
 const { clearAuthCache } = require("../src/services/authCache");
@@ -27,25 +28,33 @@ async function call(handler, body = {}) {
   return res;
 }
 
-test("legacy attendance check-in and checkout keep the same record and response contract", async (t) => {
-  t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 9, 9, 4, 0) });
-  let record;
-  let inserts = 0;
-  t.mock.method(Attendance, "findOne", () => query(record && !record.checkOut ? record : null));
-  t.mock.method(Attendance, "create", async (data) => {
-    inserts += 1;
-    record = { _id: "attendance", ...data, save: async () => {} };
-    return record;
-  });
-  const checkedIn = await call(attendance.checkIn);
-  assert.equal(checkedIn.statusCode, 201);
-  assert.equal(checkedIn.body.attendance._id, "attendance");
-  t.mock.timers.tick(3_600_000);
-  const checkedOut = await call(attendance.checkOut);
-  assert.equal(checkedOut.statusCode, 200);
-  assert.equal(checkedOut.body.attendance._id, "attendance");
-  assert.equal(record.totalHours, 1);
-  assert.equal(inserts, 1);
+test("retired attendance writes reject old-client requests without accessing records", async (t) => {
+  for (const Model of [Attendance, TaskTimeLog]) {
+    for (const method of ["findOne", "create", "updateOne", "findOneAndUpdate"]) {
+      t.mock.method(Model, method, () => assert.fail("Retired endpoints must not read or write attendance/time logs"));
+    }
+  }
+  for (const handler of [attendance.checkIn, attendance.checkOut]) {
+    const result = await call(handler, { source: "check_in", checkIn: "2026-01-01T09:00Z", checkOut: "2026-01-01T18:00Z" });
+    assert.equal(result.statusCode, 410);
+    assert.equal(result.body.success, false);
+    assert.equal(result.body.code, "ATTENDANCE_TIMER_MANAGED");
+    assert.match(result.body.message, /automatically/);
+  }
+});
+
+test('retired attendance URLs retain authentication and reject elevated callers too', async () => {
+  for (const path of ['/check-in', '/check-out']) {
+    const route = attendanceRoutes.stack.find(layer => layer.route?.path === path).route;
+    assert.equal(route.stack[0].handle, protect);
+    const unauthenticated = response();
+    await route.stack[0].handle({ headers: {} }, unauthenticated, () => assert.fail('Authentication is required'));
+    assert.equal(unauthenticated.statusCode, 401);
+    const admin = response();
+    await route.stack[1].handle({ user: { role: 'admin' } }, admin);
+    assert.equal(admin.statusCode, 410);
+    assert.equal(admin.body.code, 'ATTENDANCE_TIMER_MANAGED');
+  }
 });
 
 test("legacy timer start, manual pause, resume and stop preserve work and break history", async (t) => {
@@ -76,6 +85,7 @@ test("legacy timer start, manual pause, resume and stop preserve work and break 
     return timer;
   });
   assert.equal((await call(timers.startTimer, { project: "project", client: "client", task: "task" })).statusCode, 201);
+  assert.equal(+timer.desktopHeartbeatAt, +timer.startedAt, "legacy requests also receive a server lease");
   t.mock.timers.tick(60_000);
   assert.equal((await call(timers.pauseTimer)).statusCode, 200);
   assert.equal(timer.pauses[0].reason, "manual");

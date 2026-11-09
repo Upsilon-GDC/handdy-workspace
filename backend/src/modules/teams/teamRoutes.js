@@ -19,7 +19,8 @@ const router = express.Router();
 const catalogCache = require('../../middleware/catalogCache');
 
 // Changing a team's lead needs "assign_team_leads" on top of "edit_teams";
-// re-submitting the unchanged lead (the edit form always sends it) is allowed.
+// Older clients may submit an unchanged lead without assignment authority;
+// treat that field as a no-op, even if another assignment races this request.
 const guardTeamLeadChange = async (req, res, next) => {
   try {
     if (req.body?.teamLead === undefined || userHasPermission(req.user, "assign_team_leads")) return next();
@@ -27,7 +28,10 @@ const guardTeamLeadChange = async (req, res, next) => {
     if (!team) return next();
     const requested = req.body.teamLead ? String(req.body.teamLead) : "";
     const current = team.teamLead ? String(team.teamLead) : "";
-    if (requested === current) return next();
+    if (requested === current) {
+      delete req.body.teamLead;
+      return next();
+    }
     return res.status(403).json({ success: false, message: "You do not have permission to assign team leads." });
   } catch (error) {
     return next(error);
@@ -90,6 +94,10 @@ router.post(
   "/",
   protect,
   requirePermission("create_teams"),
+  (req, res, next) => {
+    if (!req.body?.teamLead || userHasPermission(req.user, "assign_team_leads")) return next();
+    return res.status(403).json({ success: false, message: "You do not have permission to assign team leads." });
+  },
   async (req, res) => {
     try {
       const {
