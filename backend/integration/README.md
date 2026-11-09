@@ -13,6 +13,8 @@ The runner creates a random `crm_activity_integration_*` database on a newly sta
 
 Coverage:
 
+- Server-enforced lease creation for omitted/web/desktop client metadata, heartbeat renewal, the exact 90-second expiry boundary, closure at last contact, and late-heartbeat rejection. Existing null-heartbeat records remain unchanged pending explicit rollout review.
+- Retired attendance writes cannot create presence or mutate timer-owned attendance, including requests racing live starts/stops. Historical legacy rows and overnight start-day attendance are covered.
 - Explicit index initialization and unique project/client/task tuples.
 - Ten simultaneous link saves with one accepted version and nine conflicts.
 - Eight simultaneous same-name task batches with exactly one complete batch and its mappings.
@@ -25,6 +27,8 @@ Coverage:
 
 Collection validators are installed temporarily only inside this disposable database. Model methods, sessions, queries and transaction retries are real; no mocked database methods are used. Controllers are invoked directly with fixture request/response objects, so HTTP authentication middleware is covered separately by the ordinary regression suite.
 
+`backupRecovery.cjs` starts another isolated loopback replica set and exports only synthetic collections to temporary folders. It verifies a common snapshot during concurrent writes, BSON types, restored indexes/validators, interrupted exports, corruption/path rejection, empty-target/source protection, explicit legacy-export review, and read-only domain checks. It never loads `.env` or uses the configured application URI.
+
 This establishes transaction behavior on local MongoDB, not Atlas networking, deployed credentials, multi-node failover, production index contents, or the separate manual-time overlap concurrency audit finding. Those remain deployment/pilot checks.
 
-The integration command also runs `timeEntryEditing.cjs`: administrative correction transactions, audit snapshots, old/new attendance days, stale saves, per-employee correction serialization, active/overlapping-entry rejection, rollback under real audit/attendance database validation failures, archived activity and unattributed historical entries. It starts its own disposable local replica set and never loads `.env`. See [website entry corrections](../../CRM_TIME_ENTRY_EDITING.md) for behavior and cross-writer concurrency limits.
+The integration command also runs `timeEntryEditing.cjs`: administrative correction transactions, audit snapshots, old/new attendance days, stale saves, shared per-employee time-write coordination, concurrent overlapping manual creates, durable manual-operation replay through correction/deletion, touching intervals, manual/create-versus-correction contention, live-timer protection, failure recovery, rollback under real audit/attendance database validation failures, archived activity and unattributed historical entries. It starts its own disposable local replica set and never loads `.env`. See [website entry corrections](../../CRM_TIME_ENTRY_EDITING.md) for behavior and the single-process concurrency limit.

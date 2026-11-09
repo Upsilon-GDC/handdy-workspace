@@ -19,15 +19,11 @@ const {
 const { protect } = require("../../middleware/authMiddleware");
 const { authorizeAccess } = require("../../middleware/authorizeRoles");
 const { createRateLimit } = require("../../middleware/rateLimit");
+const { createLoginRateLimits } = require('../../middleware/loginRateLimits');
 
 const router = express.Router();
 
-const loginLimiter = createRateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  message: "Too many login attempts. Please try again later.",
-  keyGenerator: (req) => `${req.ip}:${String(req.body?.email || "").trim().toLowerCase() || "unknown"}`,
-});
+const loginLimits = createLoginRateLimits();
 
 const registrationLimiter = createRateLimit({
   windowMs: 60 * 60 * 1000,
@@ -49,8 +45,8 @@ router.post(
   registrationLimiter,
   register
 );
-router.post("/login", loginLimiter, login);
-router.post("/quick-login", loginLimiter, quickLogin);
+router.post("/login", ...loginLimits.password, login);
+router.post("/quick-login", ...loginLimits.quickLogin, quickLogin);
 router.post("/login-requests/:requestId/wait", waitForLoginRequest);
 router.post("/login-requests/:requestId/cancel", cancelLoginRequest);
 

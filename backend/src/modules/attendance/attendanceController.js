@@ -22,100 +22,17 @@ async function prepareAttendanceSync(req, res, filter, includeEmployee = false) 
     return { sync, handled: true };
 }
 
-// Check in
-const checkIn = async (req, res) => {
-    try {
-        const employeeId = req.user._id;
+// These authenticated compatibility URLs no longer write attendance. New
+// presence and checkout come only from time-entry activity; a legacy request
+// must never create presence or overwrite a timer-owned day.
+const timerManagedAttendance = (_req, res) => res.status(410).json({
+    success: false,
+    code: "ATTENDANCE_TIMER_MANAGED",
+    message: "Attendance is recorded automatically from time entries. Use the timer to start and stop work.",
+});
+const checkIn = timerManagedAttendance;
+const checkOut = timerManagedAttendance;
 
-        const today = getDateKey();
-
-        const openAttendance = await Attendance.findOne({
-            employee: employeeId,
-            checkIn: { $ne: null },
-            checkOut: null,
-        }).sort({ checkIn: -1 });
-
-        if (openAttendance) {
-            return res.status(409).json({
-                success: false,
-                message: "You already have an open attendance session. Check out before checking in again.",
-            });
-        }
-
-        const existingAttendance = await Attendance.findOne({
-            employee: employeeId,
-            date: today,
-        });
-
-        if (existingAttendance) {
-            return res.status(400).json({
-                success: false,
-                message: "You have already checked in today.",
-            });
-        }
-
-        const attendance = await Attendance.create({
-            employee: employeeId,
-            date: today,
-            checkIn: new Date(),
-            status: "Present",
-        });
-
-        return res.status(201).json({
-            success: true,
-            message: "Check-in successful.",
-            attendance,
-        });
-    } catch (error) {
-        if (error.code === 11000) {
-            return res.status(409).json({
-                success: false,
-                message: "You have already checked in today.",
-            });
-        }
-        return sendErrorResponse(res, error, "Unable to check in.");
-    }
-};
-// Check out
-const checkOut = async (req, res) => {
-    try {
-        const employeeId = req.user._id;
-
-        const attendance = await Attendance.findOne({
-            employee: employeeId,
-            checkIn: { $ne: null },
-            checkOut: null,
-        }).sort({ checkIn: -1 });
-
-        if (!attendance) {
-            return res.status(400).json({
-                success: false,
-                message: "You must check in before checking out.",
-            });
-        }
-
-        const checkOutTime = new Date();
-
-        const totalMilliseconds =
-            checkOutTime.getTime() - attendance.checkIn.getTime();
-
-        const totalHours =
-            Math.round((totalMilliseconds / (1000 * 60 * 60)) * 100) / 100;
-
-        attendance.checkOut = checkOutTime;
-        attendance.totalHours = totalHours;
-
-        await attendance.save();
-
-        return res.status(200).json({
-            success: true,
-            message: "Check-out successful.",
-            attendance,
-        });
-    } catch (error) {
-        return sendErrorResponse(res, error, "Unable to check out.");
-    }
-};
 // Get today's attendance
 const getTodayAttendance = async (req, res) => {
     try {

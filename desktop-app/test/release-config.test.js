@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const pkg = require("../package.json");
 const { validateRelease } = require("../scripts/publish-release.cjs");
+const { signingConfiguration } = require('../scripts/build-signed.cjs');
 
 function requestFor({ publicRepo = true, existing = false, latest = "1.2.22", fail = false } = {}) {
   return async (url, options) => {
@@ -43,4 +44,15 @@ test("release preflight refuses missing credentials, private repositories, reuse
   await assert.rejects(validateRelease({ token: "test-only", request: requestFor({ fail: true }) }), /HTTP 503/);
   const packageInfo = { ...pkg, version: "1.2.24-beta.1" };
   await assert.rejects(validateRelease({ packageInfo, token: "test-only", request: requestFor() }), /stable semantic version/);
+});
+
+test('signed builds require explicit publisher credentials and enforce publisher verification', () => {
+  assert.throws(() => signingConfiguration({}), /CRM_PUBLISHER_NAME/);
+  assert.throws(() => signingConfiguration({ CRM_PUBLISHER_NAME: 'Example Publisher' }), /CSC_LINK/);
+  const config = signingConfiguration({ CRM_PUBLISHER_NAME: 'Example Publisher', CSC_LINK: 'test-only.pfx', CSC_KEY_PASSWORD: 'test-only' });
+  assert.equal(config.forceCodeSigning, true);
+  assert.equal(config.win.verifyUpdateCodeSignature, true);
+  assert.deepEqual(config.win.signtoolOptions.publisherName, ['Example Publisher']);
+  assert.deepEqual(config.win.signtoolOptions.signingHashAlgorithms, ['sha256']);
+  assert.doesNotMatch(JSON.stringify(config), /test-only/);
 });

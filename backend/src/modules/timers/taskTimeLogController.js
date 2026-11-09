@@ -13,6 +13,7 @@ const { closeStaleDesktopTimers, HEARTBEAT_TIMEOUT_MS } = require("../../service
 const { validateActivitySelection, buildEmployeeScope, projectAllowedForTeam } = require('../../services/activitySelection');
 const { isOn } = require("../../config/optimizations");
 const { recordAttendanceActivity } = require("../../services/attendanceService");
+const { withEmployeeTimeWrite } = require('../../services/timeEntryWrites');
 const { beginReportSync, changedTimeLogFilter, deltaRows, reportChecksum, wantsChecksum } = require("../../services/reportSync");
 const { teamMemberFilter } = require("../../services/teamScope");
 
@@ -206,7 +207,7 @@ const computeStopValues = (timer, stoppedAt, reportedIdleSeconds) => {
 };
 
 // Start Timer
-const startTimer = async (req, res) => {
+const startTimer = async (req, res) => withEmployeeTimeWrite(req.user._id, async () => {
     try {
         const employeeId = req.user._id;
         const { project, task, note, client } = req.body;
@@ -298,7 +299,9 @@ const startTimer = async (req, res) => {
             startedAt,
             status: "running",
             isActiveTimer: true,
-            desktopHeartbeatAt: req.body?.clientType === "desktop" ? startedAt : null,
+            // Every new live timer is leased. Request/session client labels
+            // are metadata, never an opt-out from heartbeat expiry.
+            desktopHeartbeatAt: startedAt,
             ...(operationId ? { startOperationId: operationId } : {}),
         });
         await recordAttendanceActivity(employeeId, startedAt);
@@ -325,7 +328,7 @@ const startTimer = async (req, res) => {
         }
         return sendErrorResponse(res, error, "Unable to start timer.");
     }
-};
+});
 // Report and history reads normally leave stale timers to the 30 s background
 // sweep (decision D1); a timer that lost its desktop may show as running for up
 // to that long, while its recorded time still ends at the last heartbeat.
@@ -537,7 +540,7 @@ const updateNote = async (req, res) => {
     }
 };
 // Stop Timer
-const stopTimer = async (req, res) => {
+const stopTimer = async (req, res) => withEmployeeTimeWrite(req.user._id, async () => {
     try {
         const employeeId = req.user._id;
         const operationId = readOperationId(req.body?.operationId);
@@ -613,7 +616,7 @@ const stopTimer = async (req, res) => {
     } catch (error) {
         return sendErrorResponse(res, error, "Unable to stop timer.");
     }
-};
+});
 // Get logged-in user's personal time-log history
 const getMyTimeLogs = async (req, res) => {
     try {

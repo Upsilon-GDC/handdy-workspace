@@ -11,6 +11,9 @@ const Team = require('../src/models/Team');
 const Employee = require('../src/models/Employee');
 const ActivityMapping = require('../src/models/ActivityMapping');
 const TaskTimeLog = require('../src/models/TaskTimeLog');
+const Attendance = require('../src/models/Attendance');
+const { startTimer, heartbeatTimer } = require('../src/modules/timers/taskTimeLogController');
+const { closeStaleDesktopTimers, HEARTBEAT_TIMEOUT_MS } = require('../src/services/desktopTimerLease');
 const ActivityLinkChange = require('../src/models/ActivityLinkChange');
 const { ensureActivityMappingIndexes } = require('../src/services/activityMappings');
 const { saveActivityLinks, saveBatchActivityLinks, getActivityLinkHistory, ensureActivityLinkHistoryIndexes } = require('../src/modules/projects/activityLinkController');
@@ -49,7 +52,7 @@ before(async context => {
     pendingCommands.delete(event.requestId);
     if (commandTrace && command) commandTrace.push({ command, reply: event.reply });
   });
-  for (const model of [Project, Client, Task, Team, Employee, TaskTimeLog]) {
+  for (const model of [Project, Client, Task, Team, Employee, TaskTimeLog, Attendance]) {
     await model.createCollection();
     await model.createIndexes();
   }
@@ -85,6 +88,45 @@ const linkBody = (f, overrides = {}) => ({ project: String(f.project._id), clien
   taskIds: [String(f.task._id)], action: 'link', version: 0, ...overrides });
 const createBody = f => ({ project: String(f.project._id), client: String(f.client._id),
   taskNames: ['Preparation', 'Review'], teamAssignment: 'project' });
+
+test('server leases every new start and expires it at last contact regardless of client metadata', async () => {
+  const f = await fixture();
+  for (const clientType of [undefined, 'web', 'desktop']) {
+    const actor = { ...user, _id: new mongoose.Types.ObjectId() };
+    const started = await invoke(startTimer, {
+      project: String(f.project._id), task: String(f.task._id), client: String(f.client._id), clientType,
+      desktopHeartbeatAt: null,
+    }, actor);
+    assert.equal(started.code, 201, JSON.stringify(started.body));
+    let stored = await TaskTimeLog.findById(started.body.timeLog._id).lean();
+    assert.ok(stored.desktopHeartbeatAt instanceof Date);
+    assert.equal(+stored.desktopHeartbeatAt, +stored.startedAt);
+    assert.equal(await closeStaleDesktopTimers(new Date(+stored.desktopHeartbeatAt + HEARTBEAT_TIMEOUT_MS - 1), actor._id), 0);
+    const confirmed = await invoke(heartbeatTimer, {}, actor);
+    assert.equal(confirmed.code, 200);
+    stored = await TaskTimeLog.findById(stored._id).lean();
+    const lastContact = stored.desktopHeartbeatAt;
+    assert.equal(await closeStaleDesktopTimers(new Date(+lastContact + HEARTBEAT_TIMEOUT_MS), actor._id), 1);
+    const stopped = await TaskTimeLog.findById(stored._id).lean();
+    assert.equal(stopped.isActiveTimer, false);
+    assert.equal(stopped.status, 'stopped');
+    assert.equal(+stopped.stoppedAt, +lastContact);
+    assert.equal(stopped.totalWorkedSeconds, Math.floor((lastContact - stored.startedAt) / 1000));
+    assert.equal((await invoke(heartbeatTimer, {}, actor)).code, 404);
+  }
+});
+
+test('legacy null-heartbeat records are not assigned fabricated contact times by the sweep', async () => {
+  const f = await fixture();
+  const actor = new mongoose.Types.ObjectId();
+  const legacy = await TaskTimeLog.create({ employee: actor, project: f.project._id, task: f.task._id,
+    startedAt: new Date(Date.now() - 3_600_000), status: 'running', isActiveTimer: true, desktopHeartbeatAt: null });
+  assert.equal(await closeStaleDesktopTimers(new Date(Date.now() + 86_400_000), actor), 0);
+  const unchanged = await TaskTimeLog.findById(legacy._id).lean();
+  assert.equal(unchanged.desktopHeartbeatAt, null);
+  assert.equal(unchanged.status, 'running');
+  assert.equal(+unchanged.startedAt, +legacy.startedAt);
+});
 
 async function batchFixture() {
   const f = await fixture(); const tag = crypto.randomUUID();

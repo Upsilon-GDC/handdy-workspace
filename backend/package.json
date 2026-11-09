@@ -16,7 +16,8 @@
     "repair:teams": "node scripts/repairEmployeeTeams.js --apply",
     "backfill:attendance": "node scripts/backfillAttendance.js",
     "backup:db": "node scripts/backupDatabase.js",
-    "restore:db": "node scripts/restoreDatabase.js"
+    "restore:db": "node scripts/restoreDatabase.js",
+    "verify:recovery": "node scripts/verifyRecovery.js"
   },
   "keywords": [],
   "author": "",

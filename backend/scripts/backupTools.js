@@ -5,6 +5,8 @@ const fs = require("fs");
 const path = require("path");
 const zlib = require("zlib");
 const readline = require("readline");
+const { Readable } = require('node:stream');
+const { pipeline } = require('node:stream/promises');
 const mongoose = require("mongoose");
 
 const { EJSON } = mongoose.mongo.BSON;
@@ -20,22 +22,27 @@ function databaseNameFromUri(uri) {
 }
 
 async function writeCollection(cursor, file) {
-  const gzip = zlib.createGzip();
-  const output = fs.createWriteStream(file);
-  gzip.pipe(output);
   let count = 0;
-  for await (const document of cursor) {
-    if (!gzip.write(`${serializeDocument(document)}\n`)) await new Promise((resolve) => gzip.once("drain", resolve));
-    count += 1;
+  async function* lines() {
+    for await (const document of cursor) {
+      count++;
+      yield `${serializeDocument(document)}\n`;
+    }
   }
-  gzip.end();
-  await new Promise((resolve, reject) => { output.on("finish", resolve); output.on("error", reject); });
+  await pipeline(Readable.from(lines()), zlib.createGzip(), fs.createWriteStream(file, { flags: 'wx' }));
   return count;
 }
 
 async function* readCollection(file) {
-  const lines = readline.createInterface({ input: fs.createReadStream(file).pipe(zlib.createGunzip()), crlfDelay: Infinity });
-  for await (const line of lines) if (line.trim()) yield parseDocument(line);
+  const input = fs.createReadStream(file);
+  const unzip = zlib.createGunzip();
+  const complete = pipeline(input, unzip);
+  complete.catch(() => {}); // Observe early stream errors before iteration awaits them.
+  const lines = readline.createInterface({ input: unzip, crlfDelay: Infinity });
+  try {
+    for await (const line of lines) if (line.trim()) yield parseDocument(line);
+    await complete;
+  } finally { lines.close(); input.destroy(); unzip.destroy(); }
 }
 
 // Backup folders are named by time, so sorting names sorts by age.
@@ -43,6 +50,12 @@ function oldBackups(root, keep) {
   if (!fs.existsSync(root)) return [];
   const folders = fs.readdirSync(root, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z$/.test(entry.name))
+    .filter(entry => {
+      try {
+        const manifest = parseDocument(fs.readFileSync(path.join(root, entry.name, 'manifest.json'), 'utf8'));
+        return Number(manifest.formatVersion) === 2 && manifest.complete === true;
+      } catch { return false; }
+    })
     .map((entry) => entry.name)
     .sort();
   return folders.slice(0, Math.max(0, folders.length - keep)).map((name) => path.join(root, name));

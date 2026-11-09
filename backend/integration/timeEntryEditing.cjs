@@ -15,6 +15,9 @@ const TimeEntryEdit = require('../src/models/TimeEntryEdit');
 const { editTimeEntry, getTimeEntryForEdit, ensureTimeEntryEditIndexes } = require('../src/modules/timers/timeEntryEditController');
 const { ensureActivityMappingIndexes } = require('../src/services/activityMappings');
 const { syncAttendanceForDay } = require('../src/services/attendanceService');
+const { createManualEntry, deleteManualEntry, ensureManualEntryIndexes } = require('../src/modules/timers/manualTimeEntryController');
+const { startTimer, stopTimer } = require('../src/modules/timers/taskTimeLogController');
+const { checkIn, checkOut } = require('../src/modules/attendance/attendanceController');
 let replica;
 const user = { _id: new mongoose.Types.ObjectId(), role: 'manager' };
 before(async context => {
@@ -25,6 +28,7 @@ before(async context => {
   await mongoose.connect(uri, { autoCreate: false, autoIndex: false });
   for (const Model of [Employee, Project, Task, Client, Team, Attendance, TaskTimeLog]) { await Model.createCollection(); await Model.createIndexes(); }
   await ensureActivityMappingIndexes(); await ensureTimeEntryEditIndexes();
+  await ensureManualEntryIndexes();
 }, { timeout: 900000 });
 after(async () => { try { await mongoose.disconnect(); } finally { await replica?.stop(); } });
 async function fixture() {
@@ -48,6 +52,144 @@ async function invoke(controller, f, body = payload(f), actor = user) {
   const res = { code: 200, status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
   await controller({ user: actor, params: { id: String(f.log._id) }, body }, res); return res;
 }
+
+const manualPayload = (f, extra = {}) => ({ employee: String(f.employee._id), project: String(f.project._id),
+  client: String(f.client._id), task: String(f.task._id), startedAt: '2026-01-01T12:00:00Z',
+  stoppedAt: '2026-01-01T13:00:00Z', reason: 'Forgot the synthetic timer', ...extra });
+
+test('retired attendance requests cannot create presence for an employee without activity', async () => {
+  const f = await fixture();
+  const actor = { ...f.employee, _id: new mongoose.Types.ObjectId() };
+  for (const handler of [checkIn, checkOut]) {
+    const result = await invoke(handler, f, { source: 'check_in', status: 'Present' }, actor);
+    assert.equal(result.code, 410);
+    assert.equal(result.body.code, 'ATTENDANCE_TIMER_MANAGED');
+  }
+  assert.equal(await Attendance.countDocuments({ employee: actor._id }), 0);
+  assert.equal(await TaskTimeLog.countDocuments({ employee: actor._id }), 0);
+});
+
+test('legacy requests racing timer actions cannot close or overwrite timer-owned attendance', async () => {
+  const f = await fixture();
+  const old = await Attendance.create({ employee: f.employee._id, date: '2025-12-31', source: 'check_in', checkIn: '2025-12-31T09:00:00Z' });
+  const historical = old.toObject();
+  const legacyRequests = () => Promise.all(Array.from({ length: 8 }, (_, i) => invoke(i % 2 ? checkIn : checkOut, f, {}, f.employee)));
+  const [started, firstLegacy] = await Promise.all([
+    invoke(startTimer, f, { project: String(f.project._id), task: String(f.task._id), client: String(f.client._id) }, f.employee),
+    legacyRequests(),
+  ]);
+  assert.equal(started.code, 201, JSON.stringify(started.body));
+  assert.ok(firstLegacy.every(result => result.code === 410));
+  const live = await TaskTimeLog.findById(started.body.timeLog._id).lean();
+  const open = await Attendance.findOne({ employee: f.employee._id, checkIn: live.startedAt, source: 'timer' }).lean();
+  assert.ok(open);
+  assert.equal(open.checkOut, null);
+  assert.ok((await legacyRequests()).every(result => result.code === 410));
+  assert.deepEqual(await Attendance.findById(open._id).lean(), open);
+  const [stopped, lastLegacy] = await Promise.all([
+    invoke(stopTimer, f, { timeLogId: String(live._id) }, f.employee),
+    legacyRequests(),
+  ]);
+  assert.equal(stopped.code, 200);
+  assert.ok(lastLegacy.every(result => result.code === 410));
+  const closed = await Attendance.findById(open._id).lean();
+  assert.equal(+closed.checkOut, +stopped.body.timeLog.stoppedAt);
+  assert.equal(closed.source, 'timer');
+  assert.deepEqual(await Attendance.findById(old._id).lean(), historical, 'historical legacy row remains unchanged');
+});
+
+test('overnight attendance remains on the start day and only time-entry reconciliation closes it', async () => {
+  const f = await fixture();
+  const start = new Date('2026-01-01T18:00:00Z'); // 23:30 in the business timezone.
+  const end = new Date('2026-01-01T20:00:00Z'); // 01:30 the following day.
+  await TaskTimeLog.updateOne({ _id: f.log._id }, { $set: { startedAt: start, stoppedAt: null, status: 'paused', isActiveTimer: true } });
+  await syncAttendanceForDay(f.employee._id, '2026-01-01', 'Asia/Kolkata');
+  const before = await Attendance.findOne({ employee: f.employee._id, date: '2026-01-01' }).lean();
+  assert.equal(before.checkOut, null);
+  assert.equal((await invoke(checkOut, f, {}, f.employee)).code, 410);
+  assert.deepEqual(await Attendance.findById(before._id).lean(), before);
+  await TaskTimeLog.updateOne({ _id: f.log._id }, { $set: { stoppedAt: end, status: 'stopped', isActiveTimer: false } });
+  await syncAttendanceForDay(f.employee._id, '2026-01-01', 'Asia/Kolkata');
+  const after = await Attendance.findById(before._id).lean();
+  assert.equal(+after.checkIn, +start);
+  assert.equal(+after.checkOut, +end);
+  assert.equal(after.totalHours, 2);
+  assert.equal(after.source, 'timer');
+  assert.equal(await Attendance.countDocuments({ employee: f.employee._id, date: '2026-01-02' }), 0);
+});
+
+test('eight concurrent overlapping manual creates accept exactly one interval', async () => {
+  const f = await fixture();
+  const results = await Promise.all(Array.from({ length: 8 }, () => invoke(createManualEntry, f, manualPayload(f, { operationId: crypto.randomUUID() }))));
+  assert.deepEqual(results.map(result => result.code).sort(), [201, 409, 409, 409, 409, 409, 409, 409]);
+  assert.equal(await TaskTimeLog.countDocuments({ employee: f.employee._id, entrySource: 'manual' }), 1);
+});
+
+test('concurrent manual retries replay one entry, reject changed payloads and retain identity after correction/deletion', async () => {
+  const f = await fixture(); const body = manualPayload(f, { operationId: crypto.randomUUID() });
+  const results = await Promise.all(Array.from({ length: 6 }, () => invoke(createManualEntry, f, body)));
+  assert.deepEqual(results.map(result => result.code).sort(), [200, 200, 200, 200, 200, 201]);
+  const entryId = results[0].body.timeLog._id;
+  assert.ok(results.every(result => String(result.body.timeLog._id) === String(entryId)));
+  assert.equal((await invoke(createManualEntry, f, { ...body, reason: 'Different request content' })).body.code, 'OPERATION_ID_REUSED');
+  const log = await TaskTimeLog.findById(entryId);
+  const g = { ...f, log };
+  assert.equal((await invoke(editTimeEntry, g, { ...payload(g), segments: [{ type: 'work', start: '2026-01-01T14:00:00Z', end: '2026-01-01T15:00:00Z' }] })).code, 200);
+  const replay = await invoke(createManualEntry, f, body);
+  assert.equal(replay.code, 200);
+  assert.equal(replay.body.replayed, true);
+  assert.equal(+new Date(replay.body.timeLog.startedAt), +new Date('2026-01-01T14:00:00Z'));
+  assert.equal((await invoke(deleteManualEntry, g)).code, 200);
+  assert.equal((await invoke(createManualEntry, f, body)).body.code, 'ENTRY_DELETED');
+  assert.equal(await TaskTimeLog.countDocuments({ employee: f.employee._id, manualOperationId: body.operationId }), 1);
+});
+
+test('touching manual intervals both save while manual creation and correction contend for one interval', async () => {
+  const f = await fixture();
+  const touching = await Promise.all([
+    invoke(createManualEntry, f, manualPayload(f)),
+    invoke(createManualEntry, f, manualPayload(f, { startedAt: '2026-01-01T13:00:00Z', stoppedAt: '2026-01-01T14:00:00Z' })),
+  ]);
+  assert.deepEqual(touching.map(result => result.code), [201, 201]);
+  const g = await fixture();
+  const correction = { ...payload(g), segments: [{ type: 'work', start: '2026-01-01T12:00:00Z', end: '2026-01-01T13:00:00Z' }] };
+  const results = await Promise.all([invoke(createManualEntry, g, manualPayload(g)), invoke(editTimeEntry, g, correction)]);
+  assert.equal(results.filter(result => [200, 201].includes(result.code)).length, 1, JSON.stringify(results));
+  assert.equal(results.filter(result => result.code === 409).length, 1);
+  assert.equal(await TaskTimeLog.countDocuments({ employee: g.employee._id, startedAt: new Date('2026-01-01T12:00:00Z') }), 1);
+});
+
+test('live starts, manual writes and corrections preserve non-overlap and active-timer protection', async () => {
+  const f = await fixture();
+  const startBody = { project: String(f.project._id), client: String(f.client._id), task: String(f.task._id), operationId: crypto.randomUUID() };
+  const results = await Promise.all([
+    invoke(startTimer, f, startBody, f.employee),
+    invoke(createManualEntry, f, manualPayload(f)),
+  ]);
+  assert.deepEqual(results.map(result => result.code), [201, 201], JSON.stringify(results));
+  const live = await TaskTimeLog.findById(results[0].body.timeLog._id);
+  // While this live timer owns the present interval, neither writer can
+  // insert or move historical work into it, even when both arrive together.
+  await new Promise(resolve => setTimeout(resolve, 5));
+  const end = new Date(); const start = new Date(+live.startedAt - 60_000);
+  const overlap = await Promise.all([
+    invoke(createManualEntry, f, manualPayload(f, { startedAt: start.toISOString(), stoppedAt: end.toISOString() })),
+    invoke(editTimeEntry, f, { ...payload(f), segments: [{ type: 'work', start: start.toISOString(), end: end.toISOString() }] }),
+  ]);
+  assert.deepEqual(overlap.map(result => result.code), [409, 409]);
+  const stopped = await invoke(stopTimer, f, { timeLogId: String(live._id) }, f.employee);
+  assert.equal(stopped.code, 200);
+  const intervals = await TaskTimeLog.find({ employee: f.employee._id }).sort('startedAt').lean();
+  for (let i = 1; i < intervals.length; i++) assert.ok(+intervals[i - 1].stoppedAt <= +intervals[i].startedAt);
+});
+
+test('failed manual insertion releases coordination so a later valid submission can save', async () => {
+  const f = await fixture();
+  await mongoose.connection.db.command({ collMod: TaskTimeLog.collection.name, validator: { entrySource: { $ne: 'manual' } }, validationAction: 'error' });
+  try { assert.equal((await invoke(createManualEntry, f, manualPayload(f))).code, 500); }
+  finally { await mongoose.connection.db.command({ collMod: TaskTimeLog.collection.name, validator: {} }); }
+  assert.equal((await invoke(createManualEntry, f, manualPayload(f))).code, 201);
+});
 test('whole activity and segment corrections save totals, mapping and immutable before/after audit', async () => {
   const f = await fixture();
   const second = await Task.create({ taskCode: crypto.randomUUID(), taskName: 'Correct activity', project: f.project._id, team: f.employee.team, teams: [f.employee.team], assignToAllEmployees: true, createdBy: user._id });

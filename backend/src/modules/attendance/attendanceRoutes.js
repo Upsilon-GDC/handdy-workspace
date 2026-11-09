@@ -12,14 +12,15 @@ const {
 } = require("./attendanceController");
 
 const { protect } = require("../../middleware/authMiddleware");
-const { authorizeRolesOrPermissions } = require("../../middleware/authorizeRoles");
+const { requirePermission } = require("../../middleware/authorizeRoles");
 
-// Team leads always see their team's attendance; anyone else needs "View team
-// timesheets" (own team) or "View all employee reports" (company).
-const TEAM_ATTENDANCE = authorizeRolesOrPermissions({ roles: ["team_lead"], permissions: ["view_team_timesheets"] });
-const COMPANY_ATTENDANCE = authorizeRolesOrPermissions({ roles: ["hr", "manager"], permissions: ["view_all_reports"] });
+// Use the same effective permissions as time reports, including revocations.
+// The controllers retain the caller's own-team/company scope boundaries.
+const TEAM_ATTENDANCE = requirePermission("view_team_timesheets");
+const COMPANY_ATTENDANCE = requirePermission("view_all_reports");
 
-// Personal attendance
+// Retired compatibility routes: authentication still applies; both return
+// 410 ATTENDANCE_TIMER_MANAGED without reading or writing attendance.
 router.post("/check-in", protect, checkIn);
 router.post("/check-out", protect, checkOut);
 

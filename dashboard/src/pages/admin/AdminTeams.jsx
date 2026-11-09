@@ -101,7 +101,7 @@ function AdminTeams() {
 
     try {
       setError("");
-      await axiosInstance.post("/teams", { teamName: teamName.trim(), teamLead: teamLeadId || undefined });
+      await axiosInstance.post("/teams", { teamName: teamName.trim(), ...(canAssignLead ? { teamLead: teamLeadId || undefined } : {}) });
       closeAddTeam();
       await loadTeams();
     } catch (requestError) {
@@ -144,7 +144,7 @@ function AdminTeams() {
     event.preventDefault();
     if (!teamName.trim()) return;
     try {
-      await axiosInstance.put(`/teams/${editingTeamId}`, { teamName: teamName.trim(), teamLead: teamLeadId || null });
+      await axiosInstance.put(`/teams/${editingTeamId}`, { teamName: teamName.trim(), ...(canAssignLead ? { teamLead: teamLeadId || null } : {}) });
       closeEditTeam();
       await loadTeams();
     } catch (requestError) {
@@ -344,10 +344,13 @@ function AdminTeams() {
               />
 
               <label htmlFor="add-team-lead">Team Lead <span>(optional)</span></label>
-              <select id="add-team-lead" value={teamLeadId} onChange={(event) => setTeamLeadId(event.target.value)}>
+              <select id="add-team-lead" value={teamLeadId} onChange={(event) => setTeamLeadId(event.target.value)}
+                disabled={!canAssignLead} title={canAssignLead ? undefined : missingPermissionHint(["assign_team_leads"])}>
                 <option value="">Assign later</option>
                 {teamLeads.map((lead) => <option key={lead._id} value={lead._id}>{lead.fullName} ({lead.employeeId})</option>)}
               </select>
+
+              {!canAssignLead && <p className="team-form-help">{missingPermissionHint(["assign_team_leads"])}</p>}
 
               <div className="team-modal-actions">
                 <button

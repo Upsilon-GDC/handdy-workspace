@@ -11,6 +11,7 @@ const { normalizeEntrySegments, entrySnapshot, fail } = require('../../services/
 const { syncAttendanceForDay } = require('../../services/attendanceService');
 const { getDateKeyInTimezone } = require('../../utils/billingUtils');
 const sendErrorResponse = require('../../utils/sendErrorResponse');
+const { withEmployeeTimeWrite } = require('../../services/timeEntryWrites');
 const id = value => String(value?._id || value || '');
 const allowed = (req, res) => {
   if (isAdminRole(req.user?.role)) return true;
@@ -73,50 +74,52 @@ async function editTimeEntry(req, res) {
     if (typeof body.note !== 'string' || body.note.length > 2000) throw fail('The note must contain at most 2000 characters.');
     const initial = await TaskTimeLog.findById(req.params.id).select('employee').lean();
     if (!initial) throw fail('Time entry not found.', 404);
-    session = await mongoose.startSession();
-    let revision;
-    await session.withTransaction(async () => {
-      // Different entries for the same employee also contend, not just this ID.
-      const locked = await Employee.updateOne({ _id: initial.employee }, { $inc: { timeEntryEditVersion: 1 } }, { session });
-      if (!locked.matchedCount) throw fail('The entry employee no longer exists.', 404);
-      const record = await TaskTimeLog.findById(req.params.id).session(session).lean();
-      if (!editable(record)) throw fail('Only completed, non-deleted entries can be edited.', 409);
-      if (id(record.employee) !== id(initial.employee) || (record.editVersion || 0) !== body.expectedVersion || +new Date(record.updatedAt) !== +new Date(body.expectedUpdatedAt)) throw fail('This entry changed in another window. Reload before saving.', 409);
-      const unchangedTuple = id(record.project) === body.project && id(record.task) === body.task && id(record.client) === (body.client || '');
-      let mapping = record.activityMapping;
-      const selectedTask = await Task.findById(body.task).select('taskType').session(session).lean();
-      if (!selectedTask) throw fail('The selected task no longer exists.');
-      if (!unchangedTuple) {
-        const employee = await Employee.findById(record.employee).select('role team isActive').session(session).lean();
-        if (!employee?.isActive) throw fail('Keep the original activity for an inactive employee.');
-        const project = await Project.findOne({ _id: body.project, status: 'Active', deletedAt: null }).session(session).lean();
-        if (!project) throw fail('Select an active project.');
-        const options = await activityOptionsForEmployee(project, employee);
-        const task = options?.tasks.find(task => id(task) === body.task);
-        if (!task || (body.client && !options.clients.some(client => id(client) === body.client))) throw fail('This activity is not available to the employee.');
-        const selection = await validateActivitySelection(project, body.client, body.task, employee);
-        if (selection.error) throw fail(selection.error);
-        mapping = selection.mapping || undefined;
-      }
-      const values = normalizeEntrySegments(body.segments, selectedTask.taskType);
-      const conflict = await TaskTimeLog.exists({ _id: { $ne: record._id }, employee: record.employee, 'manualEntry.deletedAt': null,
-        startedAt: { $lt: values.stoppedAt }, $or: [{ stoppedAt: null }, { stoppedAt: { $gt: values.startedAt } }] }).session(session);
-      if (conflict) throw fail('These times overlap another entry or active timer for this employee.', 409);
-      const changes = { ...values, project: body.project, client: body.client || null, task: body.task, note: body.note.trim() };
-      if (mapping) changes.activityMapping = mapping;
-      revision = (record.editVersion || 0) + 1;
-      const updated = await TaskTimeLog.updateOne({ _id: record._id, status: 'stopped', isActiveTimer: { $ne: true }, updatedAt: record.updatedAt },
-        { $set: changes, $inc: { editVersion: 1 }, ...(!mapping ? { $unset: { activityMapping: '' } } : {}) }, { session, runValidators: true });
-      if (!updated.matchedCount) throw fail('This entry changed while saving. Reload before retrying.', 409);
-      // Snapshot the actual cast/persisted document, not browser string IDs.
-      const after = await TaskTimeLog.findById(record._id).session(session).lean();
-      await TimeEntryEdit.create([{ timeLog: record._id, employee: record.employee, revision, editedBy: req.user._id,
-        reason: body.reason.trim(), before: entrySnapshot(record), after: entrySnapshot(after) }], { session });
-      const timezone = process.env.APP_TIMEZONE || 'Asia/Kolkata';
-      const days = new Set([getDateKeyInTimezone(record.startedAt, timezone), getDateKeyInTimezone(values.startedAt, timezone)]);
-      for (const day of days) await syncAttendanceForDay(record.employee, day, timezone, session);
+    return await withEmployeeTimeWrite(initial.employee, async () => {
+      session = await mongoose.startSession();
+      let revision;
+      await session.withTransaction(async () => {
+        // Different entries for the same employee also contend, not just this ID.
+        const locked = await Employee.updateOne({ _id: initial.employee }, { $inc: { timeEntryEditVersion: 1 } }, { session });
+        if (!locked.matchedCount) throw fail('The entry employee no longer exists.', 404);
+        const record = await TaskTimeLog.findById(req.params.id).session(session).lean();
+        if (!editable(record)) throw fail('Only completed, non-deleted entries can be edited.', 409);
+        if (id(record.employee) !== id(initial.employee) || (record.editVersion || 0) !== body.expectedVersion || +new Date(record.updatedAt) !== +new Date(body.expectedUpdatedAt)) throw fail('This entry changed in another window. Reload before saving.', 409);
+        const unchangedTuple = id(record.project) === body.project && id(record.task) === body.task && id(record.client) === (body.client || '');
+        let mapping = record.activityMapping;
+        const selectedTask = await Task.findById(body.task).select('taskType').session(session).lean();
+        if (!selectedTask) throw fail('The selected task no longer exists.');
+        if (!unchangedTuple) {
+          const employee = await Employee.findById(record.employee).select('role team isActive').session(session).lean();
+          if (!employee?.isActive) throw fail('Keep the original activity for an inactive employee.');
+          const project = await Project.findOne({ _id: body.project, status: 'Active', deletedAt: null }).session(session).lean();
+          if (!project) throw fail('Select an active project.');
+          const options = await activityOptionsForEmployee(project, employee);
+          const task = options?.tasks.find(task => id(task) === body.task);
+          if (!task || (body.client && !options.clients.some(client => id(client) === body.client))) throw fail('This activity is not available to the employee.');
+          const selection = await validateActivitySelection(project, body.client, body.task, employee);
+          if (selection.error) throw fail(selection.error);
+          mapping = selection.mapping || undefined;
+        }
+        const values = normalizeEntrySegments(body.segments, selectedTask.taskType);
+        const conflict = await TaskTimeLog.exists({ _id: { $ne: record._id }, employee: record.employee, 'manualEntry.deletedAt': null,
+          startedAt: { $lt: values.stoppedAt }, $or: [{ stoppedAt: null }, { stoppedAt: { $gt: values.startedAt } }] }).session(session);
+        if (conflict) throw fail('These times overlap another entry or active timer for this employee.', 409);
+        const changes = { ...values, project: body.project, client: body.client || null, task: body.task, note: body.note.trim() };
+        if (mapping) changes.activityMapping = mapping;
+        revision = (record.editVersion || 0) + 1;
+        const updated = await TaskTimeLog.updateOne({ _id: record._id, status: 'stopped', isActiveTimer: { $ne: true }, updatedAt: record.updatedAt },
+          { $set: changes, $inc: { editVersion: 1 }, ...(!mapping ? { $unset: { activityMapping: '' } } : {}) }, { session, runValidators: true });
+        if (!updated.matchedCount) throw fail('This entry changed while saving. Reload before retrying.', 409);
+        // Snapshot the actual cast/persisted document, not browser string IDs.
+        const after = await TaskTimeLog.findById(record._id).session(session).lean();
+        await TimeEntryEdit.create([{ timeLog: record._id, employee: record.employee, revision, editedBy: req.user._id,
+          reason: body.reason.trim(), before: entrySnapshot(record), after: entrySnapshot(after) }], { session });
+        const timezone = process.env.APP_TIMEZONE || 'Asia/Kolkata';
+        const days = new Set([getDateKeyInTimezone(record.startedAt, timezone), getDateKeyInTimezone(values.startedAt, timezone)]);
+        for (const day of days) await syncAttendanceForDay(record.employee, day, timezone, session);
+      });
+      return res.json({ success: true, revision, message: 'Entry updated. Reports and attendance now use the corrected values.' });
     });
-    return res.json({ success: true, revision, message: 'Entry updated. Reports and attendance now use the corrected values.' });
   } catch (error) { return respond(res, error); }
   finally { if (session) await session.endSession(); }
 }

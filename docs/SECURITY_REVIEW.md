@@ -1,5 +1,7 @@
 # Security review (26 October 2026)
 
+Update, 9 November 2026: Phase 5 adds aggregate IP/account/remembered-credential login budgets and bounded rate-limit stores. The sign-in threshold below describes the historical pair limit; see [current login policy](LOGIN_PROTECTION_PHASE_5.md) for the complete layered limits and deployment scope.
+
 Scope: backend API, dashboard and desktop app as in this repository (desktop 2.0.1). Method: code
 review of every route's access rule, authentication, session handling, input handling, the desktop
 app's Electron settings, and `npm audit` of production dependencies. No penetration test of the live

@@ -226,7 +226,7 @@ test("team and company report endpoints open by permission instead of role", asy
     [taskTimeLogRoutes, "/team", teamViewer, true],
     [taskTimeLogRoutes, "/team", plain, false],
     [attendanceRoutes, "/team/history", teamViewer, true],
-    [attendanceRoutes, "/team/history", { role: "team_lead", permissionOverrides: { revoked: ["view_team_timesheets"] } }, true],
+    [attendanceRoutes, "/team/history", { role: "team_lead", permissionOverrides: { revoked: ["view_team_timesheets"] } }, false],
     [attendanceRoutes, "/team/history", plain, false],
     [attendanceRoutes, "/admin/history", companyViewer, true],
     [attendanceRoutes, "/admin/history", { role: "hr" }, true],

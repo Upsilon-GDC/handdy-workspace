@@ -62,7 +62,7 @@ const PERMISSION_CATEGORIES = [
       { key: "remove_team_members", label: "Remove employees from teams", enforcement: "none", sensitive: true,
         description: "Not used yet. Team membership is changed by editing an employee." },
       { key: "assign_team_leads", label: "Assign team leads", enforcement: "backend", sensitive: true,
-        description: "Change a team's lead. Also requires “Edit teams”." },
+        description: "Assign a lead when creating a team with “Create teams”, or change an existing team's lead with “Edit teams”." },
       { key: "view_team_timesheets", label: "View team timesheets", enforcement: "backend",
         description: "Team overview, timesheets, attendance and reports. Team leads see their assigned employees; employees see the employees of their own team. HR accounts have no team, so HR uses “View all employee reports” instead." },
       { key: "view_team_productivity", label: "View team productivity reports", enforcement: "none",

@@ -129,6 +129,40 @@ function startMocks(t) {
 }
 const startedDoc = (extra = {}) => ({ ...running({ startOperationId: OP }), populate: async () => {}, ...extra });
 
+test("all new live starts are leased despite omitted, web or forged client metadata", async (t) => {
+  startMocks(t);
+  t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 10, 9, 4, 0) });
+  t.mock.method(TaskTimeLog, "findOne", async () => null);
+  t.mock.method(TaskTimeLog, "create", async data => {
+    assert.ok(data.desktopHeartbeatAt instanceof Date);
+    assert.equal(+data.desktopHeartbeatAt, Date.now());
+    assert.equal(+data.desktopHeartbeatAt, +data.startedAt);
+    return startedDoc(data);
+  });
+  for (const authSession of [undefined, { clientType: "desktop" }, { clientType: "web" }]) {
+    for (const clientType of [undefined, "desktop", "web", "unknown", null]) {
+      const res = response();
+      await startTimer({ user, authSession, body: {
+        project: "project", task: "task", clientType,
+        desktopHeartbeatAt: null, startedAt: "2000-01-01T00:00:00Z",
+      } }, res);
+      assert.equal(res.statusCode, 201);
+      assert.equal(+res.body.timeLog.desktopHeartbeatAt, Date.now());
+    }
+  }
+});
+
+test("replaying an older unleased start does not fabricate contact or renew its lease", async (t) => {
+  const earlier = startedDoc({ desktopHeartbeatAt: null });
+  t.mock.method(TaskTimeLog, "findOne", async () => earlier);
+  t.mock.method(TaskTimeLog, "create", async () => assert.fail("replay must not insert"));
+  t.mock.method(TaskTimeLog, "updateOne", async () => assert.fail("replay must not backfill"));
+  const res = await call(startTimer, { project: "project", task: "task", client: "client", operationId: OP });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.replayed, true);
+  assert.equal(res.body.timeLog.desktopHeartbeatAt, null);
+});
+
 test("a repeated start with the same operation ID returns the same timer instead of a conflict", async (t) => {
   startMocks(t);
   const earlier = startedDoc();
