@@ -1,3 +1,5 @@
+import { Plus } from "lucide-react";
+import CollectionHeading, { CollectionIdentity } from "../../components/layout/CollectionHeading";
 import ModalFrame from "../../components/layout/ModalFrame";
 import { useEffect, useRef, useState } from "react";
 import DashboardLayout from "../../components/layout/DashboardLayout";
@@ -126,27 +128,13 @@ function AdminClients() {
 
   return (
     <DashboardLayout title="Clients">
-      <section className="admin-card">
+      <section className="admin-card collection-panel">
         {error && <p className="admin-error-box" role="alert">{error}</p>}
 
-        <div className="employees-page-heading">
-          <div>
-            <p className="admin-eyebrow">
-              CLIENT MANAGEMENT
-            </p>
-
-            <h2>Clients</h2>
-            {!canManage && <PermissionNote permissions={["manage_clients"]} />}
-          </div>
-
-          {canManage && <button
-            type="button"
-            className="add-employee-button"
-            onClick={openAddClient}
-          >
-            + Add Client
-          </button>}
-        </div>
+        <CollectionHeading kind="clients" title="Your client directory" description="Keep your client relationships organized and easy to find."
+          detail={`${filteredClients.length} client${filteredClients.length === 1 ? '' : 's'} shown`} notice={!canManage && <PermissionNote permissions={["manage_clients"]} />}>
+          {canManage && <button type="button" className="add-employee-button" onClick={openAddClient}><Plus size={16} aria-hidden="true" />Add Client</button>}
+        </CollectionHeading>
 
         {/* SEARCH */}
         <div className="clients-toolbar">
@@ -192,7 +180,7 @@ function AdminClients() {
                   <tr key={client._id}>
 
                     <td>
-                      {client.clientName || "-"}
+                      <CollectionIdentity kind="clients">{client.clientName || "-"}</CollectionIdentity>
                     </td>
 
                     {canManage && <td>

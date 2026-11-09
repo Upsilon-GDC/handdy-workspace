@@ -4,9 +4,9 @@
 .edit-entry-modal input, .edit-entry-modal select, .edit-entry-modal textarea { width: 100%; min-width: 0; box-sizing: border-box; }
 .crm-content .employee-modal.edit-entry-modal .employee-form-actions { margin: 4px 0 0; padding: 16px 0 0; flex-wrap: wrap; }
 .edit-entry-segments { display: grid; gap: 12px; }
-.edit-entry-segments fieldset { display: grid; grid-template-columns: 110px minmax(220px,1fr) minmax(220px,1fr); gap: 12px; border: 1px solid #ccdcd7; padding: 12px; border-radius: 8px; }
+.edit-entry-segments fieldset { display: grid; grid-template-columns: 110px minmax(220px,1fr) minmax(220px,1fr); gap: 12px; border: 1px solid var(--border-strong); padding: 12px; border-radius: 8px; }
 .edit-entry-segments label { display: grid; gap: 5px; }
-.edit-entry-segments .edit-entry-selected-segment { border: 2px solid #206552; }
+.edit-entry-segments .edit-entry-selected-segment { border: 2px solid var(--primary-hover); }
 .edit-entry-segments .edit-entry-gap { grid-template-columns: repeat(2,minmax(0,1fr)); }
 .edit-entry-history { margin-top: 18px; }
 .edit-entry-history li { padding: 8px 0; }

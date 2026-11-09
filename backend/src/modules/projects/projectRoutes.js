@@ -22,8 +22,10 @@ const { activityOptionsForEmployee } = require('../../services/activitySelection
 const sendErrorResponse = require('../../utils/sendErrorResponse');
 const Task = require('../../models/Task');
 const { taskScope } = require('../../services/projectTasks');
+const ActivityMapping = require('../../models/ActivityMapping');
+const { allowedClientIds, workTeamIds, workProjectIds } = require('../../services/clientAccess');
 
-router.get('/task-options', protect, requirePermission('manage_projects'), requirePermission('manage_activity_links'), async (req, res) => {
+router.get('/task-options', protect, requirePermission('manage_projects'), requirePermission('manage_activity_links'), catalogCache([Task, Project, Team, Employee]), async (req, res) => {
   try {
     const tasks = await Task.find({ isActive: true, deletedAt: null, ...await taskScope(req.user) })
       .select('taskName taskCode taskType project team teams').populate('project', 'projectName').sort('taskName').lean();
@@ -31,7 +33,10 @@ router.get('/task-options', protect, requirePermission('manage_projects'), requi
   } catch (error) { return sendErrorResponse(res, error, 'Unable to load existing tasks.'); }
 });
 
-router.get('/:id/activity-options', protect, async (req, res) => {
+router.get('/:id/activity-options', protect,
+  catalogCache([Project, Client, Task, Team, Employee, ActivityMapping], {
+    scopeKey: req => [allowedClientIds(req.user)?.slice().sort() || null, workTeamIds(req.user).sort(), workProjectIds(req.user).sort()],
+  }), async (req, res) => {
   try {
     const project = await Project.findOne({ _id: req.params.id, status: 'Active', deletedAt: null }).lean();
     if (!project) return res.status(404).json({ success: false, message: 'Active project not found.' });
@@ -49,7 +54,7 @@ router.post('/activity-links', protect, requirePermission('manage_activity_links
 router.post('/activity-links/batch', protect, requirePermission('manage_activity_links'), saveBatchActivityLinks);
 
 // All logged-in users can view projects
-router.get("/", protect, catalogCache([Project, Client, Team, Employee], { shared: true }), getAllProjects);
+router.get("/", protect, catalogCache([Project, Client, Team, Employee], { shared: true, scopeKey: req => [workTeamIds(req.user).sort(), workProjectIds(req.user).sort()] }), getAllProjects);
 router.get("/:id", protect, getProjectById);
 
 // Admin and Manager can manage projects

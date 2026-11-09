@@ -1,10 +1,13 @@
 {
   "name": "handdy-desktop-app",
-  "version": "2.0.3",
+  "version": "2.0.6",
   "description": "Employee Time & Attendance System Desktop App",
   "main": "main.js",
   "scripts": {
-    "test": "node --test --test-isolation=none test/*.test.js && npm run test:electron && npm run test:startup && npm run test:dashboard && npm run test:activity-links && npm run test:manual-entry && npm run test:entry-edit && npm run test:overview && npm run test:project-tasks && npm run test:batch-links && npm run test:working-hours",
+    "test": "node --test --test-isolation=none test/*.test.js && npm run test:electron && npm run test:startup && npm run test:dashboard && npm run test:activity-links && npm run test:manual-entry && npm run test:entry-edit && npm run test:overview && npm run test:project-tasks && npm run test:batch-links && npm run test:working-hours && npm run test:client-access && npm run test:catalog-cache && npm run test:collections",
+    "test:collections": "set \"ELECTRON_RUN_AS_NODE=\" && electron test/collection-pages-smoke.cjs",
+    "test:catalog-cache": "set \"ELECTRON_RUN_AS_NODE=\" && electron test/catalog-cache-smoke.cjs",
+    "test:client-access": "set \"ELECTRON_RUN_AS_NODE=\" && electron test/client-access-smoke.cjs",
     "test:working-hours": "set \"ELECTRON_RUN_AS_NODE=\" && electron test/working-hours-smoke.cjs",
     "test:batch-links": "set \"ELECTRON_RUN_AS_NODE=\" && electron test/batch-activity-links-smoke.cjs",
     "test:project-tasks": "set \"ELECTRON_RUN_AS_NODE=\" && electron test/project-tasks-smoke.cjs && electron test/multi-project-tasks-smoke.cjs",
@@ -76,7 +79,7 @@
     ]
   },
   "devDependencies": {
-    "electron": "^44.1.1",
+    "electron": "^44.10.2",
     "electron-builder": "^26.0.0",
     "semver": "^7.7.3"
   },

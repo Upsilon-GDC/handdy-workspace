@@ -47,7 +47,7 @@ app.whenReady().then(async () => {
     await evaluate(`localStorage.setItem('token','mock'); localStorage.setItem('user',${JSON.stringify(JSON.stringify(user))});`);
     await win.loadURL(`${base}/admin/projects`);
     await until(`document.body.textContent.includes('Add New Project')`);
-    await click('+ Add New Project');
+    await click('Add New Project');
     await until(`!!document.querySelector('input[name="projectName"]')`);
     await evaluate(`(() => { const input = document.querySelector('input[name="projectName"]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'Second project'); input.dispatchEvent(new Event('input', { bubbles: true })); })()`);
     await evaluate(`document.querySelector('[aria-label="Select teams"] button').click()`);

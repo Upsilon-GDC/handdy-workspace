@@ -109,6 +109,11 @@ const server = http.createServer((req, res) => {
 });
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 let win;
+let pollingFixtureDirectory;
+const watchdog = setTimeout(() => {
+  console.error('FAIL: dashboard lifecycle smoke exceeded four minutes');
+  win?.destroy(); server.close(); app.exit(1);
+}, 240000);
 const evaluate = source => win.webContents.executeJavaScript(source);
 async function until(source) {
   for (let i = 0; i < 100; i++) {
@@ -121,13 +126,35 @@ app.whenReady().then(async () => {
   try {
     await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
     const base = `http://127.0.0.1:${server.address().port}`;
-    win = new BrowserWindow({ show: false, webPreferences: { partition: `test-${Date.now()}`, backgroundThrottling: false } });
+    // Capture the real page's five-minute timer without shortening its delay.
+    // Invoke that callback explicitly after checking the old 30-second window.
+    // A fixture preload runs before React; no DevTools attachment is needed.
+    pollingFixtureDirectory = fs.mkdtempSync(path.join(app.getPath('temp'), 'crm-dashboard-poll-'));
+    const pollingPreload = path.join(pollingFixtureDirectory, 'polling.cjs');
+    fs.writeFileSync(pollingPreload, `
+      window.testRefreshIntervals = new Map();
+      const nativeInterval = window.setInterval.bind(window);
+      const nativeClear = window.clearInterval.bind(window);
+      window.setInterval = (callback, delay, ...args) => {
+        const id = nativeInterval(callback, delay, ...args);
+        if (delay === 300000) window.testRefreshIntervals.set(id, { callback, delay, args });
+        return id;
+      };
+      window.clearInterval = id => { window.testRefreshIntervals.delete(id); nativeClear(id); };
+    `);
+    win = new BrowserWindow({ show: false, webPreferences: {
+      partition: `test-${Date.now()}`, backgroundThrottling: false,
+      preload: pollingPreload, contextIsolation: false, sandbox: false,
+    } });
+    console.log('CHECK: dashboard lifecycle window created');
     let documents = 0;
     win.webContents.on("did-finish-load", () => documents++);
     await win.loadURL(`${base}/login`);
+    console.log('CHECK: login fixture loaded');
     await evaluate(`localStorage.setItem('token', 'test-token'); localStorage.setItem('user', ${JSON.stringify(JSON.stringify(user))});`);
     await win.loadURL(`${base}/admin/team`);
     await until(`document.body.textContent.includes('Stable team')`);
+    console.log('CHECK: Teams fixture loaded');
     const initialDocuments = documents;
     const initialMe = calls.get("/auth/me");
     const pollStart = Date.now();
@@ -143,16 +170,21 @@ app.whenReady().then(async () => {
       window.dispatchEvent(new Event('focus'));
       window.dispatchEvent(new Event('online'));
     `);
-    // Management pages refresh on focus/online at once, then every 30 seconds
-    // (hooks/useDataRefresh.js). Assert the cadence from call times rather
-    // than a raw count: the online refresh is skipped while the focus one is
-    // still in flight, and the interval started when the page mounted.
+    // Focus/online share one in-flight read. No automatic reload should occur
+    // at the former 30-second interval. Then exercise the captured five-minute
+    // callback, avoiding a five-minute wall-clock wait in this smoke test.
     await delay(31_000);
     const polls = teamsCallTimes.filter((time) => time >= pollStart).map((time) => time - pollStart);
     assert.ok(polls.some((offset) => offset < 2_000), "focus/online refresh immediately");
     const intervalPolls = polls.filter((offset) => offset >= 2_000);
-    assert.equal(intervalPolls.length, 1, `one background poll in 31 s (30-second interval), got ${JSON.stringify(polls)}`);
-    assert.ok(intervalPolls[0] >= 20_000, `the background poll waits about 30 s, not 10 s (${intervalPolls[0]} ms)`);
+    assert.equal(intervalPolls.length, 0, `no automatic poll in 31 s, got ${JSON.stringify(polls)}`);
+    assert.equal(await evaluate('testRefreshIntervals.size'), 1, 'one real five-minute page refresh timer');
+    const beforeScheduled = teamsCallTimes.length;
+    await evaluate('[...testRefreshIntervals.values()].forEach(row => row.callback(...row.args))');
+    for (let i = 0; i < 20 && teamsCallTimes.length === beforeScheduled; i++) await delay(100);
+    assert.equal(teamsCallTimes.length, beforeScheduled + 1, 'five-minute callback refreshes the page');
+    await delay(300);
+    console.log('CHECK: five-minute polling callback passed');
     assert.equal(await evaluate("loadingFlashes"), 0, "background refresh never removes rows");
     assert.equal(await evaluate("testRow === document.querySelector('.team-table tbody tr')"), true);
     for (const route of ["/admin/employees", "/admin/tasks", "/admin/team"]) {
@@ -194,6 +226,7 @@ app.whenReady().then(async () => {
     // A manual report slower than the five-second poll must still finish.
     await evaluate(`document.querySelector('a[href="/admin/timesheets/detailed"]').click()`);
     await until(`location.pathname === '/admin/timesheets/detailed'`);
+    console.log('CHECK: detailed timesheet opened');
     await until(`[...document.querySelectorAll('button')].some(b => b.textContent.includes('Generate'))`);
     await evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent.includes('Generate')).click()`);
     await until(`[...document.querySelectorAll('button')].some(b => b.disabled && b.textContent.includes('Loading'))`);
@@ -244,6 +277,7 @@ app.whenReady().then(async () => {
       assert.ok(fs.statSync(exports.at(-1).output).size > 1000);
     }
     const ExcelJS = require('../../dashboard/node_modules/exceljs');
+    console.log('CHECK: export downloads completed');
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(exports[0].output);
     const sheet = workbook.worksheets[0];
@@ -348,13 +382,18 @@ app.whenReady().then(async () => {
     await until(`location.pathname === '/login'`);
     assert.equal(calls.get("/time-logs/stop") || 0, timerStopsBefore, "web sign-out never stops the desktop timer");
     assert.equal(desktopTimerRunning, true);
-    console.log("PASS: Teams polling (30 s), permission-driven menus/actions, navigation, bulk task controls, session restoration, Client timesheets/exports, device approval/revocation, HR lookups, 125 employees/shifts/schedules, delegated editing, and independent web sign-out.");
+    console.log("PASS: Teams polling (5 min; no 30-second reload), permission-driven menus/actions, navigation, bulk task controls, session restoration, Client timesheets/exports, device approval/revocation, HR lookups, 125 employees/shifts/schedules, delegated editing, and independent web sign-out.");
   } catch (error) {
     console.error(error);
     process.exitCode = 1;
   } finally {
+    clearTimeout(watchdog);
     win?.destroy();
+    if (pollingFixtureDirectory) {
+      fs.unlinkSync(path.join(pollingFixtureDirectory, 'polling.cjs'));
+      fs.rmdirSync(pollingFixtureDirectory);
+    }
     server.close();
-    app.quit();
+    app.exit(process.exitCode || 0);
   }
 });

@@ -16,6 +16,7 @@ const { syncEmployeeTeam } = require("../../services/teamAssignmentService");
 const { escapeRegExp } = require("../../utils/requestUtils");
 
 const router = express.Router();
+const catalogCache = require('../../middleware/catalogCache');
 
 // Changing a team's lead needs "assign_team_leads" on top of "edit_teams";
 // re-submitting the unchanged lead (the edit form always sends it) is allowed.
@@ -45,6 +46,7 @@ router.get(
     "create_employees", "edit_employees", "create_teams", "edit_teams", "assign_team_leads",
     "manage_projects", "view_all_reports",
   ] }),
+  catalogCache([Team, Employee]),
   async (req, res) => {
     try {
       const teams = await Team.find()

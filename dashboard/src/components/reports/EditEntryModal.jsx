@@ -60,7 +60,7 @@ export default function EditEntryModal({ entry, onClose, onSaved }) {
   };
   const project = data?.options.projects.find(project => id(project) === form?.project);
   const keepsOriginalActivity = !!data && form?.project === id(data.record.project) && form?.client === id(data.record.client) && form?.task === id(data.record.task);
-  const clients = (data?.options.clients || []).filter(client => !project?.clientIds?.length || project.clientIds.includes(id(client)));
+  const clients = (data?.options.clients || []).filter(client => !Array.isArray(project?.clientIds) || project.clientIds.includes(id(client)));
   const tasks = (data?.options.tasks || []).filter(task => id(task.project) === form?.project
     && (!project?.mappingEnabled || (form?.client && task.clientIds?.includes(form.client))
       || (id(task) === id(data.record.task) && form?.project === id(data.record.project) && form?.client === id(data.record.client))));

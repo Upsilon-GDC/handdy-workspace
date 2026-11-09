@@ -326,7 +326,8 @@ test("report sync rejects changed scopes, renamed/deleted dependencies and old w
   assert.equal((await beginReportSync(next, filter, [Task])).delta, true);
   assert.equal((await beginReportSync(next, { employee: "other" }, [Task])).delta, false);
   assert.equal((await beginReportSync({ ...next, user: { _id: "other", role: "employee" } }, filter, [Task])).delta, false);
-  assert.equal((await beginReportSync({ ...next, query: { ...next.query, syncSince: new Date(Date.now() - 6 * 60000).toISOString() } }, filter, [Task])).delta, false);
+  assert.equal((await beginReportSync({ ...next, query: { ...next.query, syncSince: new Date(Date.now() - 6 * 60000).toISOString() } }, filter, [Task])).delta, true, 'five-minute polling tolerates scheduling delays');
+  assert.equal((await beginReportSync({ ...next, query: { ...next.query, syncSince: new Date(Date.now() - 16 * 60000).toISOString() } }, filter, [Task])).delta, false);
   invalidate("Task");
   assert.equal((await beginReportSync(next, filter, [Task])).delta, false);
   t.mock.method(Task, "aggregate", () => ({ hint() { throw new Error("metadata error"); } }));

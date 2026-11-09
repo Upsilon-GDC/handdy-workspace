@@ -39,7 +39,7 @@ class ErrorBoundary extends Component {
           }}
         >
           <h1 style={{ margin: 0, fontSize: "1.25rem" }}>Something went wrong</h1>
-          <p style={{ margin: 0, color: "#6b7280", maxWidth: "32rem" }}>
+          <p style={{ margin: 0, color: "var(--text-secondary)", maxWidth: "32rem" }}>
             An unexpected error occurred while rendering this page. Reloading usually fixes it.
           </p>
           <button
@@ -50,7 +50,7 @@ class ErrorBoundary extends Component {
               padding: "0.6rem 1.4rem",
               borderRadius: "0.5rem",
               border: "none",
-              background: "#2563eb",
+              background: "var(--primary)",
               color: "#fff",
               fontWeight: 600,
               cursor: "pointer",

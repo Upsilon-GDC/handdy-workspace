@@ -225,7 +225,7 @@ function RoleReportPage({ title, description, mode = "time", scope = "team", sho
   useDataRefresh(() => {
     if (hasRun) return loadReport({ silent: true });
     return undefined;
-  }, 30_000);
+  });
 
   const report = (
     <div className="admin-report-page role-report-page">

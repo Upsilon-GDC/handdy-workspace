@@ -20,7 +20,8 @@ function harness() {
       return { ok: true, json: async () => reply };
     },
   });
-  vm.runInContext(`const reportSnapshots = new Map(); const reportRequests = new Map(); ${renderer.slice(start, end)}`, context);
+  const refreshLimits = renderer.split('\n').filter(line => /^const REPORT_(UNVERIFIED_RELOAD|FULL_RELOAD)_MS /.test(line)).join('\n');
+  vm.runInContext(`const reportSnapshots = new Map(); const reportRequests = new Map(); ${refreshLimits}\n${renderer.slice(start, end)}`, context);
   state.load = (options = {}) => context.fetchAllPages("https://example.test/time-logs/my?today=true", "timeLogs", state.token, { reportSync: true, ...options });
   return state;
 }

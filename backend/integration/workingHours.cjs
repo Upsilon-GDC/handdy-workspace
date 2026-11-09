@@ -38,6 +38,26 @@ async function fixture() {
   await Employee.collection.insertMany(employees);
   return { team, employees, employeeIds: employees.map(row => String(row._id)) };
 }
+
+test('optional shared roster reuses the productivity employee query and preserves totals and field limits', async t => {
+  const f = await fixture();
+  const originalFind = Employee.find, originalTeamFind = Team.find; let employeeReads = 0, teamReads = 0;
+  t.mock.method(Employee, 'find', function (...args) { employeeReads++; return originalFind.apply(this, args); });
+  t.mock.method(Team, 'find', function (...args) { teamReads++; return originalTeamFind.apply(this, args); });
+  const normal = await invoke(controller.getWorkingHoursOverview, {}, { date: today });
+  assert.equal(normal.code, 200); assert.equal(normal.body.roster, undefined);
+  employeeReads = 0; teamReads = 0;
+  const shared = await invoke(controller.getWorkingHoursOverview, {}, { date: today, includeRoster: 'true' });
+  assert.equal(shared.code, 200); assert.equal(employeeReads, 1);
+  assert.equal(teamReads, 1, 'Roster and productivity reuse the same team definitions');
+  assert.deepEqual(shared.body.totals, normal.body.totals);
+  assert.ok(shared.body.roster.teams.some(row => String(row._id) === String(f.team._id)));
+  const person = shared.body.roster.employees.find(row => String(row._id) === f.employeeIds[0]);
+  assert.ok(person); assert.equal(person.email, undefined); assert.equal(person.password, undefined); assert.equal(person.projectRates, undefined);
+  assert.ok(shared.body.roster.employees.every(row => row.role !== 'alpha'));
+  const filtered = await invoke(controller.getWorkingHoursOverview, {}, { date: today, includeRoster: 'true', team: String(f.team._id) });
+  assert.equal(filtered.body.roster, undefined, 'A team-filtered roster cannot be mistaken for the company roster');
+});
 const settings = (f, overrides = {}) => ({ employeeIds: f.employeeIds, requiredHours: '7.8', effectiveFrom: today, halfDayPercent: 50, versions: f.employeeIds.map(employee => ({ employee, version: 0 })), ...overrides });
 async function logsFor(f, date = yesterday) {
   const task = await Task.create({ taskName: 'Synthetic work', taskCode: crypto.randomUUID(), team: f.team._id, teams: [f.team._id], createdBy: user._id });

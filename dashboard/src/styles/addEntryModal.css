@@ -1,33 +1,33 @@
-.add-entry-subtitle { margin: 4px 0 0; color: var(--text-secondary, #64748b); font-size: 13px; }
+.add-entry-subtitle { margin: 4px 0 0; color: var(--text-secondary); font-size: 13px; }
 .add-entry-modal .employee-form-grid > div, .add-entry-modal .searchable-select { min-width: 0; }
 .add-entry-modal .employee-form-grid label, .add-entry-modal .employee-form > div > label, .add-entry-confirm dt { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 700; }
 .add-entry-modal input[type="text"], .add-entry-modal input[type="date"], .add-entry-modal input[type="time"], .add-entry-modal textarea { width: 100%; box-sizing: border-box; }
 .add-entry-modal textarea { resize: vertical; }
 .add-entry-times { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.add-entry-hint { margin: 8px 0; color: var(--text-secondary, #64748b); font-size: 12px; }
-.add-entry-alert { margin: 8px 0; padding: 9px 12px; border-radius: 6px; background: #fdecea; color: #a1281c; font-size: 13px; }
-.add-entry-modal .field-error { display: block; margin-top: 4px; color: #a1281c; font-size: 12px; }
+.add-entry-hint { margin: 8px 0; color: var(--text-secondary); font-size: 12px; }
+.add-entry-alert { margin: 8px 0; padding: 9px 12px; border-radius: 6px; background: var(--danger-bg); color: var(--danger); font-size: 13px; }
+.add-entry-modal .field-error { display: block; margin-top: 4px; color: var(--danger); font-size: 12px; }
 .add-entry-confirm h3 { margin: 4px 0 12px; }
 .add-entry-confirm dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 0; }
 .add-entry-confirm dd { margin: 0; overflow-wrap: anywhere; }
 .searchable-select { position: relative; }
-.searchable-select-list { position: absolute; z-index: 20; left: 0; right: 0; max-height: 220px; margin: 4px 0 0; padding: 4px; overflow-y: auto; list-style: none; border: 1px solid var(--border-light, #dbe5e1); border-radius: 8px; background: var(--surface, #fff); box-shadow: 0 10px 30px #10182826; }
+.searchable-select-list { position: absolute; z-index: 20; left: 0; right: 0; max-height: 220px; margin: 4px 0 0; padding: 4px; overflow-y: auto; list-style: none; border: 1px solid var(--border-light); border-radius: 8px; background: var(--surface); box-shadow: 0 10px 30px rgb(15 26 51 / 15%); }
 .searchable-select-list li { padding: 8px 10px; border-radius: 6px; font-size: 13px; cursor: pointer; }
-.searchable-select-list li.is-highlighted { background: color-mix(in srgb, var(--primary, #3d52a0) 12%, transparent); }
+.searchable-select-list li.is-highlighted { background: color-mix(in srgb, var(--primary) 12%, transparent); }
 .searchable-select-list li[aria-selected="true"] { font-weight: 700; }
-.searchable-select-empty { color: var(--text-secondary, #64748b); cursor: default !important; }
+.searchable-select-empty { color: var(--text-secondary); cursor: default !important; }
 .client-timesheet-actions { display: flex; justify-content: flex-end; padding: 8px 10px 4px; }
-.client-timesheet-add-entry, .crm-content .report-add-entry-button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 6px 13px; border: 1px solid var(--primary); border-radius: 6px; background: var(--primary); color: var(--button-text, #fff); font-size: 12px; font-weight: 700; cursor: pointer; }
+.client-timesheet-add-entry, .crm-content .report-add-entry-button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 6px 13px; border: 1px solid var(--primary); border-radius: 6px; background: var(--primary); color: var(--button-text); font-size: 12px; font-weight: 700; cursor: pointer; }
 .client-timesheet-add-entry:hover, .crm-content .report-add-entry-button:hover { filter: brightness(1.08); }
-.client-timesheet-add-entry:focus-visible, .crm-content .report-add-entry-button:focus-visible { outline: 3px solid #a9c5fa; outline-offset: 2px; }
-.report-entry-notice { margin: 8px 0; padding: 9px 12px; border-radius: 6px; background: #e6f4ec; color: #1b6b48; font-size: 13px; }
+.client-timesheet-add-entry:focus-visible, .crm-content .report-add-entry-button:focus-visible { outline: 3px solid var(--primary-200); outline-offset: 2px; }
+.report-entry-notice { margin: 8px 0; padding: 9px 12px; border-radius: 6px; border: 1px solid var(--success-border); background: var(--success-bg); color: var(--success); font-size: 13px; }
 .report-manual-actions, .report-entry-employee-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .report-entry-employee-actions { justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--border-light); }
 .report-manual-actions .secondary-button { min-height: 32px; padding: 6px 10px; font-size: 12px; }
 .manual-entry-list { display: grid; gap: 12px; }
 .manual-entry-item { padding: 12px; border: 1px solid var(--border-light); border-radius: 6px; }
 .manual-entry-item p { margin: 6px 0; overflow-wrap: anywhere; }
-.manual-entry-delete { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid #a1281c; border-radius: 6px; background: var(--surface, #fff); color: #a1281c; cursor: pointer; }
+.manual-entry-delete { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--danger); border-radius: 6px; background: var(--surface); color: var(--danger); cursor: pointer; }
 .manual-entry-delete:disabled { opacity: .6; cursor: wait; }
 .manual-entry-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 @media (max-width: 650px) { .add-entry-times { grid-template-columns: 1fr; } .add-entry-confirm dl { grid-template-columns: 1fr; gap: 2px; } }

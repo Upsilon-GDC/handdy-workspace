@@ -1,7 +1,7 @@
 .entry-employee-picker { display: grid; gap: 18px; width: 100%; min-width: 0; }
 .entry-picker-heading,.entry-member-heading { display: flex; justify-content: space-between; align-items: center; gap: 14px; }
 .entry-employee-picker h3 { margin: 5px 0; font-size: 17px; }
-.entry-picker-heading span,.entry-member-heading span { font-size: 10px; font-weight: 700; letter-spacing: 1px; color: var(--primary); }
+.entry-picker-heading span,.entry-member-heading span { font-size: 10px; font-weight: 700; letter-spacing: 1px; color: var(--eyebrow); }
 .entry-picker-heading p { margin: 5px 0 0; font-size: 13px; color: var(--text-secondary); }
 .entry-picker-heading > small,.entry-member-heading > small { flex-shrink: 0; color: var(--text-secondary); font-size: 12px; }
 .entry-team-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }

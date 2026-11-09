@@ -2,7 +2,6 @@ import { useNavigate } from "react-router-dom";
 
 import TaskForm from "../../components/tasks/TaskForm";
 
-import "../../styles/teamLeadSidebar.css";
 import "../../styles/teamLeadTasks.css";
 import "../../styles/teamLeadAddTask.css";
 

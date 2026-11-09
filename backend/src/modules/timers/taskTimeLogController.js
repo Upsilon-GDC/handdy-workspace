@@ -10,7 +10,7 @@ const { getBillingDateRange, getDateKeyInTimezone } = require("../../utils/billi
 const sendErrorResponse = require("../../utils/sendErrorResponse");
 const { isAdminRole } = require("../../utils/roles");
 const { closeStaleDesktopTimers, HEARTBEAT_TIMEOUT_MS } = require("../../services/desktopTimerLease");
-const { validateActivitySelection } = require('../../services/activitySelection');
+const { validateActivitySelection, buildEmployeeScope, projectAllowedForTeam } = require('../../services/activitySelection');
 const { isOn } = require("../../config/optimizations");
 const { recordAttendanceActivity } = require("../../services/attendanceService");
 const { beginReportSync, changedTimeLogFilter, deltaRows, reportChecksum, wantsChecksum } = require("../../services/reportSync");
@@ -244,37 +244,11 @@ const startTimer = async (req, res) => {
             return res.status(400).json({ success: false, message: "Select a valid active client." });
         }
 
-        const hasActiveTeam = req.user.team
-            ? Boolean(await Team.exists({ _id: req.user.team, isActive: true }))
-            : false;
-        const teamMatch = { $or: [{ team: req.user.team }, { teams: req.user.team }] };
-        const isElevatedRole = isAdminRole(req.user.role) || ["manager", "hr"].includes(req.user.role);
-        const projectTeams = (projectExists.teams || []).map(String);
-        if (!isElevatedRole && projectTeams.length
-            && (!hasActiveTeam || !projectTeams.includes(String(req.user.team)))) {
-            return res.status(403).json({ success: false, message: "This project is not available to your team." });
+        const workScope = await buildEmployeeScope(req.user, { projectId: projectExists._id });
+        if (!projectAllowedForTeam(projectExists, workScope, req.user)) {
+            return res.status(403).json({ success: false, message: "This project is not available to your work teams." });
         }
-        // A team lead's own team already proves they lead the task's team, so
-        // they don't also need to appear in assignedTo (they never can — see
-        // validateTaskRelations, which restricts assignedTo to role:"employee").
-        const isTeamLead = req.user.role === "team_lead";
-        // Being individually named in a task's assignedTo must be sufficient
-        // on its own — it must not require the requester to currently have
-        // an active team, and must not be gated behind the team-match check
-        // the way assignToAllEmployees (which opens a task to a whole team)
-        // legitimately is. Elevated roles (admin/manager/hr), who normally
-        // carry no team at all, follow the same no-restriction convention
-        // used by getTaskVisibility in taskController.js.
-        const assignmentScope = isElevatedRole
-            ? {}
-            : isTeamLead
-                ? (hasActiveTeam ? teamMatch : { _id: null })
-                : {
-                    $or: [
-                        { assignedTo: employeeId },
-                        ...(hasActiveTeam ? [{ $and: [teamMatch, { assignToAllEmployees: true }] }] : []),
-                    ],
-                };
+        const assignmentScope = workScope.taskScope;
 
         const taskExists = await Task.findOne({
             _id: task,
@@ -298,7 +272,7 @@ const startTimer = async (req, res) => {
             });
         }
 
-        const activitySelection = await validateActivitySelection(projectExists, client, task);
+        const activitySelection = await validateActivitySelection(projectExists, client, task, req.user);
         if (activitySelection.error) return res.status(400).json({ success: false, message: activitySelection.error });
         const activeTimer = await TaskTimeLog.findOne({
             employee: employeeId,

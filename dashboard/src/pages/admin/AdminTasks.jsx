@@ -1,7 +1,9 @@
+import { TeamList } from "../../components/teams/TeamIdentity";
+import CollectionHeading, { CollectionIdentity } from "../../components/layout/CollectionHeading";
 import ModalFrame from "../../components/layout/ModalFrame";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2, Plus, Link2, RefreshCw } from "lucide-react";
 import DashboardLayout from "../../components/layout/DashboardLayout";
 import TaskForm from "../../components/tasks/TaskForm";
 import ActivityLinksModal from '../../components/tasks/ActivityLinksModal';
@@ -357,17 +359,18 @@ function AdminTasks() {
     <DashboardLayout title="Tasks">
       {showLinks && <ActivityLinksModal onClose={() => setShowLinks(false)} />}
       <div className="tasks-page">
-        <h1 className="tasks-page-title">
-          Tasks
-        </h1>
+        <section className="tasks-card collection-panel">
 
-        <section className="tasks-card">
-
+          <CollectionHeading kind="tasks" title="Task library" description="Find tasks, keep assignments clear and connect work across projects."
+            detail={loading ? 'Loading tasks...' : `${tasks.length} task${tasks.length === 1 ? '' : 's'} loaded`}>
+            {canLink && <button type="button" className="tasks-add-button" onClick={() => setShowLinks(true)}><Link2 size={15} aria-hidden="true" />Link multiple tasks</button>}
+            {canCreate && <button type="button" className="tasks-add-button" onClick={() => navigate("/admin/tasks/new")}><Plus size={16} aria-hidden="true" />Add New Task</button>}
+          </CollectionHeading>
           {/* SEARCH + ADD */}
 
           <div className="tasks-toolbar">
-            <button type="button" onClick={() => void loadTasks()} disabled={loading}>Refresh</button>
-            {canLink && <button type="button" className="tasks-add-button" onClick={() => setShowLinks(true)}>Link multiple tasks</button>}
+            <button type="button" onClick={() => void loadTasks()} disabled={loading}><RefreshCw size={14} aria-hidden="true" />Refresh</button>
+
             <div className="tasks-search-box">
               <label htmlFor="task-search">
                 Search:
@@ -385,13 +388,7 @@ function AdminTasks() {
               />
             </div>
 
-            {canCreate && <button
-              type="button"
-              className="tasks-add-button"
-              onClick={() => navigate("/admin/tasks/new")}
-            >
-              Add New Task
-            </button>}
+
           </div>
           {missingPermissions.length > 0 && <PermissionNote permissions={missingPermissions}>
             {canCreate || canEdit || canArchive ? "Some task actions are hidden." : "View only."}
@@ -538,7 +535,7 @@ function AdminTasks() {
                       return (
                         <tr key={taskId}>
                           <td>
-                            {(task.teams?.length ? task.teams : [task.team]).filter(Boolean).map((team) => team?.teamName || team).join(", ") || "-"}
+                            <TeamList teams={(task.teams?.length ? task.teams : [task.team]).filter(Boolean)} emptyLabel="-" />
                           </td>
 
                           <td>
@@ -546,7 +543,7 @@ function AdminTasks() {
                           </td>
 
                           <td>
-                            {getTaskName(task)}
+                            <CollectionIdentity kind="tasks">{getTaskName(task)}</CollectionIdentity>
                           </td>
 
                           <td>

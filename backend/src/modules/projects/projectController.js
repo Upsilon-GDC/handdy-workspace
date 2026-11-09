@@ -6,6 +6,7 @@ const { isAdminRole } = require("../../utils/roles");
 const { userHasPermission } = require("../../services/permissionService");
 const sendErrorResponse = require("../../utils/sendErrorResponse");
 const { validateProjectTasks } = require('../../services/projectTasks');
+const { workTeamIds, additionalWorkTeamIds, activeWorkTeams, workProjectIds } = require('../../services/clientAccess');
 
 const handleProjectError = (res, error) => {
   if (error.statusCode) return res.status(error.statusCode).json({ success: false, message: error.message });
@@ -51,13 +52,16 @@ const resolveProjectTeams = async (value) => {
 
 // Employees and team leads see their team's projects, unless they manage
 // projects or read company reports, which cover every project.
-const applyProjectVisibility = (filter, user) => {
+const applyProjectVisibility = async (filter, user) => {
   if (isAdminRole(user.role) || !["employee", "team_lead"].includes(user.role)) return filter;
   if (userHasPermission(user, "manage_projects", "view_all_reports")) return filter;
   const teamId = user.team;
-  const visibility = teamId
-    ? { $or: [{ teams: teamId }, { teams: { $exists: false } }, { teams: { $size: 0 } }] }
+  const workTeams = additionalWorkTeamIds(user).length ? (await activeWorkTeams(user)).teamIds : workTeamIds(user);
+  const visibility = workTeams.length
+    ? { $or: [{ teams: workTeams.length === 1 ? (String(teamId || '') === workTeams[0] ? teamId : workTeams[0]) : { $in: workTeams } }, { teams: { $exists: false } }, { teams: { $size: 0 } }] }
     : { $or: [{ teams: { $exists: false } }, { teams: { $size: 0 } }] };
+  const workProjects = workProjectIds(user);
+  if (workProjects.length) visibility.$or.push({ _id: { $in: workProjects }, status: 'Active' });
 
   if (!filter.$or) return { ...filter, ...visibility };
   const searchConditions = filter.$or;
@@ -125,7 +129,7 @@ const getAllProjects = async (req, res) => {
       filter.status = status;
     }
 
-    const visibleFilter = applyProjectVisibility(filter, req.user);
+    const visibleFilter = await applyProjectVisibility(filter, req.user);
     const totalProjects = await Project.countDocuments(visibleFilter);
 
     const projects = await Project.find(visibleFilter)
@@ -154,7 +158,7 @@ const getAllProjects = async (req, res) => {
 // Get Project By ID
 const getProjectById = async (req, res) => {
   try {
-    const project = await Project.findOne(applyProjectVisibility({ _id: req.params.id, deletedAt: null }, req.user))
+    const project = await Project.findOne(await applyProjectVisibility({ _id: req.params.id, deletedAt: null }, req.user))
       .populate("createdBy", "fullName email")
       .populate("client", "clientName status")
       .populate("clients", "clientName status")

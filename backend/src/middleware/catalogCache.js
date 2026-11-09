@@ -5,7 +5,9 @@ const MAX_ENTRIES = 64;
 const MAX_BYTES = 8 * 1024 * 1024;
 // A client may keep reusing an unchanged list for at most this long before it
 // must download a fresh copy, even if no revision change was detected.
-const ETAG_WINDOW_MS = 5 * 60_000;
+// Every request still revalidates permissions and model revisions. This is a
+// fallback full-download boundary, not permission to serve stale data for an hour.
+const ETAG_WINDOW_MS = 60 * 60_000;
 let bytes = 0;
 
 function remove(key) {
@@ -14,7 +16,7 @@ function remove(key) {
 }
 
 // Must run AFTER authentication/authorization. Private results stay scoped.
-function catalogCache(models, { shared = false } = {}) {
+function catalogCache(models, { shared = false, scopeKey = () => null } = {}) {
   return async (req, res, next) => {
     try {
       const references = await dependencyRevision(models);
@@ -22,12 +24,14 @@ function catalogCache(models, { shared = false } = {}) {
         shared ? null : String(req.user._id), req.user.role, String(req.user.team || ""),
         // Effective permissions: some lists widen with a duty (every project for
         // "Create/edit projects"), so a change of grants must change the key.
-        String(req.user.teamLead || ""), [...getEffectivePermissionsSync(req.user)].sort(), references]);
+        String(req.user.teamLead || ""), [...getEffectivePermissionsSync(req.user)].sort(), scopeKey(req), references]);
       // The key already encodes the caller's scope and every dependency's
       // revision, so an identical key means an identical list. Answering
       // "304 Not Modified" skips the body entirely.
       const etag = `"${key}-${Math.floor(Date.now() / ETAG_WINDOW_MS)}"`;
-      const cacheHeaders = { ETag: etag, "Cache-Control": "private, no-cache", Vary: "Authorization" };
+      const vary = new Set((res.get?.('Vary') || '').split(',').map(value => value.trim()).filter(Boolean));
+      vary.add('Authorization');
+      const cacheHeaders = { ETag: etag, "Cache-Control": "private, no-cache", Vary: [...vary].join(', ') };
       if (req.headers?.["if-none-match"] === etag) {
         res.set(cacheHeaders);
         return res.status(304).end();

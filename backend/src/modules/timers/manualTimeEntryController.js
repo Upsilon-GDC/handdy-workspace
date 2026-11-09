@@ -5,18 +5,15 @@ const Task = require("../../models/Task");
 const Employee = require("../../models/Employee");
 const Team = require("../../models/Team");
 const Client = require("../../models/Client");
-const { validateActivitySelection, activityOptionsForEmployee } = require('../../services/activitySelection');
+const { validateActivitySelection, activityOptionsForEmployee, buildEmployeeScope, projectAllowedForTeam } = require('../../services/activitySelection');
+const { allowedClientIds } = require('../../services/clientAccess');
 const sendErrorResponse = require("../../utils/sendErrorResponse");
-const { isAdminRole } = require("../../utils/roles");
 const { recordAttendanceActivity } = require("../../services/attendanceService");
 const { taskProjectScope } = require('../../services/projectTasks');
 
 const MAX_ENTRY_SECONDS = 24 * 60 * 60;
 const MIN_REASON_LENGTH = 5;
 const MAX_REASON_LENGTH = 500;
-const ELEVATED_ROLES = ["manager", "hr"];
-
-const isElevated = (employee) => isAdminRole(employee.role) || ELEVATED_ROLES.includes(employee.role);
 const toId = (value) => String(value?._id || value || "");
 
 // Validates the user-supplied fields and returns the cleaned values, or the
@@ -76,25 +73,6 @@ async function canActOnEmployee(actor, target) {
 
 // The same eligibility rules startTimer applies, so a manual entry can never
 // book time against a project/task the employee could not have timed.
-async function buildEmployeeScope(employee) {
-  const hasActiveTeam = employee.team ? Boolean(await Team.exists({ _id: employee.team, isActive: true })) : false;
-  const teamMatch = { $or: [{ team: employee.team }, { teams: employee.team }] };
-  const projectFilter = { status: "Active", deletedAt: null };
-  let taskScope = {};
-  if (!isElevated(employee)) {
-    taskScope = employee.role === "team_lead"
-      ? (hasActiveTeam ? teamMatch : { _id: null })
-      : { $or: [{ assignedTo: employee._id }, ...(hasActiveTeam ? [{ $and: [teamMatch, { assignToAllEmployees: true }] }] : [])] };
-  }
-  return { hasActiveTeam, projectFilter, taskScope, restrictProjectsToTeam: !isElevated(employee) };
-}
-
-const projectAllowedForTeam = (project, scope, employee) => {
-  const teams = (project.teams || []).map(toId);
-  return !scope.restrictProjectsToTeam || teams.length === 0
-    || (scope.hasActiveTeam && teams.includes(toId(employee.team)));
-};
-
 const projectClientIds = (project) => [...new Set(
   [...(project.clients || []), project.client].filter(Boolean).map(toId),
 )];
@@ -119,7 +97,7 @@ const getManualEntryOptions = async (req, res) => {
     const allProjects = await Project.find(scope.projectFilter)
       .select("projectCode projectName client clients clientName teams activityMappingEnabled linkedTasks").sort("projectName").lean();
     const candidateProjects = allProjects.filter((project) => projectAllowedForTeam(project, scope, employee));
-    if (candidateProjects.some(project => project.activityMappingEnabled || project.linkedTasks?.length)) {
+    if (allowedClientIds(employee) !== null || scope.projectIds.length || candidateProjects.some(project => project.activityMappingEnabled || project.linkedTasks?.length)) {
       const results = await Promise.all(candidateProjects.map(project => activityOptionsForEmployee(project, employee, {
         workOnly: true, includeShared: project.activityMappingEnabled === true,
       })));
@@ -183,7 +161,7 @@ const createManualEntry = async (req, res) => {
       return res.status(403).json({ success: false, message: "You cannot add entries for this employee." });
     }
 
-    const scope = await buildEmployeeScope(employee);
+    const scope = await buildEmployeeScope(employee, { projectId: value.project });
     const project = await Project.findOne({ _id: value.project, ...scope.projectFilter })
       .select("client clients teams activityMappingEnabled linkedTasks").lean();
     if (!project || !projectAllowedForTeam(project, scope, employee)) {
@@ -203,7 +181,7 @@ const createManualEntry = async (req, res) => {
       }
     }
 
-    const activitySelection = await validateActivitySelection(project, value.client, value.task);
+    const activitySelection = await validateActivitySelection(project, value.client, value.task, employee);
     if (activitySelection.error) return res.status(400).json({ success: false, message: activitySelection.error });
     // Overlap (which also covers exact duplicates). An open timer has no
     // stoppedAt and is treated as running to the present.
