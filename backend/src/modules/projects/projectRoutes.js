@@ -35,7 +35,7 @@ router.get('/task-options', protect, requirePermission('manage_projects'), requi
 
 router.get('/:id/activity-options', protect,
   catalogCache([Project, Client, Task, Team, Employee, ActivityMapping], {
-    scopeKey: req => [allowedClientIds(req.user)?.slice().sort() || null, workTeamIds(req.user).sort(), workProjectIds(req.user).sort()],
+    scopeKey: req => [allowedClientIds(req.user, req.params?.id)?.slice().sort() || null, workTeamIds(req.user).sort(), workProjectIds(req.user).sort()],
   }), async (req, res) => {
   try {
     const project = await Project.findOne({ _id: req.params.id, status: 'Active', deletedAt: null }).lean();

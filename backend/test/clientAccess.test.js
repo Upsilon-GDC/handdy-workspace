@@ -134,3 +134,47 @@ test('bulk access validation bounds and deduplicates members before any database
     assert.throws(() => validateSave({ body: { ...body, ...invalid } }, true));
   }
 });
+
+
+test('project client limits narrow only the configured employee and project, including empty limits', async t => {
+  replacePolicies([policy('team', 'software', ['wcpa', 'upsilon']), {
+    ...policy('employee', 'person', ['wcpa', 'upsilon']), overrideTeam: true,
+    projectClients: [{ project: 'tax', clients: ['wcpa'] }, { project: 'blocked', clients: [] }],
+  }]);
+  assert.deepEqual(allowedClientIds(employee, 'tax'), ['wcpa']);
+  assert.deepEqual(allowedClientIds(employee, { _id: 'tax' }), ['wcpa']);
+  assert.deepEqual(allowedClientIds(employee, 'no-project'), ['wcpa', 'upsilon']);
+  assert.deepEqual(allowedClientIds({ ...employee, _id: 'exception' }, 'tax'), ['wcpa', 'upsilon']);
+  assert.deepEqual(allowedClientIds(employee, 'blocked'), []);
+  assert.match(clientAccessError(employee, 'upsilon', 'tax'), /allowed/);
+  assert.equal(clientAccessError(employee, 'upsilon', 'no-project'), null);
+  for (const activityMappingEnabled of [false, true]) {
+    assert.match((await validateActivitySelection({ _id: 'tax', clients: ['wcpa', 'upsilon'], activityMappingEnabled }, 'upsilon', 'task', employee)).error, /allowed/);
+  }
+  t.mock.method(Team, 'exists', async () => ({ _id: 'software' }));
+  t.mock.method(Client, 'find', filter => {
+    assert.deepEqual(filter._id, { $in: ['wcpa'] });
+    return query([{ _id: 'wcpa', clientName: 'WCPA' }]);
+  });
+  t.mock.method(Task, 'find', () => query([]));
+  const options = await activityOptionsForEmployee({ _id: 'tax', clients: ['wcpa', 'upsilon'] }, employee);
+  assert.deepEqual(options.clients.map(row => row._id), ['wcpa']);
+  rememberPolicy({ ...policy('employee', 'person', ['wcpa']), projectClients: [{ project: 'tax', clients: ['upsilon'] }] });
+  assert.deepEqual(allowedClientIds(employee, 'tax'), [], 'project limits cannot grant clients beyond global access');
+  rememberPolicy({ ...policy('employee', 'person', [], false), projectClients: [{ project: 'tax', clients: [] }] });
+  assert.deepEqual(allowedClientIds(employee, 'tax'), ['wcpa', 'upsilon'], 'disabled employee restrictions restore inheritance');
+});
+
+test('project client API validation rejects duplicate, malformed and team-scoped limits', () => {
+  const { validateSave } = require('../src/modules/settings/clientAccessController');
+  const team = '64b000000000000000000001', employee = '64b000000000000000000002';
+  const body = { enabled: true, clients: [team], version: 0, projectClients: [{ project: team, clients: [team, team] }] };
+  const req = { params: { type: 'employee', id: employee }, body };
+  assert.deepEqual(validateSave(req, false).projectClients, [{ project: team, clients: [team] }]);
+  assert.equal(validateSave({ ...req, body: { ...body, projectClients: undefined } }, false).projectClients, undefined);
+  for (const projectClients of [null, {}, [null], [{ project: 'bad', clients: [] }], [{ project: team, clients: 'bad' }],
+    [{ project: team, clients: ['bad'] }], [...body.projectClients, ...body.projectClients], Array(501).fill(body.projectClients[0])]) {
+    assert.throws(() => validateSave({ ...req, body: { ...body, projectClients } }, false), error => error.statusCode === 400);
+  }
+  assert.throws(() => validateSave({ ...req, params: { type: 'team', id: team } }, false));
+});

@@ -20,6 +20,13 @@ function validateSave(req, bulk) {
   const overrideTeam = req.body.overrideTeam ?? false;
   const workTeams = req.body.workTeams;
   const workProjects = req.body.workProjects;
+  const projectClients = req.body.projectClients;
+  if (projectClients !== undefined && (type !== 'employee' || !Array.isArray(projectClients) || projectClients.length > 500
+    || projectClients.some(row => !row || typeof row.project !== 'string' || !mongoose.isObjectIdOrHexString(row.project) || !Array.isArray(row.clients)
+      || row.clients.length > 500 || row.clients.some(value => typeof value !== 'string' || !mongoose.isObjectIdOrHexString(value)))
+    || new Set(projectClients.map(row => row.project.toLowerCase())).size !== projectClients.length)) {
+    throw fail('Select unique valid projects and their permitted clients for employees only.');
+  }
   if (workProjects !== undefined && (!Array.isArray(workProjects) || workProjects.length > 500
     || workProjects.some(value => !mongoose.isObjectIdOrHexString(value)) || (type !== 'employee' && workProjects.length))) {
     throw fail('Select valid additional projects for employees only.');
@@ -36,13 +43,16 @@ function validateSave(req, bulk) {
     || !Array.isArray(clients) || clients.length > 500 || clients.some(value => !mongoose.isObjectIdOrHexString(value))
     || !Array.isArray(targets) || !targets.length || targets.length > 500
     || targets.some(row => !row || !mongoose.isObjectIdOrHexString(row.id) || !Number.isSafeInteger(row.version) || row.version < 0)) {
-    throw fail('Select 1–500 valid members and clients, then refresh before saving.');
+    throw fail('Select 1â€“500 valid members and clients, then refresh before saving.');
   }
   const rows = targets.map(row => ({ id: row.id.toLowerCase(), version: row.version }));
   if (new Set(rows.map(row => row.id)).size !== rows.length) throw fail('Select each member once.');
   if (bulk && req.body.team !== 'unassigned' && !mongoose.isObjectIdOrHexString(req.body.team)) throw fail('Choose a valid team.');
   return { type, targets: rows.sort((a, b) => a.id.localeCompare(b.id)), enabled, overrideTeam,
     workTeams: workTeams === undefined ? undefined : [...new Set(workTeams.map(value => value.toLowerCase()))],
+    projectClients: projectClients === undefined ? undefined : projectClients.map(row => ({
+      project: row.project.toLowerCase(), clients: [...new Set(row.clients.map(value => value.toLowerCase()))],
+    })),
     workProjects: workProjects === undefined ? undefined : [...new Set(workProjects.map(value => value.toLowerCase()))],
     clients: enabled ? [...new Set(clients.map(value => value.toLowerCase()))] : [], team: bulk ? req.body.team : undefined };
 }
@@ -75,15 +85,29 @@ async function save(req, res, bulk = false) {
       }
       const teamSnapshot = values => (values || []).map(value => ({ id: value,
         name: workTeamCatalog.find(team => id(team) === id(value))?.teamName || 'Removed team' }));
-      const projectReferences = [...new Set([...(input.workProjects || []), ...previous.flatMap(row => (row.workProjects || []).map(id))])];
+      const projectReferences = [...new Set([...(input.workProjects || []), ...previous.flatMap(row => (row.workProjects || []).map(id)),
+        ...(input.projectClients || []).map(row => row.project), ...previous.flatMap(row => (row.projectClients || []).map(value => id(value.project)))])];
       const projectCatalog = projectReferences.length ? await Project.find({ _id: { $in: projectReferences } })
-        .select('projectName status deletedAt').session(session).lean() : [];
+        .select('projectName status deletedAt client clients').session(session).lean() : [];
       if (input.workProjects?.some(value => !projectCatalog.some(project => id(project) === value && project.status === 'Active' && !project.deletedAt))) {
         throw fail('Some additional projects are inactive or missing.');
+      }
+      for (const restriction of input.projectClients || []) {
+        const project = projectCatalog.find(row => id(row) === restriction.project && row.status === 'Active' && !row.deletedAt);
+        if (!project) throw fail('Some restricted projects are inactive or missing.');
+        const linked = [...(project.clients || []), project.client].filter(Boolean).map(id);
+        if (restriction.clients.some(value => !input.clients.includes(value) || (linked.length && !linked.includes(value)))) {
+          throw fail('Project client limits must use active selected clients linked to that project.');
+        }
       }
       const projectSnapshot = values => (values || []).map(value => ({ id: value,
         name: projectCatalog.find(project => id(project) === id(value))?.projectName || 'Removed project' }));
       const snapshot = (values, catalog) => values.map(value => ({ id: value, name: catalog.find(client => id(client) === id(value))?.clientName || 'Removed client' }));
+      const restrictionClientIds = previous.flatMap(row => (row.projectClients || []).flatMap(value => value.clients));
+      const restrictionClients = restrictionClientIds.length ? await Client.find({ _id: { $in: restrictionClientIds } }).select('clientName').session(session).lean() : [];
+      const restrictionSnapshot = values => (values || []).map(row => ({
+        project: projectSnapshot([row.project])[0], clients: snapshot(row.clients, [...oldClients, ...selectedClients, ...restrictionClients]),
+      }));
       const teamId = input.type === 'team' ? input.targets[0].id : bulk ? (input.team === 'unassigned' ? null : input.team) : subjects[0].team;
       const team = teamId ? await Team.findById(teamId).select('teamName').session(session).lean() : null;
       if (bulk && input.team !== 'unassigned' && !team) throw fail('The selected team no longer exists.', 409);
@@ -92,7 +116,8 @@ async function save(req, res, bulk = false) {
         const row = await Policy.findOneAndUpdate({ subjectType: input.type, subjectId: target.id, version: target.version },
           { $set: { enabled: input.enabled, overrideTeam: input.overrideTeam, clients: input.clients,
             ...(input.workTeams === undefined ? {} : { workTeams: input.workTeams }),
-            ...(input.workProjects === undefined ? {} : { workProjects: input.workProjects }), updatedBy: req.user._id }, $inc: { version: 1 } },
+            ...(input.workProjects === undefined ? {} : { workProjects: input.workProjects }),
+            ...(input.projectClients === undefined ? {} : { projectClients: input.projectClients }), updatedBy: req.user._id }, $inc: { version: 1 } },
           { upsert: target.version === 0, returnDocument: 'after', runValidators: true, session }).lean();
         if (!row) throw fail('Client access changed in another window. Refresh before saving.', 409);
         policies.push(row);
@@ -110,6 +135,8 @@ async function save(req, res, bulk = false) {
             afterWorkTeams: teamSnapshot(policies.find(row => id(row.subjectId) === target.id)?.workTeams),
             beforeWorkProjects: projectSnapshot(before?.workProjects),
             afterWorkProjects: projectSnapshot(policies.find(row => id(row.subjectId) === target.id)?.workProjects),
+            beforeProjectClients: restrictionSnapshot(before?.projectClients),
+            afterProjectClients: restrictionSnapshot(policies.find(row => id(row.subjectId) === target.id)?.projectClients),
             beforeClients: snapshot(before?.clients || [], oldClients), afterClients: snapshot(input.clients, selectedClients), version: target.version + 1 };
         }),
       }], { session });

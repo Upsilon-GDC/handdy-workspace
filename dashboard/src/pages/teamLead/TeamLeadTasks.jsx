@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Pencil, SquareX } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import axiosInstance from "../../api/axiosInstance";
 import { getAllTasks } from "../../api/taskApi";
 import getApiErrorMessage from "../../utils/getApiErrorMessage";
@@ -107,11 +107,11 @@ function TeamLeadTasks() {
                     <td>{task.assignToAllEmployees ? "Entire team" : (task.assignedTo || []).map((item) => item.fullName).join(", ") || "-"}</td>
                     <td><span className={`tl-task-status ${task.isActive ? "is-active" : "is-inactive"}`}>{task.isActive ? "Active" : "Inactive"}</span></td>
                     {(canEdit || canArchive) && <td className="tl-task-actions">
-                      {canEdit && <button type="button" className="tl-task-edit" title="Edit" aria-label={`Edit ${task.taskName}`}
-                        onClick={() => { setError(""); setMessage(""); setEditingTask(task); }}><Pencil size={16} /></button>}
+                      {canEdit && <button type="button" className="tl-task-edit" title="Edit task" aria-label={`Edit ${task.taskName}`}
+                        onClick={() => { setError(""); setMessage(""); setEditingTask(task); }}><Pencil size={18} aria-hidden="true" /></button>}
                       {canArchive && <>
                         <button type="button" className="tl-task-toggle" onClick={() => toggleTask(task._id)}>{task.isActive ? "Deactivate" : "Activate"}</button>
-                        <button type="button" className="tl-task-delete" aria-label={`Delete ${task.taskName}`} onClick={() => deleteTask(task._id)}><SquareX size={17} /></button>
+                        <button type="button" className="tl-task-delete" title="Delete task" aria-label={`Delete ${task.taskName}`} onClick={() => deleteTask(task._id)}><Trash2 size={18} aria-hidden="true" /></button>
                       </>}
                     </td>}
                   </tr>

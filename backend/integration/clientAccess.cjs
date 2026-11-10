@@ -235,3 +235,63 @@ test('specific project grants allow only selected projects and shared tasks, per
   assert.equal((await TaskTimeLog.findById(started.body.timeLog._id).lean()).status, 'running');
   assert.ok((await Employee.find({ _id: { $in: f.members.map(row => row._id) } }).lean()).every(row => String(row.team) === String(f.group._id)));
 });
+
+
+test('employee project client limits persist, preserve exceptions, and enforce timer/manual choices', async () => {
+  const f = await membersFixture();
+  const [restricted, exception] = f.members;
+  const projects = await Project.create(['Tax Review', 'Tax preparation', 'No Project'].map(name => ({
+    projectName: name, projectCode: `PC-${new mongoose.Types.ObjectId()}`, teams: [f.group._id],
+    clients: [other._id, upsilon._id], createdBy: actor._id,
+  })));
+  const tasks = await Task.create(projects.map(project => ({ taskName: 'Work', taskCode: `PC-${new mongoose.Types.ObjectId()}`,
+    project: project._id, teams: [f.group._id], assignToAllEmployees: true, createdBy: actor._id })));
+  const clients = [String(other._id), String(upsilon._id)];
+  assert.equal((await batch({ ...f.body, clients })).statusCode, 200);
+  const exceptionBefore = await Policy.findOne({ subjectId: exception._id }).lean();
+  const projectClients = projects.slice(0, 2).map(project => ({ project: String(project._id), clients: [String(other._id)] }));
+  const input = { enabled: true, clients, version: 1, projectClients };
+  const historyBefore = await Change.countDocuments();
+  for (const invalid of [
+    [{ project: String(new mongoose.Types.ObjectId()), clients: [String(other._id)] }],
+    [{ project: String(projects[0]._id), clients: [String(new mongoose.Types.ObjectId())] }],
+  ]) assert.equal((await save('employee', restricted._id, { ...input, projectClients: invalid })).statusCode, 400);
+  assert.equal(await Change.countDocuments(), historyBefore);
+  const saved = await save('employee', restricted._id, input);
+  assert.equal(saved.statusCode, 200, JSON.stringify(saved.body));
+  assert.equal(saved.body.history.targets[0].afterProjectClients.length, 2);
+  assert.equal(saved.body.history.targets[0].afterProjectClients[0].project.name, 'Tax Review');
+  assert.deepEqual(await Policy.findOne({ subjectId: exception._id }).lean(), exceptionBefore);
+  replacePolicies([]); await initializeClientAccess();
+  for (const project of projects.slice(0, 2)) {
+    assert.deepEqual((await activityOptionsForEmployee(project, restricted)).clients.map(row => String(row._id)), [String(other._id)]);
+    assert.equal((await activityOptionsForEmployee(project, exception)).clients.length, 2);
+  }
+  assert.equal((await activityOptionsForEmployee(projects[2], restricted)).clients.length, 2);
+  const options = response();
+  await getManualEntryOptions({ user: actor, query: { employee: String(restricted._id) } }, options);
+  assert.equal(options.statusCode, 200, JSON.stringify(options.body));
+  for (const project of projects.slice(0, 2)) assert.deepEqual(options.body.projects.find(p => String(p._id) === String(project._id)).clientIds, [String(other._id)]);
+  const countBefore = await TaskTimeLog.countDocuments();
+  for (const index of [0, 1]) {
+    const forged = response();
+    await startTimer({ user: restricted, body: { project: String(projects[index]._id), task: String(tasks[index]._id), client: String(upsilon._id), clientType: 'desktop' } }, forged);
+    assert.equal(forged.statusCode, 400, JSON.stringify(forged.body)); assert.match(forged.body.message, /allowed/);
+    const manual = response();
+    await createManualEntry({ user: actor, body: { employee: String(restricted._id), project: String(projects[index]._id),
+      task: String(tasks[index]._id), client: String(upsilon._id), startedAt: new Date(Date.now() - 120000).toISOString(),
+      stoppedAt: new Date(Date.now() - 60000).toISOString(), reason: 'Synthetic disallowed project client' } }, manual);
+    assert.equal(manual.statusCode, 400, JSON.stringify(manual.body)); assert.match(manual.body.message, /allowed/);
+  }
+  assert.equal(await TaskTimeLog.countDocuments(), countBefore);
+  const started = response();
+  await startTimer({ user: restricted, body: { project: String(projects[2]._id), task: String(tasks[2]._id), client: String(upsilon._id), clientType: 'desktop' } }, started);
+  assert.equal(started.statusCode, 201, JSON.stringify(started.body));
+  const omitted = await save('employee', restricted._id, { enabled: true, clients, version: 2 });
+  assert.equal(omitted.statusCode, 200, JSON.stringify(omitted.body));
+  assert.equal(omitted.body.policy.projectClients.length, 2, 'older settings callers preserve saved per-project limits');
+  const cleared = await save('employee', restricted._id, { enabled: true, clients, version: 3, projectClients: [] });
+  assert.equal(cleared.statusCode, 200, JSON.stringify(cleared.body));
+  assert.equal((await activityOptionsForEmployee(projects[0], restricted)).clients.length, 2);
+  assert.equal((await TaskTimeLog.findById(started.body.timeLog._id)).status, 'running');
+});

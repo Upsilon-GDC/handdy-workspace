@@ -25,3 +25,25 @@
   .tl-tasks-card { padding: 16px; }
 }
 }
+
+/* Keep icon controls above the shared button padding in workspace.css. */
+.crm-content .tl-task-actions :is(.tl-task-edit, .tl-task-delete) {
+  flex: 0 0 40px;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+}
+.crm-content .tl-task-actions :is(.tl-task-edit, .tl-task-delete) svg {
+  display: block;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+}
+.crm-content .tl-task-edit { --btn-fg: var(--primary); }
+.crm-content .tl-task-actions :is(.tl-task-edit, .tl-task-delete):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
