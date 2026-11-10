@@ -5,14 +5,13 @@
 const ALL_REPORTS = ["view_all_reports"];
 const TEAM_REPORTS = ["view_team_timesheets"];
 const BILLING = ["view_billing_amounts"];
+const WORK_SETUP_PATHS = ["/admin/project-client-links", "/admin/task-links", "/admin/client-access"];
 
 export const workspaceNavigation = [
   { path: "/admin/dashboard", title: "Overview", role: "admin", group: "Workspace", needs: ALL_REPORTS },
   { path: "/admin/clients", title: "Clients", role: "admin", group: "Workspace" },
   { path: "/admin/projects", title: "Projects", role: "admin", group: "Workspace" },
-  { path: "/admin/task-links", title: "Task links", role: "admin", group: "Task linking", needs: ["manage_activity_links"] },
-  { path: "/admin/project-client-links", title: "Project & client links", role: "admin", group: "Task linking", needs: ["manage_activity_links"] },
-  { path: "/admin/client-access", title: "Team & employee clients", role: "admin", group: "Task linking", needs: ["manage_activity_links"] },
+  { path: "/admin/project-client-links", title: "Work setup", activePaths: WORK_SETUP_PATHS, role: "admin", group: "Task linking", needs: ["manage_activity_links"] },
   { path: "/admin/tasks", title: "Tasks", role: "admin", group: "Workspace" },
   { path: "/admin/team", title: "Teams", role: "admin", group: "Workspace" },
   { path: "/admin/employees", title: "Employees", role: "admin", group: "Workspace" },
@@ -50,9 +49,7 @@ export const workspaceNavigation = [
   { path: "/admin/dashboard", title: "Overview", role: "manager", group: "Workspace", needs: ALL_REPORTS },
   { path: "/admin/clients", title: "Clients", role: "manager", group: "Workspace" },
   { path: "/admin/projects", title: "Projects", role: "manager", group: "Workspace" },
-  { path: "/admin/task-links", title: "Task links", role: "manager", group: "Task linking", needs: ["manage_activity_links"] },
-  { path: "/admin/project-client-links", title: "Project & client links", role: "manager", group: "Task linking", needs: ["manage_activity_links"] },
-  { path: "/admin/client-access", title: "Team & employee clients", role: "manager", group: "Task linking", needs: ["manage_activity_links"] },
+  { path: "/admin/project-client-links", title: "Work setup", activePaths: WORK_SETUP_PATHS, role: "manager", group: "Task linking", needs: ["manage_activity_links"] },
   { path: "/admin/tasks", title: "Tasks", role: "manager", group: "Workspace" },
   { path: "/admin/team", title: "Teams", role: "manager", group: "Workspace" },
   { path: "/admin/employees", title: "Employees", role: "manager", group: "Workspace" },
@@ -74,8 +71,7 @@ export const workspaceNavigation = [
   { path: "/admin/dashboard", title: "Overview", role: "hr", group: "Workspace", needs: ALL_REPORTS },
   { path: "/admin/clients", title: "Clients", role: "hr", group: "Workspace" },
   { path: "/admin/projects", title: "Projects", role: "hr", group: "Workspace" },
-  { path: "/admin/task-links", title: "Task links", role: "hr", group: "Task linking", needs: ["manage_activity_links"] },
-  { path: "/admin/project-client-links", title: "Project & client links", role: "hr", group: "Task linking", needs: ["manage_activity_links"] },
+  { path: "/admin/project-client-links", title: "Work setup", activePaths: WORK_SETUP_PATHS, role: "hr", group: "Task linking", needs: ["manage_activity_links"] },
   { path: "/admin/tasks", title: "Tasks", role: "hr", group: "Workspace" },
   { path: "/admin/team", title: "Teams", role: "hr", group: "Workspace" },
   { path: "/admin/my-timesheet", title: "My timesheet", role: "hr", group: "Time & attendance" },
@@ -105,8 +101,7 @@ const TEAM_ADMIN = ["create_teams", "edit_teams", "assign_team_leads"];
 const EMPLOYEES = ["employee"];
 
 export const dutyNavigation = [
-  { path: "/admin/task-links", title: "Task links", group: "Task linking", anyOf: ["manage_activity_links"] },
-  { path: "/admin/project-client-links", title: "Project & client links", group: "Task linking", anyOf: ["manage_activity_links"] },
+  { path: "/admin/project-client-links", title: "Work setup", activePaths: WORK_SETUP_PATHS, group: "Task linking", anyOf: ["manage_activity_links"] },
   { path: "/admin/dashboard", title: "Company overview", group: "Workspace", anyOf: ALL_REPORTS },
   { path: "/admin/clients", title: "Clients", group: "Workspace", anyOf: ["manage_clients"] },
   { path: "/admin/projects", title: "Projects", group: "Workspace", anyOf: ["manage_projects"] },

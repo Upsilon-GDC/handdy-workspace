@@ -8,6 +8,17 @@
 .client-access-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
 .client-access-columns > section { min-width: 0; border: 1px solid var(--border, #dce2ed); border-radius: 12px; padding: 20px; }
 .client-access-editor > label { display: grid; gap: 8px; }
+.client-access-method { border: 0; padding: 0; margin: 20px 0; min-width: 0; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.client-access-method legend { margin-bottom: 12px; padding: 0; font-size: 14px; font-weight: 600; }
+.client-access-method > label { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border: 1px solid var(--border-light); border-radius: 10px; cursor: pointer; }
+.client-access-method > label.is-selected { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 5%, var(--card-bg)); }
+.client-access-method input { flex: none; width: 17px !important; height: 17px; min-height: 0 !important; margin-top: 2px; accent-color: var(--primary); }
+.client-access-method strong { display: block; font-size: 14px; line-height: 1.5; }
+.client-access-method small { font-size: 12px; line-height: 1.6; color: var(--text-secondary); opacity: 1; }
+.crm-content .client-access-editor > .client-access-outside { display: flex; align-items: flex-start; gap: 10px; padding: 14px; margin-bottom: 18px; background: var(--surface-soft); border-radius: 9px; font-size: 13px; }
+.client-access-outside input { flex: none; width: 17px; height: 17px; margin-top: 3px; accent-color: var(--primary); }
+.client-access-outside small, .client-access-result small { font-size: 12px; color: var(--text-secondary); line-height: 1.6; opacity: 1; }
+@media(max-width:650px) { .client-access-method { grid-template-columns: 1fr; } }
 .client-access-page input:not([type=checkbox]), .client-access-page select { width: 100%; min-height: 42px; box-sizing: border-box; }
 .client-access-choices { max-height: 260px; overflow: auto; margin: 16px 0; border: 1px solid var(--border, #dce2ed); border-radius: 8px; }
 .client-access-choices label { display: flex; align-items: center; gap: 10px; padding: 12px; border-bottom: 1px solid var(--border, #dce2ed); }

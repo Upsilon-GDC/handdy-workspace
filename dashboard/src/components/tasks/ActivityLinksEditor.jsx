@@ -7,7 +7,7 @@ import '../../styles/activityLinks.css';
 
 const ignoreBusy = () => {};
 
-export default function ActivityLinksEditor({ clientsOnly = false, onBusyChange = ignoreBusy }) {
+export default function ActivityLinksEditor({ clientsOnly = false, onBusyChange = ignoreBusy, allInOne = false }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -22,15 +22,16 @@ export default function ActivityLinksEditor({ clientsOnly = false, onBusyChange 
     return () => { active = false; };
   }, [attempt]);
   const reload = () => { setData(null); setLoading(true); setError(''); setAttempt(value => value + 1); };
+  const history = <ActivityLinksHistory mode={clientsOnly ? 'clients' : 'tasks'} refreshKey={historyRevision} latest={latestHistory} page={historyPage} onPageChange={setHistoryPage} />;
   return <>
     {error && <div role="alert" className="admin-error-box"><p>{error}</p><button type="button" onClick={reload}>Retry loading links</button></div>}
     {loading && <p role="status">Loading activity links…</p>}
-    {data && <BatchActivityLinksForm data={data} clientProjectsOnly={clientsOnly} onBusyChange={onBusyChange} onReload={reload} onSaved={entry => {
+    {data && <BatchActivityLinksForm data={data} clientProjectsOnly={clientsOnly} allInOne={allInOne} onBusyChange={onBusyChange} onReload={reload} onSaved={entry => {
       setLatestHistory(entry || null); setHistoryPage(1); setHistoryRevision(value => value + 1);
     }} onRefresh={async () => {
       const response = await axiosInstance.get('/projects/activity-links');
       setData(response.data);
     }} />}
-    <ActivityLinksHistory mode={clientsOnly ? 'clients' : 'tasks'} refreshKey={historyRevision} latest={latestHistory} page={historyPage} onPageChange={setHistoryPage} />
+    {allInOne ? <details className="setup-history"><summary>View previous changes</summary>{history}</details> : history}
   </>;
 }

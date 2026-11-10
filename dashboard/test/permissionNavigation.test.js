@@ -7,15 +7,27 @@ import { isAdminRole, missingPermissionHint, missingTaskPermissions } from "../s
 const grants = (role, keys) => (...needed) => isAdminRole(role) || needed.every((key) => keys.includes(key));
 const paths = (role, keys) => navigationForRole(role, grants(role, keys)).map((item) => item.path);
 
-test('a personal linking grant opens Task links without project/task administration', () => {
+test('a personal linking grant opens Work setup without project/task administration', () => {
   for (const role of ['employee', 'team_lead']) {
     const menu = dutyNavigationFor(role, grants(role, ['manage_activity_links']));
-    assert.ok(menu.some(item => item.path === '/admin/task-links'));
+    assert.equal(menu.filter(item => item.group === 'Task linking').length, 1);
+    assert.ok(menu.some(item => item.path === '/admin/project-client-links' && item.title === 'Work setup'));
     assert.equal(menu.some(item => item.path === '/admin/projects'), false);
-    assert.equal(dutyNavigationFor(role, grants(role, [])).some(item => item.path === '/admin/task-links'), false);
+    assert.equal(dutyNavigationFor(role, grants(role, [])).some(item => item.path === '/admin/project-client-links'), false);
   }
-  assert.ok(paths('hr', ['manage_activity_links']).includes('/admin/task-links'));
-  assert.equal(paths('hr', []).includes('/admin/task-links'), false);
+  assert.ok(paths('hr', ['manage_activity_links']).includes('/admin/project-client-links'));
+  assert.equal(paths('hr', []).includes('/admin/project-client-links'), false);
+});
+
+test('work setup has one menu entry covering all three existing pages', () => {
+  for (const role of ['admin', 'alpha', 'manager', 'hr']) {
+    const items = navigationForRole(role, grants(role, ['manage_activity_links'])).filter(item => item.group === 'Task linking');
+    assert.equal(items.length, 1);
+    assert.equal(items[0].title, 'Work setup');
+    for (const path of ['/admin/project-client-links', '/admin/task-links', '/admin/client-access']) {
+      assert.ok(items[0].activePaths.includes(path));
+    }
+  }
 });
 
 test("admin-level roles keep the full menu whatever the grants", () => {

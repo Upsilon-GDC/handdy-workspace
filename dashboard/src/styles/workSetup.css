@@ -1,0 +1,30 @@
+.work-setup-back { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 20px; padding: 0; border: 0; background: transparent; color: var(--primary); text-decoration: none; font: inherit; font-size: 13px; cursor: pointer; }
+.work-setup-back:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.work-setup-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; padding: 6px; border: 1px solid var(--border-light); border-radius: 12px; background: var(--card-bg); width: fit-content; max-width: 100%; box-sizing: border-box; }
+.crm-content .work-setup-tabs [role="tab"] { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 44px; width: auto !important; padding: 12px 20px; border: 1px solid transparent !important; border-radius: 8px; color: var(--text-secondary) !important; background: transparent !important; font-size: 14px; font-weight: 600; box-shadow: none; cursor: pointer; }
+.crm-content .work-setup-tabs [role="tab"][aria-selected="true"] { background: var(--primary) !important; color: var(--button-text) !important; }
+.work-setup-tabs [role="tab"] svg { flex: none; }
+.work-setup-tabs [role="tab"]:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+@media(max-width:650px) { .work-setup-tabs { width: 100%; flex-wrap: nowrap; } .crm-content .work-setup-tabs [role="tab"] { flex: 1; min-width: 0; padding: 10px 8px; gap: 6px; font-size: 12px; } }
+.unified-setup-heading { padding: 24px 26px 0; }
+.unified-setup-heading h2 { margin: 0 0 8px; font-size: 22px; line-height: 1.4; }
+.unified-setup-heading p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.7; }
+.unified-setup-mode { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 20px 26px 16px; padding: 12px 14px; background: var(--surface-soft); border: 1px solid var(--border-light); border-radius: 9px; }
+.unified-setup-mode label { display: inline-flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.unified-setup-mode input { width: 17px; height: 17px; accent-color: var(--primary); }
+.unified-setup-mode > span { color: var(--text-secondary); font-size: 12px; }
+.work-setup-unified .activity-batch-picker h3 { font-size: 16px; }
+.work-setup-unified .activity-batch-review { margin-top: 22px; padding: 22px; border: 1px solid var(--primary); border-radius: 12px; }
+.work-setup-unified .activity-batch-review .activity-batch-footer { margin: 12px 0 0; padding: 16px 0 0; background: transparent; }
+.setup-history { padding: 18px 26px; border-top: 1px solid var(--border-light); font-size: 13px; color: var(--text-secondary); }
+.setup-history > summary, .access-extra-options > summary { cursor: pointer; }
+.access-guided-content { max-width: 860px; }
+.access-question-title { margin: 24px 0 16px; font-size: 17px; }
+.access-scope-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 24px; }
+.crm-content .access-scope-options button { display: flex; flex-direction: column; align-items: flex-start; text-align: left; padding: 18px; border: 1px solid var(--border-light); border-radius: 12px; color: var(--text-main); background: var(--card-bg); cursor: pointer; }
+.access-scope-options button[aria-pressed="true"] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 5%, var(--card-bg)); }
+.access-scope-options strong { display: block; font-size: 14px; }
+.access-scope-options span { display: block; margin-top: 7px; font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
+.access-extra-options { padding: 16px 0; font-size: 13px; border-top: 1px solid var(--border-light); }
+@media (min-width: 901px) { .work-setup-unified .activity-batch-form .activity-batch-columns.has-tasks { grid-template-columns: repeat(3, minmax(0,1fr)); } .work-setup-unified .activity-batch-columns.has-tasks > .activity-batch-picker:last-child { grid-column: auto; } }
+@media (max-width: 650px) { .access-scope-options { grid-template-columns: 1fr; } .unified-setup-heading { padding: 20px 16px 0; } .unified-setup-mode { margin: 16px; } .setup-history { padding: 18px 16px; } .work-setup-unified .activity-batch-review { padding: 14px; } }

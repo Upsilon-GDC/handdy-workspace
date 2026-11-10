@@ -35,16 +35,18 @@ const server = http.createServer((req, res) => {
   const endpoint = url.pathname.slice(4); calls.push(endpoint); let body = { success: true };
   if (endpoint === '/auth/me') body = { user };
   if (endpoint === '/auth/login-requests/pending') body = { loginRequest: null };
-  if (endpoint === '/permissions/me') body = { permissions: ['view_all_reports'] };
+  if (endpoint === '/permissions/me') body = { permissions: [user.role === 'team_lead' ? 'view_team_timesheets' : 'view_all_reports'] };
   if (endpoint.startsWith('/employees')) body = { employees, totalPages: 1 };
+  if (endpoint === '/employees/my-team') body = { employees: employees.filter(row => row.team === 'wcpa'), totalPages: 1 };
   if (endpoint === '/teams') body = { teams };
-  if (endpoint === '/working-hours/overview') {
+  if (['/working-hours/overview', '/working-hours/team-overview'].includes(endpoint)) {
     if (failHours) { res.statusCode = 503; body = { message: 'Synthetic productivity outage' }; }
     else body = { date: url.searchParams.get('date') || today, asOf: new Date().toISOString(), teams: [],
       totals: { requiredSeconds: 0, completedSeconds: 0, pendingSeconds: 0, completionPercent: 0, overtimeSeconds: 0, presentCount: 0, unconfiguredCount: 0 },
       ...(!legacyRoster && url.searchParams.get('includeRoster') === 'true' ? { roster: { employees: employees.filter(row => row.role !== 'alpha'), teams } } : {}) };
+    if (endpoint === '/working-hours/team-overview' && body.roster) body.roster = { employees: employees.filter(row => row.team === 'wcpa'), teams: teams.filter(row => row._id === 'wcpa') };
   }
-  if (endpoint === '/time-logs/admin') {
+  if (['/time-logs/admin', '/time-logs/team'].includes(endpoint)) {
     if (failNext) { failNext = false; res.statusCode = 503; body = { message: 'Synthetic outage' }; }
     else body = { timeLogs: url.searchParams.get('startDate') <= today && url.searchParams.get('endDate') >= today ? current : [{ ...closed, _id: 'historical', startedAt: `${yesterday}T04:00:00Z`, stoppedAt: `${yesterday}T06:00:00Z`, totalWorkedSeconds: 7200 }], totalPages: 1 };
   }
@@ -132,6 +134,27 @@ app.whenReady().then(async () => {
     fs.writeFileSync(path.join(output, 'overview-mobile.png'), (await win.webContents.capturePage()).toPNG());
     assert.deepEqual(errors.filter(error => !/Failed to load resource.*503/.test(error)), []);
     assert.ok(calls.includes('/time-logs/admin'));
+    user.role = 'team_lead';
+    await evaluate(`localStorage.setItem('user',${JSON.stringify(JSON.stringify(user))})`);
+    const beforeLead = calls.length;
+    await win.loadURL(`${base}/team-lead/dashboard`);
+    await until(`document.querySelector('.overview-refresh')?.textContent==='Refresh' && document.querySelectorAll('.overview-team-card').length===1`);
+    assert.equal(await evaluate(`document.body.textContent.includes('Your team at a glance')`),true);
+    assert.equal(await evaluate(`!!document.querySelector('[data-overview-team="tax"]') || !!document.querySelector('[data-overview-team="software"]')`),false);
+    assert.equal(await evaluate(`document.querySelector('.crm-stat-strip article').textContent.includes('1 / 2')`),true,'Other team logs never enter the team overview');
+    assert.equal(await evaluate(`!!document.querySelector('a[href="/admin/working-hours"]')`),false);
+    assert.ok(calls.slice(beforeLead).includes('/working-hours/team-overview'));
+    assert.ok(calls.slice(beforeLead).includes('/time-logs/team'));
+    assert.equal(calls.slice(beforeLead).some(path=>['/working-hours/overview','/time-logs/admin','/employees/options','/teams'].includes(path)),false);
+    await evaluate(`document.querySelector('[data-overview-team="wcpa"]').click()`);
+    await until(`document.querySelectorAll('.overview-member-table tbody tr').length===2`);
+    assert.equal(await evaluate(`document.querySelector('.overview-member-table').textContent.includes('B Break Employee')`),false);
+    failHours = true; await click('Refresh');
+    await until(`document.querySelector('.overview-refresh')?.textContent==='Refresh' && !!document.querySelector('.wh-overview [role=alert]')`);
+    assert.ok(calls.slice(beforeLead).includes('/employees/my-team'));
+    assert.equal(calls.slice(beforeLead).some(path=>['/employees/options','/teams','/time-logs/admin'].includes(path)),false,'An outage never falls back to company catalogs');
+    assert.equal(await evaluate(`document.querySelectorAll('.overview-team-card').length`),1);
+    fs.writeFileSync(path.join(output, 'team-lead-overview-mobile.png'),(await win.webContents.capturePage()).toPNG());
     console.log('PASS: shared roster, deduplicated current-day/week reports, one productivity request, older-server/outage fallback, unchanged team totals and live status, drilldown, filters and mobile layout. Local fixture API only.');
   } catch (error) {
     code = 1; console.error(error);

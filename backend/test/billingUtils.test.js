@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   aggregateBillingLogs,
+  aggregateBillingMembers,
   getBillingDateRange,
   getBillingEmployeeAccess,
 } = require("../src/utils/billingUtils");
@@ -37,6 +38,36 @@ const reportFor = (logs, startDate = "2026-08-01", endDate = "2026-08-03", emplo
   const range = getBillingDateRange(startDate, endDate, "UTC");
   return aggregateBillingLogs({ logs, employee: employeeRecord, startDate, endDate, timezone: "UTC", rangeStart: range.start, rangeEnd: range.endExclusive });
 };
+
+test('team billing preserves employee rates, missing rates and members without time', () => {
+  const second = { ...employee, _id: 'second', employeeId: 'EMP-2', fullName: 'Second Member', projectRates: [{ project: project._id, chargeRate: 40 }] };
+  const missing = { ...employee, _id: 'missing', fullName: 'Missing Rate', projectRates: [] };
+  const idle = { ...employee, _id: 'idle', fullName: 'No Time' };
+  const reports = [reportFor([log('a', workTask, '2026-08-01T09:00:00Z', 3600)]), reportFor([log('b', workTask, '2026-08-01T09:00:00Z', 7200)], undefined, undefined, second), reportFor([log('c', workTask, '2026-08-01T10:00:00Z', 3600)], undefined, undefined, missing), reportFor([], undefined, undefined, idle)];
+  const result = aggregateBillingMembers({ reports, scope: { label: 'Tax team', type: 'team' }, period: reports[0].period });
+  assert.equal(result.scope.memberCount, 4);
+  assert.equal(result.summary.taskSeconds, 14400);
+  assert.equal(result.summary.totalBillableAmount, 105);
+  assert.equal(result.summary.taskCount, 1);
+  assert.equal(result.summary.missingRateCount, 1);
+  assert.equal(result.summary.workingDays, 1);
+  assert.equal(result.members.find(row => row._id === 'idle').totalSeconds, 0);
+  assert.equal(result.taskSummary.find(row => row.memberId === 'second').chargeRate, 40);
+  assert.equal(result.projects[0].tasks.length, 3);
+  assert.equal(new Set(result.projects[0].tasks.map(row => row.key)).size, 3);
+  assert.equal(result.dailyDetails[0].totalBillableAmount, 105);
+  assert.equal(result.dailyDetails[0].hasMissingRates, true);
+  assert.equal(result.dailyDetails[0].allRatesMissing, false);
+  assert.equal(result.warnings[0].employeeName, 'Missing Rate');
+});
+
+test('an empty team returns a valid zero billing report', () => {
+  const result = aggregateBillingMembers({ reports: [], scope: { label: 'Empty team' }, period: { startDate: '2026-08-01', endDate: '2026-08-01', timezone: 'UTC' } });
+  assert.equal(result.summary.totalBillableAmount, 0);
+  assert.equal(result.scope.memberCount, 0);
+  assert.deepEqual(result.dailyDetails, []);
+  assert.deepEqual(result.members, []);
+});
 
 test("recorded clients split shared-project billing without duplicating totals", () => {
   const first = { ...log("client-a-log", workTask, "2026-08-01T09:00:00Z", 3600), client: "client-a", clientRecord: { clientName: "Selected A" } };

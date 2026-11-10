@@ -6,7 +6,7 @@ import ReportSummary from './ReportSummary';
 import '../../styles/workingHours.css';
 
 // Daily working-hours pieces for the Overview; data comes from useWorkingHoursOverview.
-export function WorkingHoursSummary({ hours, admin, onTeamChange, activityItems = [], activityPeriod = '' }) {
+export function WorkingHoursSummary({ hours, admin, teamOnly = false, onTeamChange, activityItems = [], activityPeriod = '' }) {
   const { date, setDate, team, data, loading, error, load } = hours;
   const total = team ? data?.teams.find(row => row.key === team) : data?.totals;
   const items = [...activityItems, ...(total ? [
@@ -20,7 +20,7 @@ export function WorkingHoursSummary({ hours, admin, onTeamChange, activityItems 
       <div><p className="overview-eyebrow">ACTIVITY & DAILY TARGETS</p><h2>Team working overview</h2><p>Live activity, tracked time and progress towards daily working hours.</p></div>
       <div className="wh-filters">
         <label>Target date<input type="date" aria-label="Productivity date" max={todayDateKey()} value={date} onChange={event => setDate(event.target.value)} /></label>
-        <label>Team<select aria-label="Productivity team" value={team} onChange={event => onTeamChange(event.target.value)}><option value="">All teams</option>{(data?.teams || []).map(row => <option key={row.key} value={row.key}>{row.name}</option>)}</select></label>
+        <label>Team<select aria-label="Productivity team" value={team} onChange={event => onTeamChange(event.target.value)}><option value="">{teamOnly ? 'Your teams' : 'All teams'}</option>{(data?.teams || []).map(row => <option key={row.key} value={row.key}>{row.name}</option>)}</select></label>
         <button disabled={loading || !date} onClick={load}><RefreshCw size={15} />{loading ? 'Refreshing…' : 'Refresh hours'}</button>
       </div>
     </header>

@@ -11,6 +11,7 @@ const reportStaff = (req, res, next) => ['admin', 'alpha', 'manager'].includes(r
   ? next() : res.status(403).json({ success: false, message: 'Only authorized Admin and Manager users can view productivity.' });
 router.use(protect);
 router.get('/overview', reportStaff, requirePermission('view_all_reports'), controller.getWorkingHoursOverview);
+router.get('/team-overview', requirePermission('view_team_timesheets'), controller.getTeamWorkingHoursOverview);
 router.get('/settings', settingsAdmin, controller.getWorkingHoursSettings);
 router.put('/settings', settingsAdmin, controller.saveWorkingHoursSettings);
 router.put('/adjustments', settingsAdmin, controller.saveWorkingHoursAdjustment);

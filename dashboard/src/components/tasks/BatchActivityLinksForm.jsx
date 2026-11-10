@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, ArrowLeft, Building2, FolderOpen, Link2, ListTodo, Search, Unlink } from 'lucide-react';
 import axiosInstance from '../../api/axiosInstance';
 import getApiErrorMessage from '../../utils/getApiErrorMessage';
@@ -19,17 +19,18 @@ function Picker({ label, items, selected, onChange, nameField, search, onSearch,
   </section>;
 }
 
-export default function BatchActivityLinksForm({ data, onRefresh, onBusyChange, onReload, onSaved, clientProjectsOnly = false }) {
+export default function BatchActivityLinksForm({ data, onRefresh, onBusyChange, onReload, onSaved, clientProjectsOnly = false, allInOne = false }) {
   const clientsOnly = clientProjectsOnly;
   const [projectIds, setProjectIds] = useState([]), [clientIds, setClientIds] = useState([]), [taskIds, setTaskIds] = useState([]);
   const [searches, setSearches] = useState({ projects: '', clients: '', tasks: '' });
   const [review, setReview] = useState(null), [busy, setBusy] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState('');
   const [needsReload, setNeedsReload] = useState(false);
+  useEffect(() => { setReview(null); }, [clientsOnly]);
   const submitting = useRef(false);
   const projects = data.projects.filter(project => projectIds.includes(activityId(project)));
   const clients = data.clients.filter(client => clientIds.includes(activityId(client)));
   const tasks = data.tasks.filter(task => taskIds.includes(activityId(task)));
-  const eligible = new Set(tasksForBulkProjects(data.tasks, projects).map(activityId));
+  const eligible = new Set((allInOne && !projects.length ? data.tasks : tasksForBulkProjects(data.tasks, projects)).map(activityId));
   const unavailable = new Set(data.tasks.filter(task => !eligible.has(activityId(task))).map(activityId));
   const incompatible = !clientsOnly && taskIds.some(id => unavailable.has(id));
   const count = projectIds.length * clientIds.length * (clientsOnly ? 1 : taskIds.length);
@@ -55,23 +56,23 @@ export default function BatchActivityLinksForm({ data, onRefresh, onBusyChange, 
     } finally { setBusy(false); onBusyChange(false); submitting.current = false; }
   };
   return <div className="activity-batch-form">
-    <p className="activity-editor-intro">{clientsOnly ? 'Choose your projects and clients below. Review the connections before adding or removing links.' : 'Select projects, clients and tasks, then review the connections. Every selected combination is saved together.'}</p>
+    <p className="activity-editor-intro">{clientsOnly ? 'Each selected client will be linked to every selected project.' : 'Each selected task will be linked to every selected client and project.'} Review your selections before saving.</p>
     {error && <p role="alert" className="admin-error-box">{error}</p>}{message && <p role="status" className="activity-links-success">{message}</p>}
     {needsReload && onReload && <button type="button" disabled={busy} onClick={onReload}>Reload links</button>}
     <fieldset disabled={busy || needsReload} className="activity-links-fields">
-      {!review && <>
+      {(!review || allInOne) && <>
         <div className={`activity-batch-columns${clientsOnly ? '' : ' has-tasks'}`}>
-          <Picker label="Projects" items={data.projects} selected={projectIds} onChange={change(setProjectIds)} nameField="projectName" {...searchProps('projects')} />
           <Picker label="Clients" items={data.clients} selected={clientIds} onChange={change(setClientIds)} nameField="clientName" {...searchProps('clients')} />
+          <Picker label="Projects" items={data.projects} selected={projectIds} onChange={change(setProjectIds)} nameField="projectName" {...searchProps('projects')} />
         {!clientsOnly && <Picker label="Tasks" items={data.tasks} selected={taskIds} onChange={change(setTaskIds)} nameField="taskName" {...searchProps('tasks')} unavailable={unavailable} />}
         </div>
-        {!clientsOnly && !projectIds.length && <p>Select projects to see which tasks their teams can use.</p>}
+        {!allInOne && !clientsOnly && !projectIds.length && <p>Select projects to see which tasks their teams can use.</p>}
         {incompatible && <p role="alert">Some selected tasks do not share a team with every selected project. Deselect those tasks or adjust the projects before linking.</p>}
         {(count > 5000 || projectIds.length > 50 || clientIds.length > 500 || taskIds.length > 500) && <p role="alert">Choose at most 50 projects, 500 clients, 500 tasks and 5,000 combinations per save.</p>}
-        <div className="activity-batch-footer">
+        {!review && <div className="activity-batch-footer">
           <div className="activity-connection-summary" aria-live="polite"><span className="activity-summary-icon"><Link2 size={19} aria-hidden="true" /></span><div><strong>{count} combinations</strong><span>{projectIds.length} projects × {clientIds.length} clients{!clientsOnly && ` × ${taskIds.length} tasks`}</span></div></div>
           <div className="activity-footer-actions"><button type="button" className="activity-action-secondary" disabled={invalid} onClick={() => setReview('unlink')}><Unlink size={15} aria-hidden="true" />Review unlink</button><button type="button" className="activity-action-primary" disabled={invalid || incompatible} onClick={() => setReview('link')}>Review links<ArrowRight size={16} aria-hidden="true" /></button></div>
-        </div>
+        </div>}
       </>}
       {review && <section className="activity-batch-review">
         <h3>Review {review === 'link' ? 'links' : 'unlink'}</h3>

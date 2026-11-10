@@ -5,7 +5,7 @@ const Task = require("../../models/Task");
 const TaskTimeLog = require("../../models/TaskTimeLog");
 const Team = require("../../models/Team");
 const Client = require("../../models/Client");
-const { aggregateBillingLogs, DEFAULT_TIMEZONE, getBillingDateRange, getBillingEmployeeAccess } = require("../../utils/billingUtils");
+const { aggregateBillingLogs, aggregateBillingMembers, DEFAULT_TIMEZONE, getBillingDateRange, getBillingEmployeeAccess } = require("../../utils/billingUtils");
 
 // Billing needs both relationships: `team` is the authoritative assignment
 // used by the Team filter, while `teamLead` is retained for access checks and
@@ -46,9 +46,23 @@ const getBillingEmployees = async (req, res) => {
 const getBillingReport = async (req, res) => {
   try {
     const { employee: employeeId, startDate, endDate } = req.query;
-    const authorization = await getAuthorizedEmployee(req.user, employeeId);
-    if (!authorization.employee) {
-      return res.status(authorization.status).json({ success: false, message: authorization.message });
+    const allMembers = employeeId === 'all';
+    let employees, scope;
+    if (allMembers) {
+      if (getBillingEmployeeAccess(req.user, '').forbidden) return res.status(403).json({ success: false, message: 'You do not have permission to view billing reports.' });
+      const teamId = req.query.team || 'all';
+      if (typeof teamId !== 'string' || (!['all', 'unassigned'].includes(teamId) && !mongoose.isValidObjectId(teamId))) return res.status(400).json({ success: false, message: 'Select a valid team.' });
+      let team;
+      if (!['all', 'unassigned'].includes(teamId)) {
+        team = await Team.findById(teamId).select('teamName').lean();
+        if (!team) return res.status(404).json({ success: false, message: 'Team not found.' });
+      }
+      employees = await Employee.find(teamId === 'all' ? {} : { team: teamId === 'unassigned' ? null : teamId }).select(employeeFields).sort('fullName').lean();
+      scope = { type: teamId === 'all' ? 'company' : 'team', teamId, label: team?.teamName || (teamId === 'unassigned' ? 'Unassigned employees' : 'All teams') };
+    } else {
+      const authorization = await getAuthorizedEmployee(req.user, employeeId);
+      if (!authorization.employee) return res.status(authorization.status).json({ success: false, message: authorization.message });
+      employees = [authorization.employee];
     }
 
     const timezone = process.env.APP_TIMEZONE || DEFAULT_TIMEZONE;
@@ -60,12 +74,12 @@ const getBillingReport = async (req, res) => {
     }
 
     const logs = await TaskTimeLog.find({
-      employee: authorization.employee._id,
+      employee: allMembers ? { $in: employees.map(employee => employee._id) } : employees[0]._id,
       status: "stopped",
       "manualEntry.deletedAt": null,
       startedAt: { $lt: range.endExclusive },
       stoppedAt: { $gt: range.start },
-    }).select("project task client startedAt stoppedAt pauses totalWorkedSeconds").sort("startedAt").lean();
+    }).select("employee project task client startedAt stoppedAt pauses totalWorkedSeconds").sort("startedAt").lean();
 
     const taskIds = [...new Set(logs.map((log) => String(log.task)))];
     const projectIds = [...new Set(logs.map((log) => String(log.project)))];
@@ -95,15 +109,21 @@ const getBillingReport = async (req, res) => {
       clientRecord: clientsById.get(String(log.client)),
     }));
 
-    const report = aggregateBillingLogs({
-      logs: enrichedLogs,
-      employee: authorization.employee,
+    const logsByEmployee = new Map();
+    for (const log of enrichedLogs) {
+      const key = String(log.employee); if (!logsByEmployee.has(key)) logsByEmployee.set(key, []);
+      logsByEmployee.get(key).push(log);
+    }
+    const reports = employees.map(employee => aggregateBillingLogs({
+      logs: logsByEmployee.get(String(employee._id)) || [],
+      employee,
       startDate,
       endDate,
       timezone,
       rangeStart: range.start,
       rangeEnd: range.endExclusive,
-    });
+    }));
+    const report = allMembers ? aggregateBillingMembers({ reports, scope, period: { startDate, endDate, timezone } }) : reports[0];
     return res.status(200).json({ success: true, report });
   } catch (error) {
     return res.status(error.name === "CastError" ? 400 : 500).json({

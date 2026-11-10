@@ -98,3 +98,13 @@ test('working-hours configuration uses exact admin roles even though managers no
     assert.equal(passed, ['admin', 'alpha', 'manager'].includes(role));
   }
 });
+
+test('team productivity requires the team-report permission and respects revocation', () => {
+  const route = routes.stack.find(layer => layer.route?.path === '/team-overview').route;
+  for (const [user, expected] of [[{ role: 'team_lead' }, true], [{ role: 'employee' }, false], [{ role: 'team_lead', permissionOverrides: { revoked: ['view_team_timesheets'] } }, false]]) {
+    let passed = false, code;
+    route.stack[0].handle({ user }, { status(value) { code = value; return this; }, json() {} }, () => { passed = true; });
+    assert.equal(passed, expected);
+    if (!expected) assert.equal(code, 403);
+  }
+});

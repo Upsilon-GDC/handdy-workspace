@@ -623,7 +623,7 @@ function AppRoutes() {
         path="/team-lead/dashboard"
         element={
           <TeamLeadOnly needs={TEAM_REPORTS} grants={TEAM_REPORTS}>
-            <RoleReportPage title="Team activity" description="Recorded project and task timer activity for your assigned employees." />
+            <AdminOverviewPage teamOnly />
           </TeamLeadOnly>
         }
       />

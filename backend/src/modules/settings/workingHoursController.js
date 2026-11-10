@@ -7,6 +7,7 @@ const WorkingHoursPolicy = require('../../models/WorkingHoursPolicy');
 const { getDateKeyInTimezone, dateKeyToUtc, addDateKeyDays } = require('../../utils/billingUtils');
 const { fail, id, TARGET_EXCLUDED_ROLES, validDate, hoursToSeconds, policyOnDate, buildWorkingHoursOverview } = require('../../services/workingHours');
 const sendErrorResponse = require('../../utils/sendErrorResponse');
+const { ownTeamIds, teamMemberFilter } = require('../../services/teamScope');
 const timezone = process.env.APP_TIMEZONE || 'Asia/Kolkata';
 const today = () => getDateKeyInTimezone(new Date(), timezone);
 function sendError(res, error) {
@@ -90,7 +91,7 @@ async function saveWorkingHoursAdjustment(req, res) {
   } catch (error) { return sendError(res, error); }
   finally { if (session) await session.endSession(); }
 }
-async function getWorkingHoursOverview(req, res) {
+async function getOverview(req, res, teamOnly = false) {
   try {
     const date = validDate(req.query.date || today());
     if (date > today()) throw fail('Choose today or an earlier date for productivity.');
@@ -98,7 +99,10 @@ async function getWorkingHoursOverview(req, res) {
     if (team && team !== 'unassigned' && !mongoose.isObjectIdOrHexString(team)) throw fail('Choose a valid team.');
     const now = Date.now(), start = dateKeyToUtc(date, timezone), end = dateKeyToUtc(addDateKeyDays(date, 1), timezone);
     const includeRoster = req.query.includeRoster === 'true' && !team;
-    const employees = await employeesQuery(team ? { team: team === 'unassigned' ? null : team } : {}, { populateTeam: !includeRoster });
+    const teamIds = teamOnly ? await ownTeamIds(req.user) : null;
+    if (teamOnly && team && !teamIds.some(value => id(value) === team)) throw fail('You can only view your own teams.', 403);
+    const memberFilter = teamOnly ? { ...await teamMemberFilter(req.user), team: { $in: team ? [team] : teamIds } } : team ? { team: team === 'unassigned' ? null : team } : {};
+    const employees = await employeesQuery(memberFilter, { populateTeam: !includeRoster });
     const employeeIds = employees.map(row => row._id);
     const [policies, attendance, logs, teams] = await Promise.all([
       WorkingHoursPolicy.find({ employee: { $in: employeeIds } }).lean(),
@@ -106,7 +110,7 @@ async function getWorkingHoursOverview(req, res) {
       TaskTimeLog.find({ employee: { $in: employeeIds }, startedAt: { $lt: end },
         $or: [{ stoppedAt: { $gt: start } }, { stoppedAt: null, status: { $in: ['running', 'paused'] } }],
         'manualEntry.deletedAt': null }).select('employee startedAt stoppedAt status desktopHeartbeatAt pauses task manualEntry.deletedAt').populate('task', 'taskType').lean(),
-      includeRoster ? Team.find({}).select('teamName isActive').sort('teamName').lean() : null,
+      includeRoster ? Team.find(teamOnly ? { _id: { $in: teamIds }, isActive: true } : {}).select('teamName isActive').sort('teamName').lean() : null,
     ]);
     const teamById = new Map((teams || []).map(row => [id(row), row]));
     const people = includeRoster ? employees.map(person => {
@@ -117,8 +121,10 @@ async function getWorkingHoursOverview(req, res) {
       ...(includeRoster ? { roster: { employees: people, teams } } : {}) });
   } catch (error) { return sendError(res, error); }
 }
+const getWorkingHoursOverview = (req, res) => getOverview(req, res);
+const getTeamWorkingHoursOverview = (req, res) => getOverview(req, res, true);
 async function ensureWorkingHoursIndexes() {
   await WorkingHoursPolicy.createCollection();
   await WorkingHoursPolicy.createIndexes();
 }
-module.exports = { getWorkingHoursSettings, saveWorkingHoursSettings, saveWorkingHoursAdjustment, getWorkingHoursOverview, ensureWorkingHoursIndexes };
+module.exports = { getWorkingHoursSettings, saveWorkingHoursSettings, saveWorkingHoursAdjustment, getWorkingHoursOverview, getTeamWorkingHoursOverview, ensureWorkingHoursIndexes };

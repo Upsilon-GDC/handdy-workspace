@@ -5,9 +5,9 @@ import DashboardLayout from '../../components/layout/DashboardLayout';
 import ReportSummary from '../../components/dashboard/ReportSummary';
 import { WorkingHoursDetails, WorkingHoursSummary, WorkingHoursTeamProgress } from '../../components/dashboard/TeamWorkingHours';
 import useWorkingHoursOverview, { canViewWorkingHours } from '../../hooks/useWorkingHoursOverview';
-import { getAllEmployeeOptions } from '../../api/employeeApi';
+import { getAllEmployeeOptions, getAllMyTeamMembers } from '../../api/employeeApi';
 import { getAllTeams } from '../../api/teamApi';
-import { getAdminTimeLogs } from '../../api/reportApi';
+import { getAdminTimeLogs, getTeamTimeLogs } from '../../api/reportApi';
 import { todayDateKey, APP_TIMEZONE } from '../../utils/appDate';
 import { buildAdminOverview, overviewHours, overviewPreset, overviewRangeError } from '../../utils/adminOverview';
 import { loadOverviewData } from '../../utils/overviewData';
@@ -19,7 +19,7 @@ import '../../styles/adminOverview.css';
 const stateClass = state => ({ Working: 'working', 'On break': 'break', Idle: 'idle', Paused: 'idle' }[state] || 'stopped');
 // The working-hours API names the no-team group differently from the overview.
 const overviewTeamKey = key => key === 'unassigned' ? '__unassigned_team__' : key;
-export default function AdminOverviewPage() {
+export default function AdminOverviewPage({ teamOnly = false }) {
   const { user } = useAuth();
   const [from, setFrom] = useState(todayDateKey);
   const [to, setTo] = useState(todayDateKey);
@@ -36,7 +36,7 @@ export default function AdminOverviewPage() {
   const busy = useRef(false);
   const applied = useRef(overviewPreset('today', todayDateKey()));
   const details = useRef(null);
-  const hours = useWorkingHoursOverview(canViewWorkingHours(user?.role), { autoRefresh: false, includeRoster: true });
+  const hours = useWorkingHoursOverview(teamOnly || canViewWorkingHours(user?.role), { autoRefresh: false, includeRoster: true, teamOnly });
   const hoursLoader = useRef(hours.load);
   useEffect(() => { hoursLoader.current = hours.load; }, [hours.load]);
   const load = useCallback(async ({ range = applied.current, force = false } = {}) => {
@@ -47,16 +47,18 @@ export default function AdminOverviewPage() {
     try {
       const today = todayDateKey();
       const { employees, teams, period, current } = await loadOverviewData({ range, today, force,
-        loadContext: () => hoursLoader.current(), loadEmployees: getAllEmployeeOptions, loadTeams: getAllTeams, loadReport: getAdminTimeLogs });
+        loadContext: () => hoursLoader.current(), loadEmployees: teamOnly ? getAllMyTeamMembers : getAllEmployeeOptions, loadTeams: teamOnly ? async () => [] : getAllTeams, loadReport: teamOnly ? getTeamTimeLogs : getAdminTimeLogs });
       if (!mounted.current || token !== request.current) return;
       const asOf = Date.now();
-      const overview = buildAdminOverview({ teams, employees, records: period.timeLogs || [], todayRecords: current.timeLogs || [], asOf });
+      const allowedMembers = new Set(employees.map(row => String(row._id)));
+      const records = rows => teamOnly ? (rows || []).filter(row => allowedMembers.has(String(row.employee?._id || row.employee))) : rows || [];
+      const overview = buildAdminOverview({ teams, employees, records: records(period.timeLogs), todayRecords: records(current.timeLogs), asOf });
       applied.current = range;
       setSnapshot({ ...overview, range, asOf }); setError('');
     } catch (error) {
       if (mounted.current && token === request.current) setError(getApiErrorMessage(error, 'Unable to refresh the team overview.'));
     } finally { if (mounted.current && token === request.current) { busy.current = false; setRefreshing(false); } }
-  }, []);
+  }, [teamOnly]);
   useEffect(() => {
     mounted.current = true;
     void load({ force: true });
@@ -88,7 +90,7 @@ export default function AdminOverviewPage() {
     && [member.fullName, member.employeeId, member.currentProject, member.currentTask].filter(Boolean).join(' ').toLowerCase().includes(memberSearch.trim().toLowerCase())) || [];
   const total = snapshot?.totals;
   const summaryTotal = hours.enabled && hours.team ? snapshot?.teams.find(row => row.key === overviewTeamKey(hours.team)) : total;
-  const summaryScope = hours.team ? hours.data?.teams.find(row => row.key === hours.team)?.name || 'Selected team' : 'All teams';
+  const summaryScope = hours.team ? hours.data?.teams.find(row => row.key === hours.team)?.name || 'Selected team' : teamOnly ? 'Your teams' : 'All teams';
   const activityItems = summaryTotal ? [
     { label: error ? 'Working at last update' : 'Working now', value: `${summaryTotal.working} / ${summaryTotal.activeMembers}`, help: `${summaryScope} · ${summaryTotal.onBreak} on break · ${summaryTotal.idle} idle or paused` },
     { label: 'Tracked work', value: overviewHours(summaryTotal.workedSeconds), help: `${summaryScope} · Break ${overviewHours(summaryTotal.breakSeconds)} · Idle ${overviewHours(summaryTotal.idleSeconds)}` },
@@ -104,7 +106,7 @@ export default function AdminOverviewPage() {
   return <DashboardLayout title="Team overview" hideHeader>
     <div className="admin-team-overview">
       <section className="card overview-toolbar" aria-label="Overview period">
-        <div><p className="overview-eyebrow">TEAM OVERVIEW</p><h2>Your teams at a glance</h2><p>See who is working now and how much time each team has recorded.</p></div>
+        <div><p className="overview-eyebrow">TEAM OVERVIEW</p><h2>{teamOnly ? 'Your team at a glance' : 'Your teams at a glance'}</h2><p>{teamOnly ? 'See activity, recorded time and daily working hours for your assigned team members.' : 'See who is working now and how much time each team has recorded.'}</p></div>
         <div className="overview-range-controls"><div className="overview-presets"><button onClick={() => preset('today')}>Today</button><button onClick={() => preset('week')}>This week</button><button onClick={() => preset('month')}>This month</button></div>
           <label>From<input type="date" aria-label="Overview from" max={todayDateKey()} value={from} onChange={event => setFrom(event.target.value)} /></label>
           <label>To<input type="date" aria-label="Overview to" min={from} max={todayDateKey()} value={to} onChange={event => setTo(event.target.value)} /></label>
@@ -121,7 +123,7 @@ export default function AdminOverviewPage() {
         { label: 'Break hours', value: overviewHours(total.breakSeconds), help: 'Break tasks and intentional breaks' },
         { label: 'Idle hours', value: overviewHours(total.idleSeconds), help: 'Idle pauses and same-day gaps' },
       ]} />}
-      {hours.enabled && <WorkingHoursSummary hours={hours} admin={['admin', 'alpha'].includes(user?.role)} onTeamChange={chooseProductivityTeam}
+      {hours.enabled && <WorkingHoursSummary hours={hours} admin={!teamOnly && ['admin', 'alpha'].includes(user?.role)} teamOnly={teamOnly} onTeamChange={chooseProductivityTeam}
         activityItems={activityItems} activityPeriod={snapshot ? `${snapshot.range.startDate} – ${snapshot.range.endDate}` : ''} />}
       {(snapshot || hours.data) && <>
         <section className="overview-teams-section" aria-label="Team activity">

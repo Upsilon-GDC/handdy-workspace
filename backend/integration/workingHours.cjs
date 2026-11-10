@@ -27,9 +27,9 @@ before(async context => {
   await controller.ensureWorkingHoursIndexes();
 }, { timeout: 900000 });
 after(async () => { try { await mongoose.disconnect(); } finally { await replica?.stop(); } });
-async function invoke(action, body = {}, query = {}) {
+async function invoke(action, body = {}, query = {}, actor = user) {
   const res = { code: 200, status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
-  await action({ user, body, query }, res); return res;
+  await action({ user: actor, body, query }, res); return res;
 }
 async function fixture() {
   const tag = crypto.randomUUID();
@@ -77,6 +77,33 @@ test('bulk configuration persists exact decimals, teams and independent employee
   const loaded = await invoke(controller.getWorkingHoursSettings, {}, { date: today });
   const rows = loaded.body.employees.filter(row => f.employeeIds.includes(String(row._id)));
   assert.equal(rows.length, 2); assert.ok(rows.every(row => row.team.teamName === f.team.teamName && row.policy.requiredSeconds === 28080));
+});
+
+test('team overview limits roster, attendance and logs to led teams and rejects another team', async () => {
+  const own = await fixture(), foreign = await fixture();
+  const lead = { _id: new mongoose.Types.ObjectId(), role: 'team_lead' };
+  await Team.updateOne({ _id: own.team._id }, { $set: { teamLead: lead._id } });
+  // Stale employee assignments must not expose members of an unrelated team.
+  await Employee.updateMany({ _id: { $in: [...own.employeeIds, ...foreign.employeeIds] } }, { $set: { teamLead: lead._id } });
+  await logsFor(own); await logsFor(foreign);
+  const result = await invoke(controller.getTeamWorkingHoursOverview, {}, { date: yesterday, includeRoster: 'true' }, lead);
+  assert.equal(result.code, 200, JSON.stringify(result.body));
+  assert.deepEqual(result.body.roster.teams.map(row => String(row._id)), [String(own.team._id)]);
+  assert.deepEqual(result.body.roster.employees.map(row => String(row._id)).sort(), [...own.employeeIds].sort());
+  assert.equal(result.body.totals.presentCount, 2);
+  assert.equal(result.body.totals.completedSeconds, 21600);
+  assert.equal(result.body.totals.requiredSeconds, 56160);
+  for (const team of [String(foreign.team._id), 'unassigned']) {
+    const rejected = await invoke(controller.getTeamWorkingHoursOverview, {}, { date: yesterday, team }, lead);
+    assert.equal(rejected.code, 403);
+  }
+  const filtered = await invoke(controller.getTeamWorkingHoursOverview, {}, { date: yesterday, team: String(own.team._id) }, lead);
+  assert.equal(filtered.code, 200);
+  assert.deepEqual(filtered.body.totals, result.body.totals);
+  const empty = await invoke(controller.getTeamWorkingHoursOverview, {}, { date: yesterday, includeRoster: 'true' }, { _id: new mongoose.Types.ObjectId(), role: 'team_lead' });
+  assert.equal(empty.code, 200);
+  assert.deepEqual(empty.body.roster, { employees: [], teams: [] });
+  assert.equal(empty.body.totals.presentCount, 0);
 });
 test('managers stay in the activity roster but cannot receive working-hours targets or exceptions', async () => {
   const f = await fixture();

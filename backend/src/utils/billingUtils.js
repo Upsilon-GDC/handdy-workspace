@@ -320,7 +320,50 @@ const aggregateBillingLogs = ({ logs, employee, startDate, endDate, timezone, ra
   };
 };
 
+// Price each employee separately before combining: members can have different
+// project rates, including a missing rate for only one member.
+const aggregateBillingMembers = ({ reports, scope, period }) => {
+  const projects = new Map(), days = new Map();
+  const taskSummary = [], warnings = [];
+  const members = reports.map(report => ({ _id: String(report.employee._id), employeeId: report.employee.employeeId, fullName: report.employee.fullName, ...report.summary }));
+  for (const report of reports) {
+    const identity = { memberId: String(report.employee._id), employeeName: report.employee.fullName, employeeCode: report.employee.employeeId };
+    for (const task of report.taskSummary) taskSummary.push({ ...task, ...identity, key: `${identity.memberId}:${task.clientKey}:${task.projectId}:${task.taskId}` });
+    warnings.push(...report.warnings.map(warning => ({ ...warning, ...identity })));
+    for (const day of report.dailyDetails) {
+      const combined = days.get(day.date) || { date: day.date, taskSeconds: 0, breakSeconds: 0, entries: [] };
+      combined.taskSeconds += day.taskSeconds; combined.breakSeconds += day.breakSeconds;
+      combined.entries.push(...day.entries.map(entry => ({ ...entry, ...identity })));
+      days.set(day.date, combined);
+    }
+  }
+  taskSummary.sort((a, b) => a.projectName.localeCompare(b.projectName) || a.clientName.localeCompare(b.clientName) || a.employeeName.localeCompare(b.employeeName) || a.taskName.localeCompare(b.taskName));
+  for (const task of taskSummary) {
+    const key = `${task.clientKey}:${task.projectId}`;
+    const project = projects.get(key) || { key, projectId: task.projectId, projectCode: task.projectCode, projectName: task.projectName, clientName: task.clientName, clientId: task.clientId, totalSeconds: 0, totalBillableAmount: 0, hasMissingRates: false, tasks: [] };
+    project.totalSeconds += task.totalSeconds;
+    project.totalBillableAmount = roundCurrency(project.totalBillableAmount + (task.billableAmount ?? 0));
+    project.hasMissingRates ||= Boolean(task.billingWarning);
+    project.tasks.push(task); projects.set(key, project);
+  }
+  const dailyDetails = [...days.values()].sort((a, b) => a.date.localeCompare(b.date));
+  for (const day of dailyDetails) {
+    day.totalSeconds = day.taskSeconds + day.breakSeconds; day.billableSeconds = day.taskSeconds;
+    day.totalBillableAmount = roundCurrency(day.entries.reduce((sum, entry) => sum + (entry.type === 'break' || entry.billingWarning || !entry.chargeRate ? 0 : entry.durationSeconds / 3600 * entry.chargeRate), 0));
+    day.hasMissingRates = day.entries.some(entry => entry.billingWarning);
+    day.allRatesMissing = day.hasMissingRates && day.entries.filter(entry => entry.type !== 'break').every(entry => entry.billingWarning);
+    day.entries.sort((a, b) => a.startedAt.localeCompare(b.startedAt) || a.employeeName.localeCompare(b.employeeName));
+  }
+  const taskSeconds = reports.reduce((sum, report) => sum + report.summary.taskSeconds, 0);
+  const breakSeconds = reports.reduce((sum, report) => sum + report.summary.breakSeconds, 0);
+  return { employee: null, scope: { ...scope, memberCount: members.length }, members, period, taskSummary, projects: [...projects.values()], dailyDetails, warnings,
+    summary: { taskSeconds, breakSeconds, totalSeconds: taskSeconds + breakSeconds, workingDays: dailyDetails.length,
+      taskCount: new Set(taskSummary.map(task => task.taskId)).size, projectCount: new Set(taskSummary.map(task => task.projectId)).size,
+      totalBillableAmount: roundCurrency(taskSummary.reduce((sum, task) => sum + (task.billableAmount ?? 0), 0)), missingRateCount: warnings.length } };
+};
+
 module.exports = {
+  aggregateBillingMembers,
   DEFAULT_TIMEZONE,
   MAX_BILLING_RANGE_DAYS,
   addDateKeyDays,

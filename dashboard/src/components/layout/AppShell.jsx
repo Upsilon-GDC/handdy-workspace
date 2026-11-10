@@ -58,7 +58,7 @@ export default function AppShell({ children }) {
       ? [{ path: "/admin/employees", title: "Employees", group: "Workspace" }]
       : []),
   ];
-  const current = navigation.find((item) => item.path === location.pathname);
+  const current = navigation.find((item) => item.path === location.pathname || item.activePaths?.includes(location.pathname));
   const name = user?.fullName || user?.name || "Your account";
   const initials = name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("");
   const groups = ["Workspace", "Task linking", "Entry management", "Time & attendance", "Finance", "System"].filter((group) => navigation.some((item) => item.group === group));
@@ -107,7 +107,7 @@ export default function AppShell({ children }) {
             const Icon = icons[group] || ClipboardList;
             return <details key={group} aria-label={group} data-tone={groupTones[group]} open={group === "Workspace" || group === "Time & attendance" || current?.group === group}>
               <summary title={group === "Time & attendance" ? "Time & reports" : group}><Icon size={15} /><span>{group === "Time & attendance" ? "Time & reports" : group}</span></summary>
-              {navigation.filter((item) => item.group === group).map((item) => <NavLink key={item.path} to={item.path} end title={item.title} onClick={closeNavigation}><span className="crm-nav-dash" /><span>{item.title}</span></NavLink>)}
+              {navigation.filter((item) => item.group === group).map((item) => <NavLink key={item.path} to={item.path} end title={item.title} className={() => current === item ? 'active' : ''} aria-current={current === item ? 'page' : undefined} onClick={closeNavigation}><span className="crm-nav-dash" /><span>{item.title}</span></NavLink>)}
             </details>;
           })}
         </nav>

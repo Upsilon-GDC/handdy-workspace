@@ -99,11 +99,8 @@ function BillingContent() {
         setEmployees(nextEmployees);
         setTeams(nextTeams);
         const firstTeam = nextTeams[0];
-        const firstEmployee = firstTeam
-          ? nextEmployees.find((employee) => recordId(employee.team) === recordId(firstTeam))
-          : nextEmployees[0];
         setTeamId(firstTeam ? recordId(firstTeam) : "all");
-        setEmployeeId(recordId(firstEmployee));
+        setEmployeeId('all');
       } catch (requestError) {
         if (active) setError(getApiErrorMessage(requestError, "Unable to load employees for Billing."));
       }
@@ -125,16 +122,13 @@ function BillingContent() {
   // Projects no longer carry a service type (rates are set per project), so
   // only legacy projects have one. Show the column only when it has data.
   const showServiceType = Boolean(report?.taskSummary?.some((task) => task.serviceType));
+  const groupReport = Boolean(report?.scope);
+  const reportName = report?.scope?.label || report?.employee?.fullName || '';
 
   const changeTeam = (value) => {
     setTeamId(value);
     setReport(null);
-    let nextEmployees = employees;
-    if (value === "unassigned") nextEmployees = employees.filter((employee) => !recordId(employee.team));
-    else if (value !== "all") {
-      nextEmployees = employees.filter((employee) => recordId(employee.team) === value);
-    }
-    setEmployeeId(recordId(nextEmployees[0]));
+    setEmployeeId('all');
   };
 
   const changePeriod = (value) => {
@@ -148,7 +142,7 @@ function BillingContent() {
 
   const generateReport = async () => {
     if (!employeeId) {
-      setError("Select an employee before generating the report.");
+      setError("Select all members or an employee before generating the report.");
       return;
     }
     if (!fromDate || !toDate || toDate < fromDate) {
@@ -158,7 +152,7 @@ function BillingContent() {
     try {
       setLoading(true);
       setError("");
-      const data = await getBillingReport({ employee: employeeId, startDate: fromDate, endDate: toDate });
+      const data = await getBillingReport({ employee: employeeId, ...(employeeId === 'all' ? { team: teamId } : {}), startDate: fromDate, endDate: toDate });
       setReport(data.report);
     } catch (requestError) {
       setReport(null);
@@ -174,12 +168,12 @@ function BillingContent() {
     const ExcelJS = ExcelJSModule.default || ExcelJSModule;
     const titleRows = [
       ["Billing Report"],
-      ["Employee", report.employee.fullName],
-      ["Employee ID", report.employee.employeeId],
+      [groupReport ? 'Team' : 'Employee', reportName],
+      [groupReport ? 'Members' : 'Employee ID', groupReport ? report.scope.memberCount : report.employee.employeeId],
       ["Period", `${formatDate(report.period.startDate)} - ${formatDate(report.period.endDate)}`],
       [],
       ["Task Summary"],
-      ["Project", "Client", "Service Type", "Task", "Description", "Total Hours", "Decimal Hours", "Hourly Rate", "Billable Amount", "Warning"],
+      ["Project", "Client", "Service Type", "Task", "Description", "Total Hours", "Decimal Hours", "Hourly Rate", "Billable Amount", "Warning", "Employee", "Employee ID"],
       ...report.taskSummary.map((task) => [
         task.projectName,
         task.clientName,
@@ -191,6 +185,8 @@ function BillingContent() {
         task.chargeRate,
         task.billableAmount,
         task.billingWarning || "",
+        task.employeeName || report.employee?.fullName || '',
+        task.employeeCode || report.employee?.employeeId || '',
       ]),
       [],
       ["Time Summary"],
@@ -202,7 +198,7 @@ function BillingContent() {
       ["Rate Warnings", "", report.summary.missingRateCount || 0],
     ];
     const dailyRows = [
-      ["Date", "Type", "Project", "Client", "Service Type", "Task", "Description", "Start", "End", "Duration", "Decimal Hours", "Hourly Rate", "Billable Amount", "Warning"],
+      ["Date", "Type", "Project", "Client", "Service Type", "Task", "Description", "Start", "End", "Duration", "Decimal Hours", "Hourly Rate", "Billable Amount", "Warning", "Employee", "Employee ID"],
       ...report.dailyDetails.flatMap((day) => day.entries.map((entry) => [
         day.date,
         entry.type === "break" ? "Break" : "Task",
@@ -218,9 +214,18 @@ function BillingContent() {
         entry.chargeRate,
         entry.billableAmount,
         entry.billingWarning || "",
+        entry.employeeName || report.employee?.fullName || '',
+        entry.employeeCode || report.employee?.employeeId || '',
       ])),
     ];
     const workbook = new ExcelJS.Workbook();
+    if (groupReport) {
+      const membersSheet = workbook.addWorksheet('Members');
+      membersSheet.addRows([['Employee', 'Employee ID', 'Task hours', 'Break hours', 'Billable amount', 'Missing rates'],
+        ...report.members.map(member => [member.fullName, member.employeeId, toDecimalHours(member.taskSeconds), toDecimalHours(member.breakSeconds), member.totalBillableAmount, member.missingRateCount])]);
+      membersSheet.columns = [{ width: 26 }, { width: 18 }, { width: 16 }, { width: 16 }, { width: 20 }, { width: 16 }];
+      membersSheet.getColumn(3).numFmt = '0.0#'; membersSheet.getColumn(4).numFmt = '0.0#'; membersSheet.getColumn(5).numFmt = '$0.00';
+    }
     const summarySheet = workbook.addWorksheet("Billing Summary");
     const dailySheet = workbook.addWorksheet("Daily Details");
     summarySheet.addRows(titleRows);
@@ -239,15 +244,15 @@ function BillingContent() {
     summarySheet.columns = [
       { width: 24 }, { width: 22 }, { width: 22 }, { width: 24 },
       { width: 36 }, { width: 16 }, { width: 16 }, { width: 16 },
-      { width: 18 }, { width: 28 },
+      { width: 18 }, { width: 28 }, { width: 26 }, { width: 18 },
     ];
     dailySheet.columns = [
       { width: 14 }, { width: 12 }, { width: 24 }, { width: 22 },
       { width: 22 }, { width: 24 }, { width: 36 }, { width: 24 },
       { width: 24 }, { width: 14 }, { width: 16 }, { width: 16 },
-      { width: 18 }, { width: 28 },
+      { width: 18 }, { width: 28 }, { width: 26 }, { width: 18 },
     ];
-    const safeName = report.employee.fullName.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "");
+    const safeName = reportName.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "");
     const fileName = `Billing-${safeName}-${report.period.startDate}-${report.period.endDate}.xlsx`;
     const buffer = await workbook.xlsx.writeBuffer();
     const downloadUrl = URL.createObjectURL(new Blob([buffer], {
@@ -270,21 +275,21 @@ function BillingContent() {
       </section>
 
       <section className="billing-filters card" aria-label="Billing report filters">
-        <label><span>Team</span><select value={teamId} onChange={(event) => changeTeam(event.target.value)}><option value="all">All teams</option>{teams.map((team) => <option key={recordId(team)} value={recordId(team)}>{team.teamName}</option>)}<option value="unassigned">Unassigned employees</option></select></label>
-        <label><span>Employee</span><select value={employeeId} onChange={(event) => { setEmployeeId(event.target.value); setReport(null); }} disabled={filteredEmployees.length === 0}>{filteredEmployees.length === 0 && <option value="">No employees in this team</option>}{filteredEmployees.map((employee) => <option key={recordId(employee)} value={recordId(employee)}>{employee.fullName} ({employee.employeeId})</option>)}</select></label>
-        <label><span>Date period</span><select value={period} onChange={(event) => changePeriod(event.target.value)}><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="this-week">This week</option><option value="last-week">Last week</option><option value="this-month">This month</option><option value="last-month">Last month</option><option value="custom">Custom date range</option></select></label>
-        <label><span>From date</span><input type="date" value={fromDate} onChange={(event) => { setPeriod("custom"); setFromDate(event.target.value); }} /></label>
-        <label><span>To date</span><input type="date" min={fromDate} value={toDate} onChange={(event) => { setPeriod("custom"); setToDate(event.target.value); }} /></label>
+        <label><span>Team</span><select disabled={loading} value={teamId} onChange={(event) => changeTeam(event.target.value)}><option value="all">All teams</option>{teams.map((team) => <option key={recordId(team)} value={recordId(team)}>{team.teamName}</option>)}<option value="unassigned">Unassigned employees</option></select></label>
+        <label><span>Employee</span><select disabled={loading} value={employeeId} onChange={(event) => { setEmployeeId(event.target.value); setReport(null); }}><option value="all">All members ({filteredEmployees.length})</option>{filteredEmployees.map((employee) => <option key={recordId(employee)} value={recordId(employee)}>{employee.fullName} ({employee.employeeId})</option>)}</select></label>
+        <label><span>Date period</span><select disabled={loading} value={period} onChange={(event) => changePeriod(event.target.value)}><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="this-week">This week</option><option value="last-week">Last week</option><option value="this-month">This month</option><option value="last-month">Last month</option><option value="custom">Custom date range</option></select></label>
+        <label><span>From date</span><input type="date" disabled={loading} value={fromDate} onChange={(event) => { setPeriod("custom"); setFromDate(event.target.value); }} /></label>
+        <label><span>To date</span><input type="date" disabled={loading} min={fromDate} value={toDate} onChange={(event) => { setPeriod("custom"); setToDate(event.target.value); }} /></label>
         <button type="button" className="billing-generate" onClick={generateReport} disabled={loading || !employeeId}><ReceiptText size={17} />{loading ? "Generating..." : "Generate report"}</button>
       </section>
 
       {error && <p className="billing-error" role="alert">{error}</p>}
-      {!report && !error && <section className="billing-empty card"><FileSearch size={30} /><h3>Choose an employee and period</h3><p>Generate a report to see task totals, break time, project groups, and daily details.</p></section>}
+      {!report && !error && <section className="billing-empty card"><FileSearch size={30} /><h3>Choose a team, members and period</h3><p>Select All members for a combined team report, or choose one employee.</p></section>}
 
       {report && (
         <>
           <section className="billing-summary-grid">
-            <article className="card"><UsersRound size={20} /><span>Employee</span><strong>{report.employee.fullName}</strong><small>{report.employee.employeeId}</small></article>
+            <article className="card"><UsersRound size={20} /><span>{groupReport ? 'Team' : 'Employee'}</span><strong>{reportName}</strong><small>{groupReport ? `${report.scope.memberCount} members` : report.employee.employeeId}</small></article>
             <article className="card"><CalendarRange size={20} /><span>Selected period</span><strong>{formatDate(report.period.startDate)} - {formatDate(report.period.endDate)}</strong><small>{report.summary.workingDays} working days</small></article>
             <article className="card"><Clock3 size={20} /><span>Task hours</span><strong>{formatDuration(report.summary.taskSeconds)}</strong><small>{report.summary.taskCount} tasks</small></article>
             <article className="card break-card"><Clock3 size={20} /><span>Break hours</span><strong>{formatDuration(report.summary.breakSeconds)}</strong><small>Recorded break tasks</small></article>
@@ -295,16 +300,17 @@ function BillingContent() {
           {report.warnings?.length > 0 && (
             <section className="billing-rate-warning" role="alert">
               <strong>Billing configuration required.</strong>
-              <span>{report.warnings.map((warning) => `${warning.projectName} / ${warning.taskName}: ${warning.message}`).join(" ")}</span>
+              <span>{report.warnings.map((warning) => `${warning.employeeName ? `${warning.employeeName}: ` : ''}${warning.projectName} / ${warning.taskName}: ${warning.message}`).join(" ")}</span>
             </section>
           )}
 
+          {groupReport && <section className="billing-report card" aria-label="Billing by member"><header><div><span>All selected members</span><h3>Member totals</h3></div></header><div className="billing-table-wrap"><table><thead><tr><th>Employee</th><th>Task hours</th><th>Break hours</th><th>Billable amount</th></tr></thead><tbody>{report.members.map(member => <tr key={member._id}><td><strong>{member.fullName}</strong><small>{member.employeeId}</small></td><td>{formatDuration(member.taskSeconds)}</td><td>{formatDuration(member.breakSeconds)}</td><td>{formatMoney(member.totalBillableAmount)}{member.missingRateCount > 0 && <small className="billing-missing-rate">Missing rates excluded</small>}</td></tr>)}</tbody></table></div></section>}
           <section className="billing-report card">
             <header><div><span>Primary report</span><h3>Project-wise task summary</h3></div><strong>{formatDuration(report.summary.taskSeconds)}</strong></header>
             {report.projects.length === 0 ? <div className="billing-no-data">No completed task time was recorded in this period.</div> : report.projects.map((project) => (
               <article className="billing-project" key={project.key || project.projectId}>
                 <div className="billing-project-heading"><div><FolderKanban size={18} /><div><h4>{project.projectName}</h4><p>{project.clientName || project.projectCode || "No client assigned"}</p></div></div><div className="billing-project-totals"><strong>{formatDuration(project.totalSeconds)}</strong><span>{project.hasMissingRates ? "Known subtotal: " : ""}{formatMoney(project.totalBillableAmount)}{project.hasMissingRates ? " (missing rates excluded)" : ""}</span></div></div>
-                <div className="billing-table-wrap"><table><thead><tr>{showServiceType && <th>Service type</th>}<th>Task</th><th>Description</th><th>Total time</th><th>Hourly rate</th><th>Billable amount</th></tr></thead><tbody>{project.tasks.map((task) => <tr key={task.taskId}>{showServiceType && <td>{task.serviceType || "-"}</td>}<td><strong>{task.taskName}</strong>{task.taskCode && <small>{task.taskCode}</small>}</td><td>{task.taskDescription || "-"}</td><td>{formatClockDuration(task.totalSeconds)}</td><td className={task.billingWarning ? "billing-missing-rate" : ""}>{formatRate(task.chargeRate, task.billingWarning)}</td><td className={task.billingWarning ? "billing-missing-rate" : ""}>{formatMoney(task.billableAmount, task.billingWarning)}</td></tr>)}</tbody></table></div>
+                <div className="billing-table-wrap"><table><thead><tr>{groupReport && <th>Employee</th>}{showServiceType && <th>Service type</th>}<th>Task</th><th>Description</th><th>Total time</th><th>Hourly rate</th><th>Billable amount</th></tr></thead><tbody>{project.tasks.map((task) => <tr key={task.key || task.taskId}>{groupReport && <td><strong>{task.employeeName}</strong><small>{task.employeeCode}</small></td>}{showServiceType && <td>{task.serviceType || "-"}</td>}<td><strong>{task.taskName}</strong>{task.taskCode && <small>{task.taskCode}</small>}</td><td>{task.taskDescription || "-"}</td><td>{formatClockDuration(task.totalSeconds)}</td><td className={task.billingWarning ? "billing-missing-rate" : ""}>{formatRate(task.chargeRate, task.billingWarning)}</td><td className={task.billingWarning ? "billing-missing-rate" : ""}>{formatMoney(task.billableAmount, task.billingWarning)}</td></tr>)}</tbody></table></div>
               </article>
             ))}
           </section>
@@ -323,7 +329,7 @@ function BillingContent() {
                       : <strong>{formatMoney(day.totalBillableAmount)}{day.hasMissingRates && <em className="billing-missing-rate"> + Missing Rate</em>}</strong>}
                   </span>
                 </summary>
-                <div className="billing-table-wrap"><table><thead><tr><th>Type</th><th>Project</th>{showServiceType && <th>Service</th>}<th>Task</th><th>Start</th><th>End</th><th>Time</th><th>Rate</th><th>Amount</th></tr></thead><tbody>{day.entries.map((entry, index) => <tr key={`${entry.logId}-${index}`}><td><span className={`billing-type ${entry.type}`}>{entry.type === "break" ? "Break" : "Task"}</span></td><td>{entry.projectName}</td>{showServiceType && <td>{entry.serviceType || "-"}</td>}<td>{entry.taskName}</td><td>{new Date(entry.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone: report.period.timezone })}</td><td>{new Date(entry.stoppedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone: report.period.timezone })}</td><td>{formatDuration(entry.durationSeconds)}</td><td className={entry.billingWarning ? "billing-missing-rate" : ""}>{entry.type === "break" ? "-" : formatRate(entry.chargeRate, entry.billingWarning)}</td><td className={entry.billingWarning ? "billing-missing-rate" : ""}>{entry.type === "break" ? "-" : formatMoney(entry.billableAmount, entry.billingWarning)}</td></tr>)}</tbody></table></div>
+                <div className="billing-table-wrap"><table><thead><tr>{groupReport && <th>Employee</th>}<th>Type</th><th>Project</th>{showServiceType && <th>Service</th>}<th>Task</th><th>Start</th><th>End</th><th>Time</th><th>Rate</th><th>Amount</th></tr></thead><tbody>{day.entries.map((entry, index) => <tr key={`${entry.logId}-${index}`}>{groupReport && <td><strong>{entry.employeeName}</strong><small>{entry.employeeCode}</small></td>}<td><span className={`billing-type ${entry.type}`}>{entry.type === "break" ? "Break" : "Task"}</span></td><td>{entry.projectName}</td>{showServiceType && <td>{entry.serviceType || "-"}</td>}<td>{entry.taskName}</td><td>{new Date(entry.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone: report.period.timezone })}</td><td>{new Date(entry.stoppedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone: report.period.timezone })}</td><td>{formatDuration(entry.durationSeconds)}</td><td className={entry.billingWarning ? "billing-missing-rate" : ""}>{entry.type === "break" ? "-" : formatRate(entry.chargeRate, entry.billingWarning)}</td><td className={entry.billingWarning ? "billing-missing-rate" : ""}>{entry.type === "break" ? "-" : formatMoney(entry.billableAmount, entry.billingWarning)}</td></tr>)}</tbody></table></div>
               </details>
             ))}
           </section>

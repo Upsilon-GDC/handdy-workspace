@@ -212,7 +212,7 @@ app.whenReady().then(async () => {
     forceConflict = false;
     await evaluate(`localStorage.setItem('user', ${JSON.stringify(JSON.stringify(user))})`);
     await win.loadURL(`${base}/admin/task-links`);
-    await until(`!!document.querySelector('a[href="/admin/task-links"]') && document.body.textContent.includes('Link existing tasks')`);
+    await until(`!!document.querySelector('.crm-nav a[href="/admin/project-client-links"]') && document.body.textContent.includes('Select what you want to connect')`);
     assert.equal(await evaluate(`!!document.querySelector('a[href="/admin/projects"]')`), false, 'linking does not grant project management');
     await until(`!!document.querySelector('[aria-label="Select projects"] input[value="p1"]')`);
     await evaluate(`document.querySelector('[aria-label="Select projects"] input[value="p1"]').click()`);
@@ -227,7 +227,7 @@ app.whenReady().then(async () => {
     permissionGrants = [];
     await win.loadURL(`${base}/admin/task-links`);
     await until(`location.pathname === '/employee/dashboard'`);
-    assert.equal(await evaluate(`!!document.querySelector('a[href="/admin/task-links"]')`), false);
+    assert.equal(await evaluate(`!!document.querySelector('.crm-nav a[href="/admin/project-client-links"]')`), false);
     console.log('PASS: bulk links, automatic manager/project and TL/own-team assignment, admin override excluding Software, manager visibility, linked creation and edit preservation. Delegated employee link-only access and revocation. Mock API only.');
   } catch (error) { console.error(error); process.exitCode = 1; }
   finally { win?.destroy(); server.close(); app.exit(process.exitCode || 0); }
