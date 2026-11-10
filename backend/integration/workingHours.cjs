@@ -78,6 +78,31 @@ test('bulk configuration persists exact decimals, teams and independent employee
   const rows = loaded.body.employees.filter(row => f.employeeIds.includes(String(row._id)));
   assert.equal(rows.length, 2); assert.ok(rows.every(row => row.team.teamName === f.team.teamName && row.policy.requiredSeconds === 28080));
 });
+test('managers stay in the activity roster but cannot receive working-hours targets or exceptions', async () => {
+  const f = await fixture();
+  await Employee.updateOne({ _id: f.employeeIds[1] }, { $set: { role: 'manager' } });
+  await Attendance.create({ employee: f.employeeIds[1], date: today, status: 'Present', source: 'check_in' });
+  const loaded = await invoke(controller.getWorkingHoursSettings, {}, { date: today });
+  assert.equal(loaded.code, 200);
+  assert.ok(loaded.body.employees.some(row => String(row._id) === f.employeeIds[0]));
+  assert.ok(!loaded.body.employees.some(row => String(row._id) === f.employeeIds[1]));
+  const summary = await invoke(controller.getWorkingHoursOverview, {}, { date: today, includeRoster: 'true' });
+  assert.equal(summary.code, 200);
+  assert.ok(summary.body.roster.employees.some(row => String(row._id) === f.employeeIds[1]));
+  const team = summary.body.teams.find(row => row.key === String(f.team._id));
+  assert.equal(team.members.length, 1);
+  assert.equal(team.presentCount, 0);
+  assert.equal(team.unconfiguredCount, 0);
+  const rejected = await invoke(controller.saveWorkingHoursSettings, settings(f));
+  assert.equal(rejected.code, 409);
+  assert.equal(await WorkingHoursPolicy.countDocuments({ employee: { $in: f.employeeIds } }), 0);
+  const adjustment = await invoke(controller.saveWorkingHoursAdjustment, { employeeIds: f.employeeIds, date: today, type: 'half_day', reason: 'Synthetic test exception' });
+  assert.equal(adjustment.code, 409);
+  const attendance = await Attendance.findOne({ employee: f.employeeIds[1], date: today }).lean();
+  assert.deepEqual(attendance.workingHoursAdjustments || [], []);
+  assert.equal(await Attendance.countDocuments({ employee: f.employeeIds[0], date: today }), 0);
+});
+
 test('stale employee versions roll back the entire selected batch', async () => {
   const f = await fixture();
   await invoke(controller.saveWorkingHoursSettings, settings(f));

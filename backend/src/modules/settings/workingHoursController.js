@@ -5,7 +5,7 @@ const Attendance = require('../../models/Attendance');
 const TaskTimeLog = require('../../models/TaskTimeLog');
 const WorkingHoursPolicy = require('../../models/WorkingHoursPolicy');
 const { getDateKeyInTimezone, dateKeyToUtc, addDateKeyDays } = require('../../utils/billingUtils');
-const { fail, id, validDate, hoursToSeconds, policyOnDate, buildWorkingHoursOverview } = require('../../services/workingHours');
+const { fail, id, TARGET_EXCLUDED_ROLES, validDate, hoursToSeconds, policyOnDate, buildWorkingHoursOverview } = require('../../services/workingHours');
 const sendErrorResponse = require('../../utils/sendErrorResponse');
 const timezone = process.env.APP_TIMEZONE || 'Asia/Kolkata';
 const today = () => getDateKeyInTimezone(new Date(), timezone);
@@ -22,13 +22,14 @@ function selectedEmployees(body) {
   return values;
 }
 async function employeesQuery(filter = {}, { populateTeam = true } = {}) {
+  // Keep managers in the shared activity roster; target eligibility is separate.
   const query = Employee.find({ role: { $ne: 'alpha' }, ...filter }).select('employeeId fullName role team isActive').sort('fullName').lean();
   return populateTeam ? query.populate('team', 'teamName') : query;
 }
 async function getWorkingHoursSettings(req, res) {
   try {
     const date = validDate(req.query.date || today());
-    const [employees, policies, attendance] = await Promise.all([employeesQuery(), WorkingHoursPolicy.find({}).lean(), Attendance.find({ date }).select('employee workingHoursAdjustments').lean()]);
+    const [employees, policies, attendance] = await Promise.all([employeesQuery({ role: { $nin: TARGET_EXCLUDED_ROLES } }), WorkingHoursPolicy.find({}).lean(), Attendance.find({ date }).select('employee workingHoursAdjustments').lean()]);
     const policyMap = new Map(policies.map(row => [id(row.employee), row]));
     const attendanceMap = new Map(attendance.map(row => [id(row.employee), row]));
     return res.json({ success: true, date, timezone, employees: employees.map(employee => ({ ...employee,
@@ -53,8 +54,8 @@ async function saveWorkingHoursSettings(req, res) {
       || new Set(req.body.versions.map(row => row.employee)).size !== employeeIds.length) throw fail('Reload current employee versions before saving.');
     session = await mongoose.startSession();
     await session.withTransaction(async () => {
-      const employees = await Employee.find({ _id: { $in: employeeIds }, role: { $ne: 'alpha' } }).select('_id').session(session).lean();
-      if (employees.length !== employeeIds.length) throw fail('Some employees no longer exist. Reload the list.', 409);
+      const employees = await Employee.find({ _id: { $in: employeeIds }, role: { $nin: TARGET_EXCLUDED_ROLES } }).select('_id').session(session).lean();
+      if (employees.length !== employeeIds.length) throw fail('Some employees no longer exist or are not eligible for working-hours targets. Reload the list.', 409);
       const policies = await WorkingHoursPolicy.find({ employee: { $in: employeeIds } }).session(session).lean();
       for (const employee of [...employeeIds].sort()) {
         const policy = policies.find(row => id(row.employee) === employee);
@@ -77,7 +78,7 @@ async function saveWorkingHoursAdjustment(req, res) {
     if (typeof req.body.reason !== 'string' || req.body.reason.trim().length < 3 || req.body.reason.trim().length > 500) throw fail('Enter a reason of 3–500 characters.');
     session = await mongoose.startSession();
     await session.withTransaction(async () => {
-      if (await Employee.countDocuments({ _id: { $in: employeeIds }, role: { $ne: 'alpha' } }).session(session) !== employeeIds.length) throw fail('Some employees no longer exist.', 409);
+      if (await Employee.countDocuments({ _id: { $in: employeeIds }, role: { $nin: TARGET_EXCLUDED_ROLES } }).session(session) !== employeeIds.length) throw fail('Some employees no longer exist or are not eligible for working-hours targets. Reload the list.', 409);
       for (const employee of [...employeeIds].sort()) {
         await Attendance.updateOne({ employee, date }, {
           $setOnInsert: { status: 'Absent', source: 'check_in' },

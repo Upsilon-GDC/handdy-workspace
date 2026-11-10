@@ -35,6 +35,24 @@ test('individual targets, absent employees, unconfigured staff and Alpha never i
   assert.equal(result.totals.presentCount, 2); assert.equal(result.totals.unconfiguredCount, 1);
   assert.equal(result.teams[0].members.length, 4); assert.equal(result.teams[0].members.find(row => row.employee === 'c').trackedSeconds, 10800);
 });
+test('managers with or without saved targets do not affect employee totals or missing-hours alerts', () => {
+  const baseline = overview({ employees: [person('a'), person('b')], attendance: ['a', 'b'].map(employee => ({ employee, status: 'Present' })), logs: [log(0, 3)] });
+  for (const configured of [false, true]) {
+    const result = overview({
+      employees: [person('a'), person('b'), { ...person('manager'), role: 'manager' }],
+      policies: [policy('a'), ...(configured ? [policy('manager')] : [])],
+      attendance: ['a', 'b', 'manager'].map(employee => ({ employee, status: 'Present' })),
+      logs: [log(0, 3), log(0, 10, { employee: 'manager' })],
+    });
+    assert.deepEqual(result, baseline);
+    assert.equal(result.totals.unconfiguredCount, 1, 'Unconfigured employees still trigger the alert');
+  }
+  const managersOnly = overview({ employees: [{ ...person('manager'), role: 'manager' }], policies: [], attendance: [{ employee: 'manager', status: 'Present' }] });
+  assert.equal(managersOnly.totals.unconfiguredCount, 0);
+  assert.equal(managersOnly.totals.presentCount, 0);
+  assert.deepEqual(managersOnly.teams, []);
+});
+
 test('exact requirements complete and overtime is retained with a capped progress indicator', () => {
   const exact = overview({ logs: [log(0, 8)] }).teams[0].members[0];
   assert.equal(exact.status, 'Completed'); assert.equal(exact.pendingSeconds, 0); assert.equal(exact.completionPercent, 100);
