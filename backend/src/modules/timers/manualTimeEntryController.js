@@ -99,7 +99,7 @@ const getManualEntryOptions = async (req, res) => {
     const allProjects = await Project.find(scope.projectFilter)
       .select("projectCode projectName client clients clientName teams activityMappingEnabled linkedTasks").sort("projectName").lean();
     const candidateProjects = allProjects.filter((project) => projectAllowedForTeam(project, scope, employee));
-    if (allowedClientIds(employee) !== null || scope.projectIds.length || candidateProjects.some(project => project.activityMappingEnabled || project.linkedTasks?.length)) {
+    if (candidateProjects.some(project => allowedClientIds(employee, project) !== null) || scope.projectIds.length || candidateProjects.some(project => project.activityMappingEnabled || project.linkedTasks?.length)) {
       const results = await Promise.all(candidateProjects.map(project => activityOptionsForEmployee(project, employee, {
         workOnly: true, includeShared: project.activityMappingEnabled === true,
       })));

@@ -54,3 +54,18 @@ Startup creates the additive `clientaccesspolicies` and `clientaccesschanges` co
 `POST /api/client-access/employees/batch` accepts `{ team, employees: [{id, version}], enabled, clients, overrideTeam?, workTeams?, workProjects? }` for 1–500 unique active members of one team (`team: "unassigned"` for employees without a team). Omitted `workTeams` or `workProjects` preserves saved grants for older callers; an explicit empty array revokes the corresponding grants. `GET /api/client-access/history?page=1&limit=10` returns paginated history, newest first, including before/after cross-team mode, work teams and projects. Both use the same administrator and activity-link permission checks.
 
 Verification: backend client-access unit tests and isolated MongoDB integration tests; `npm run test:client-access` in desktop-app runs the real dashboard against loopback fixtures and checks saves, failed-save retention, team isolation and responsive layout.
+
+
+## Per-employee project client limits
+
+Employee policy saves also accept optional `projectClients: [{ project: "<project ID>", clients: ["<client ID>"] }]`.
+These limits narrow the enabled employee's effective clients for the specified project; they never grant additional clients,
+projects or tasks. Projects omitted from the array inherit normal client access. An empty client list blocks that project's
+new selections; an empty `projectClients` array clears the limits. Disabling the employee policy restores inheritance.
+Omitting the field preserves existing limits, including saves from the current dashboard. Configuration is available through
+the administrator API; the dashboard does not yet have per-project controls. Saves validate active projects and clients,
+use optimistic versions and transactions, and record before/after limits in client-access history.
+
+Activity options and project catalog cache keys include these effective limits. Timer starts, new manual entries and activity
+changes to completed entries enforce them through the shared selection validator. Existing timers and historical selections
+are retained. Deploy the updated backend before relying on stored limits; older backend versions ignore this additive field.

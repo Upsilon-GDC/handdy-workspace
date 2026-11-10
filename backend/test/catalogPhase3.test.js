@@ -128,3 +128,22 @@ test('cache failures fall through and errors are never stored as successful list
   let reached = false; await cache(req, response(), () => { reached = true; });
   assert.equal(reached, true);
 });
+
+
+test('project-specific client changes invalidate activity choices while preserving other projects and employees', async t => {
+  mockRevisions(t, [Project, Client, Task, Team, Employee, ActivityMapping]);
+  const cache = projectRoutes.stack.find(layer => layer.route?.path === '/:id/activity-options').route.stack[1].handle;
+  const req = { ...request('/tax/activity-options'), params: { id: 'tax' } };
+  rememberPolicy({ subjectType: 'team', subjectId: 'software', enabled: true, clients: ['wcpa', 'upsilon'], version: 1 });
+  const call = async input => { const res = response(); await cache(input, res, () => res.json({ success: true, clients: allowedClientIds(input.user, input.params.id) })); return res; };
+  const first = await call(req);
+  rememberPolicy({ subjectType: 'employee', subjectId: 'first', enabled: true, clients: ['wcpa', 'upsilon'],
+    projectClients: [{ project: 'tax', clients: ['wcpa'] }], version: 1 });
+  const narrowed = await call({ ...req, headers: { 'if-none-match': first.headers.ETag } });
+  assert.equal(narrowed.statusCode, 200); assert.deepEqual(narrowed.body.clients, ['wcpa']);
+  assert.equal((await call({ ...req, headers: { 'if-none-match': narrowed.headers.ETag } })).statusCode, 304);
+  const other = await call({ ...req, user: { ...req.user, _id: 'exception' }, headers: { 'if-none-match': narrowed.headers.ETag } });
+  assert.equal(other.statusCode, 200); assert.deepEqual(other.body.clients, ['wcpa', 'upsilon']);
+  const noProject = await call({ ...req, path: '/no-project/activity-options', params: { id: 'no-project' } });
+  assert.deepEqual(noProject.body.clients, ['wcpa', 'upsilon']);
+});

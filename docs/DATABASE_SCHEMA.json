@@ -1,0 +1,6225 @@
+{
+  "scope": "Current workspace Mongoose definitions; not a live database inspection",
+  "connection": "MONGODB_URI (value not read)",
+  "modelCount": 19,
+  "declaredIndexCount": 57,
+  "models": [
+    {
+      "model": "ActivityLinkChange",
+      "collection": "activity_link_changes",
+      "source": "backend/src/models/ActivityLinkChange.js",
+      "purpose": "Activity-link/unlink audit snapshots.",
+      "schemaOptions": {
+        "timestamps": true,
+        "strict": true,
+        "versionKey": "__v",
+        "autoCreate": false,
+        "autoIndex": false
+      },
+      "fields": [
+        {
+          "path": "action",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "link",
+              "unlink"
+            ]
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            },
+            {
+              "type": "enum",
+              "message": "`{VALUE}` is not a valid enum value for path `{PATH}`."
+            }
+          ]
+        },
+        {
+          "path": "mode",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "tasks",
+              "clients"
+            ]
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            },
+            {
+              "type": "enum",
+              "message": "`{VALUE}` is not a valid enum value for path `{PATH}`."
+            }
+          ]
+        },
+        {
+          "path": "actor",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "actorName",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "projects",
+          "type": "Embedded[]",
+          "required": true,
+          "default": {
+            "kind": "value",
+            "value": [],
+            "implicit": true
+          },
+          "hiddenByDefault": false,
+          "embeddedId": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "projects[].id",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "projects[].name",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "clients",
+          "type": "Embedded[]",
+          "required": true,
+          "default": {
+            "kind": "value",
+            "value": [],
+            "implicit": true
+          },
+          "hiddenByDefault": false,
+          "embeddedId": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "clients[].id",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "clients[].name",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "tasks",
+          "type": "Embedded[]",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": []
+          },
+          "hiddenByDefault": false,
+          "embeddedId": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "tasks[].id",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "tasks[].name",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "combinationCount",
+          "type": "Number",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "min": 1
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            },
+            {
+              "type": "min",
+              "message": "Path `{PATH}` ({VALUE}) is less than minimum allowed value (1)."
+            }
+          ]
+        },
+        {
+          "path": "_id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "generated",
+            "expression": "ObjectId"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "createdAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "immutable": true
+          },
+          "validators": []
+        },
+        {
+          "path": "updatedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "__v",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        }
+      ],
+      "indexes": [
+        {
+          "keys": {
+            "mode": 1,
+            "createdAt": -1,
+            "_id": -1
+          },
+          "options": {}
+        },
+        {
+          "keys": {
+            "actor": 1,
+            "mode": 1,
+            "createdAt": -1,
+            "_id": -1
+          },
+          "options": {}
+        }
+      ]
+    },
+    {
+      "model": "ActivityMapping",
+      "collection": "activity_mappings",
+      "source": "backend/src/models/ActivityMapping.js",
+      "purpose": "Unique project/client/task activity tuples.",
+      "schemaOptions": {
+        "timestamps": true,
+        "strict": true,
+        "versionKey": "__v",
+        "autoCreate": false,
+        "autoIndex": false
+      },
+      "fields": [
+        {
+          "path": "project",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Project",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "client",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Client",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "task",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Task",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "isActive",
+          "type": "Boolean",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": true
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "createdBy",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "unset",
+            "explicit": true
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "updatedBy",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "unset",
+            "explicit": true
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "migrationId",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "unset",
+            "explicit": true
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "immutable": true
+          },
+          "validators": []
+        },
+        {
+          "path": "_id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "generated",
+            "expression": "ObjectId"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "createdAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "immutable": true
+          },
+          "validators": []
+        },
+        {
+          "path": "updatedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "__v",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        }
+      ],
+      "indexes": [
+        {
+          "keys": {
+            "project": 1,
+            "client": 1,
+            "task": 1
+          },
+          "options": {
+            "unique": true,
+            "name": "activity_tuple_unique"
+          }
+        },
+        {
+          "keys": {
+            "project": 1,
+            "client": 1,
+            "isActive": 1
+          },
+          "options": {
+            "name": "activity_picker"
+          }
+        },
+        {
+          "keys": {
+            "task": 1,
+            "isActive": 1
+          },
+          "options": {
+            "name": "activity_task"
+          }
+        },
+        {
+          "keys": {
+            "updatedAt": 1
+          },
+          "options": {}
+        }
+      ]
+    },
+    {
+      "model": "Attendance",
+      "collection": "attendances",
+      "source": "backend/src/models/Attendance.js",
+      "purpose": "Daily attendance derived from time entries, with retained historical check-in rows and productivity adjustments.",
+      "schemaOptions": {
+        "timestamps": true,
+        "strict": true,
+        "versionKey": "__v",
+        "autoIndex": null
+      },
+      "fields": [
+        {
+          "path": "employee",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "date",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "checkIn",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "checkOut",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "totalHours",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": 0
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "status",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": "Present"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "Present",
+              "Absent"
+            ]
+          },
+          "validators": [
+            {
+              "type": "enum",
+              "message": "`{VALUE}` is not a valid enum value for path `{PATH}`."
+            }
+          ]
+        },
+        {
+          "path": "source",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": "check_in"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "check_in",
+              "timer"
+            ]
+          },
+          "validators": [
+            {
+              "type": "enum",
+              "message": "`{VALUE}` is not a valid enum value for path `{PATH}`."
+            }
+          ]
+        },
+        {
+          "path": "workingHoursAdjustments",
+          "type": "Embedded[]",
+          "required": false,
+          "default": {
+            "kind": "unset",
+            "explicit": true
+          },
+          "hiddenByDefault": false,
+          "embeddedId": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "workingHoursAdjustments[].type",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "normal",
+              "half_day",
+              "leave",
+              "absent"
+            ]
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            },
+            {
+              "type": "enum",
+              "message": "`{VALUE}` is not a valid enum value for path `{PATH}`."
+            }
+          ]
+        },
+        {
+          "path": "workingHoursAdjustments[].reason",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "maxlength": 500
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            },
+            {
+              "type": "maxlength",
+              "message": "[message function]"
+            }
+          ]
+        },
+        {
+          "path": "workingHoursAdjustments[].changedBy",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "workingHoursAdjustments[].changedAt",
+          "type": "Date",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "_id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "generated",
+            "expression": "ObjectId"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "createdAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "immutable": true
+          },
+          "validators": []
+        },
+        {
+          "path": "updatedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "__v",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        }
+      ],
+      "indexes": [
+        {
+          "keys": {
+            "employee": 1,
+            "date": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "keys": {
+            "employee": 1,
+            "updatedAt": 1
+          },
+          "options": {}
+        },
+        {
+          "keys": {
+            "updatedAt": 1
+          },
+          "options": {}
+        }
+      ]
+    },
+    {
+      "model": "AuthSession",
+      "collection": "authsessions",
+      "source": "backend/src/models/AuthSession.js",
+      "purpose": "Device authentication sessions and active desktop-session uniqueness.",
+      "schemaOptions": {
+        "timestamps": true,
+        "strict": true,
+        "versionKey": "__v",
+        "autoIndex": null
+      },
+      "fields": [
+        {
+          "path": "employee",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "sessionId",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "unique": true
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "deviceId",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "deviceName",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "maxlength": 160
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            },
+            {
+              "type": "maxlength",
+              "message": "[message function]"
+            }
+          ]
+        },
+        {
+          "path": "clientType",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": "desktop"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "desktop",
+              "web"
+            ]
+          },
+          "validators": [
+            {
+              "type": "enum",
+              "message": "`{VALUE}` is not a valid enum value for path `{PATH}`."
+            }
+          ]
+        },
+        {
+          "path": "status",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "value",
+            "value": "pending"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "pending",
+              "active",
+              "revoked",
+              "logged_out",
+              "expired",
+              "denied"
+            ]
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            },
+            {
+              "type": "enum",
+              "message": "`{VALUE}` is not a valid enum value for path `{PATH}`."
+            }
+          ]
+        },
+        {
+          "path": "loginAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "lastActivity",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "function",
+            "expression": "Date.now()"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "expiresAt",
+          "type": "Date",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "revokedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "revokeReason",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": ""
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "_id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "generated",
+            "expression": "ObjectId"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "createdAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "immutable": true
+          },
+          "validators": []
+        },
+        {
+          "path": "updatedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "__v",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        }
+      ],
+      "indexes": [
+        {
+          "keys": {
+            "employee": 1
+          },
+          "options": {}
+        },
+        {
+          "keys": {
+            "sessionId": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "keys": {
+            "employee": 1,
+            "clientType": 1,
+            "status": 1
+          },
+          "options": {
+            "name": "one_active_desktop_session_per_employee",
+            "unique": true,
+            "partialFilterExpression": {
+              "clientType": "desktop",
+              "status": "active"
+            }
+          }
+        },
+        {
+          "keys": {
+            "expiresAt": 1
+          },
+          "options": {
+            "expireAfterSeconds": 0
+          }
+        }
+      ]
+    },
+    {
+      "model": "Client",
+      "collection": "clients",
+      "source": "backend/src/models/Client.js",
+      "purpose": "Business clients; these are not authenticated user accounts.",
+      "schemaOptions": {
+        "timestamps": true,
+        "strict": true,
+        "versionKey": "__v",
+        "autoIndex": null
+      },
+      "fields": [
+        {
+          "path": "clientName",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "company",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": ""
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true
+          },
+          "validators": []
+        },
+        {
+          "path": "email",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": ""
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true,
+            "lowercase": true
+          },
+          "validators": []
+        },
+        {
+          "path": "phone",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": ""
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true
+          },
+          "validators": []
+        },
+        {
+          "path": "status",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": "Active"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "Active",
+              "Inactive"
+            ]
+          },
+          "validators": [
+            {
+              "type": "enum",
+              "message": "`{VALUE}` is not a valid enum value for path `{PATH}`."
+            }
+          ]
+        },
+        {
+          "path": "createdBy",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "_id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "generated",
+            "expression": "ObjectId"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "createdAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "immutable": true
+          },
+          "validators": []
+        },
+        {
+          "path": "updatedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "__v",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        }
+      ],
+      "indexes": [
+        {
+          "keys": {
+            "updatedAt": 1
+          },
+          "options": {}
+        }
+      ]
+    },
+    {
+      "model": "ClientAccessChange",
+      "collection": "clientaccesschanges",
+      "source": "backend/src/models/ClientAccessChange.js",
+      "purpose": "Batch access-policy audit snapshots.",
+      "schemaOptions": {
+        "timestamps": true,
+        "strict": true,
+        "versionKey": "__v",
+        "autoCreate": false,
+        "autoIndex": false
+      },
+      "fields": [
+        {
+          "path": "actor",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "actorName",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "team",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "teamName",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "targets",
+          "type": "Embedded[]",
+          "required": true,
+          "default": {
+            "kind": "value",
+            "value": [],
+            "implicit": true
+          },
+          "hiddenByDefault": false,
+          "embeddedId": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "targets[].subjectType",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "team",
+              "employee"
+            ]
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            },
+            {
+              "type": "enum",
+              "message": "`{VALUE}` is not a valid enum value for path `{PATH}`."
+            }
+          ]
+        },
+        {
+          "path": "targets[].subjectId",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "targets[].name",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "targets[].beforeEnabled",
+          "type": "Boolean",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "targets[].afterEnabled",
+          "type": "Boolean",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "targets[].beforeOverrideTeam",
+          "type": "Boolean",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": false
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "targets[].afterOverrideTeam",
+          "type": "Boolean",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": false
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "targets[].beforeWorkTeams",
+          "type": "Embedded[]",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": [],
+            "implicit": true
+          },
+          "hiddenByDefault": false,
+          "embeddedId": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "targets[].beforeWorkTeams[].id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "targets[].beforeWorkTeams[].name",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "targets[].afterWorkTeams",
+          "type": "Embedded[]",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": [],
+            "implicit": true
+          },
+          "hiddenByDefault": false,
+          "embeddedId": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "targets[].afterWorkTeams[].id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "targets[].afterWorkTeams[].name",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "targets[].beforeWorkProjects",
+          "type": "Embedded[]",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": [],
+            "implicit": true
+          },
+          "hiddenByDefault": false,
+          "embeddedId": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "targets[].beforeWorkProjects[].id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "targets[].beforeWorkProjects[].name",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "targets[].afterWorkProjects",
+          "type": "Embedded[]",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": [],
+            "implicit": true
+          },
+          "hiddenByDefault": false,
+          "embeddedId": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "targets[].afterWorkProjects[].id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "targets[].afterWorkProjects[].name",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "targets[].beforeClients",
+          "type": "Embedded[]",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": [],
+            "implicit": true
+          },
+          "hiddenByDefault": false,
+          "embeddedId": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "targets[].beforeClients[].id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "targets[].beforeClients[].name",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "targets[].afterClients",
+          "type": "Embedded[]",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": [],
+            "implicit": true
+          },
+          "hiddenByDefault": false,
+          "embeddedId": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "targets[].afterClients[].id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "targets[].afterClients[].name",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "targets[].version",
+          "type": "Number",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "_id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "generated",
+            "expression": "ObjectId"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "createdAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "immutable": true
+          },
+          "validators": []
+        },
+        {
+          "path": "updatedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "__v",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        }
+      ],
+      "indexes": [
+        {
+          "keys": {
+            "createdAt": -1,
+            "_id": -1
+          },
+          "options": {}
+        }
+      ]
+    },
+    {
+      "model": "ClientAccessPolicy",
+      "collection": "clientaccesspolicies",
+      "source": "backend/src/models/ClientAccessPolicy.js",
+      "purpose": "Team/employee client limits and extra work-team/project grants.",
+      "schemaOptions": {
+        "timestamps": true,
+        "strict": true,
+        "versionKey": "__v",
+        "autoCreate": false,
+        "autoIndex": false
+      },
+      "fields": [
+        {
+          "path": "subjectType",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "team",
+              "employee"
+            ]
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            },
+            {
+              "type": "enum",
+              "message": "`{VALUE}` is not a valid enum value for path `{PATH}`."
+            }
+          ]
+        },
+        {
+          "path": "subjectId",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "enabled",
+          "type": "Boolean",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "overrideTeam",
+          "type": "Boolean",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": false
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "workTeams",
+          "type": "ObjectId[]",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": [],
+            "implicit": true
+          },
+          "hiddenByDefault": false,
+          "ref": "Team",
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "workProjects",
+          "type": "ObjectId[]",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": [],
+            "implicit": true
+          },
+          "hiddenByDefault": false,
+          "ref": "Project",
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "clients",
+          "type": "ObjectId[]",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": [],
+            "implicit": true
+          },
+          "hiddenByDefault": false,
+          "ref": "Client",
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "version",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": 0
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "updatedBy",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "_id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "generated",
+            "expression": "ObjectId"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "createdAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "immutable": true
+          },
+          "validators": []
+        },
+        {
+          "path": "updatedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "__v",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        }
+      ],
+      "indexes": [
+        {
+          "keys": {
+            "subjectType": 1,
+            "subjectId": 1
+          },
+          "options": {
+            "unique": true
+          }
+        }
+      ]
+    },
+    {
+      "model": "DeviceLoginRequest",
+      "collection": "deviceloginrequests",
+      "source": "backend/src/models/DeviceLoginRequest.js",
+      "purpose": "Second-device approval requests and their cleanup lifecycle.",
+      "schemaOptions": {
+        "timestamps": true,
+        "strict": true,
+        "versionKey": "__v",
+        "autoIndex": null
+      },
+      "fields": [
+        {
+          "path": "requestId",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "unique": true
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "requestTokenHash",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": true,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "tokenVersion",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": 0
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "rememberedTokenHash",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": true,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "employee",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "existingSession",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "AuthSession",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "requestedSession",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "AuthSession",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "deviceId",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "deviceName",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "maxlength": 160
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            },
+            {
+              "type": "maxlength",
+              "message": "[message function]"
+            }
+          ]
+        },
+        {
+          "path": "clientType",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": "desktop"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "desktop",
+              "web"
+            ]
+          },
+          "validators": [
+            {
+              "type": "enum",
+              "message": "`{VALUE}` is not a valid enum value for path `{PATH}`."
+            }
+          ]
+        },
+        {
+          "path": "status",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "value",
+            "value": "pending"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "pending",
+              "approving",
+              "approved",
+              "consumed",
+              "denied",
+              "expired",
+              "cancelled",
+              "superseded"
+            ]
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            },
+            {
+              "type": "enum",
+              "message": "`{VALUE}` is not a valid enum value for path `{PATH}`."
+            }
+          ]
+        },
+        {
+          "path": "expiresAt",
+          "type": "Date",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "cleanupAt",
+          "type": "Date",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "resolvedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "_id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "generated",
+            "expression": "ObjectId"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "createdAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "immutable": true
+          },
+          "validators": []
+        },
+        {
+          "path": "updatedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "__v",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        }
+      ],
+      "indexes": [
+        {
+          "keys": {
+            "requestId": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "keys": {
+            "employee": 1
+          },
+          "options": {}
+        },
+        {
+          "keys": {
+            "existingSession": 1
+          },
+          "options": {}
+        },
+        {
+          "keys": {
+            "status": 1
+          },
+          "options": {}
+        },
+        {
+          "keys": {
+            "expiresAt": 1
+          },
+          "options": {}
+        },
+        {
+          "keys": {
+            "cleanupAt": 1
+          },
+          "options": {
+            "expireAfterSeconds": 0
+          }
+        },
+        {
+          "keys": {
+            "existingSession": 1,
+            "status": 1,
+            "createdAt": 1
+          },
+          "options": {}
+        }
+      ]
+    },
+    {
+      "model": "Employee",
+      "collection": "employees",
+      "source": "backend/src/models/Employee.js",
+      "purpose": "Employee identities, authentication hashes, team membership, billing rates and individual permissions/idle policy.",
+      "schemaOptions": {
+        "timestamps": true,
+        "strict": true,
+        "versionKey": "__v",
+        "autoIndex": null
+      },
+      "fields": [
+        {
+          "path": "employeeId",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true,
+            "uppercase": true,
+            "unique": true
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Employee ID is required"
+            }
+          ]
+        },
+        {
+          "path": "fullName",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "minlength": [
+              2,
+              "Full name must contain at least 2 characters"
+            ],
+            "maxlength": [
+              100,
+              "Full name cannot exceed 100 characters"
+            ],
+            "trim": true
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Full name is required"
+            },
+            {
+              "type": "minlength",
+              "message": "Full name must contain at least 2 characters"
+            },
+            {
+              "type": "maxlength",
+              "message": "[message function]"
+            }
+          ]
+        },
+        {
+          "path": "firstName",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": ""
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true
+          },
+          "validators": []
+        },
+        {
+          "path": "lastName",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": ""
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true
+          },
+          "validators": []
+        },
+        {
+          "path": "email",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "match": [
+              "/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/",
+              "Please enter a valid email address"
+            ],
+            "trim": true,
+            "lowercase": true,
+            "unique": true
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Email is required"
+            },
+            {
+              "type": "regexp",
+              "message": "Please enter a valid email address"
+            }
+          ]
+        },
+        {
+          "path": "password",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": true,
+          "constraints": {
+            "minlength": [
+              8,
+              "Password must contain at least 8 characters"
+            ]
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Password is required"
+            },
+            {
+              "type": "minlength",
+              "message": "Password must contain at least 8 characters"
+            }
+          ]
+        },
+        {
+          "path": "role",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": "employee"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "alpha",
+              "admin",
+              "team_lead",
+              "hr",
+              "manager",
+              "employee"
+            ]
+          },
+          "validators": [
+            {
+              "type": "enum",
+              "message": "Role must be alpha, admin, team_lead, hr, manager, or employee"
+            }
+          ]
+        },
+        {
+          "path": "department",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": ""
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true
+          },
+          "validators": []
+        },
+        {
+          "path": "designation",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": ""
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true
+          },
+          "validators": []
+        },
+        {
+          "path": "companyName",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": ""
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true
+          },
+          "validators": []
+        },
+        {
+          "path": "address1",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": ""
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true
+          },
+          "validators": []
+        },
+        {
+          "path": "address2",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": ""
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true
+          },
+          "validators": []
+        },
+        {
+          "path": "city",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": ""
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true
+          },
+          "validators": []
+        },
+        {
+          "path": "state",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": ""
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true
+          },
+          "validators": []
+        },
+        {
+          "path": "postalCode",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": ""
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true
+          },
+          "validators": []
+        },
+        {
+          "path": "country",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": ""
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true
+          },
+          "validators": []
+        },
+        {
+          "path": "phoneNumber",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": ""
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true
+          },
+          "validators": []
+        },
+        {
+          "path": "serviceRates",
+          "type": "Embedded[]",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": []
+          },
+          "hiddenByDefault": true,
+          "embeddedId": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "user defined",
+              "message": "A service type cannot be assigned more than once",
+              "expression": "validator(assignments) {\r\n          const serviceTypes = assignments.map((assignment) => assignment.serviceType);\r\n          return new Set(serviceTypes).size === serviceTypes.length;\r\n        }"
+            }
+          ]
+        },
+        {
+          "path": "serviceRates[].serviceType",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": true,
+          "constraints": {
+            "trim": true,
+            "enum": [
+              "FTC",
+              "Tax",
+              "Bookkeeping",
+              "Audit",
+              "Business Tax Return"
+            ]
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Service type is required"
+            },
+            {
+              "type": "enum",
+              "message": "Select a valid service type"
+            }
+          ]
+        },
+        {
+          "path": "serviceRates[].chargeRate",
+          "type": "Number",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": true,
+          "constraints": {
+            "min": [
+              0.01,
+              "Charge rate must be greater than zero"
+            ],
+            "max": [
+              1000000,
+              "Charge rate is too large"
+            ]
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Charge rate is required"
+            },
+            {
+              "type": "min",
+              "message": "Charge rate must be greater than zero"
+            },
+            {
+              "type": "max",
+              "message": "Charge rate is too large"
+            }
+          ]
+        },
+        {
+          "path": "projectRates",
+          "type": "Embedded[]",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": []
+          },
+          "hiddenByDefault": false,
+          "embeddedId": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "user defined",
+              "message": "The same project cannot be assigned more than once",
+              "expression": "validator(assignments) {\r\n          const projectIds = assignments.map((assignment) => String(assignment.project));\r\n          return new Set(projectIds).size === projectIds.length;\r\n        }"
+            }
+          ]
+        },
+        {
+          "path": "projectRates[].project",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Project",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Project is required"
+            }
+          ]
+        },
+        {
+          "path": "projectRates[].chargeRate",
+          "type": "Number",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "min": [
+              0.01,
+              "Charge rate must be greater than zero"
+            ],
+            "max": [
+              1000000,
+              "Charge rate is too large"
+            ]
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Charge rate is required"
+            },
+            {
+              "type": "min",
+              "message": "Charge rate must be greater than zero"
+            },
+            {
+              "type": "max",
+              "message": "Charge rate is too large"
+            }
+          ]
+        },
+        {
+          "path": "isActive",
+          "type": "Boolean",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": true
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "permissions",
+          "type": "String[]",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": []
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "create_employees",
+              "edit_employees"
+            ]
+          },
+          "validators": []
+        },
+        {
+          "path": "permissionOverrides.granted",
+          "type": "String[]",
+          "required": false,
+          "default": {
+            "kind": "unset",
+            "explicit": true
+          },
+          "hiddenByDefault": true,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "permissionOverrides.revoked",
+          "type": "String[]",
+          "required": false,
+          "default": {
+            "kind": "unset",
+            "explicit": true
+          },
+          "hiddenByDefault": true,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "permissionOverrides.updatedBy",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": true,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "permissionOverrides.updatedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": true,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "teamLead",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "team",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "ref": "Team",
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "lastLoginAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "tokenVersion",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": 0
+          },
+          "hiddenByDefault": true,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "rememberedSessionTokenHash",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": true,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "rememberedSessionExpires",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": true,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "rememberedSessions",
+          "type": "Embedded[]",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": []
+          },
+          "hiddenByDefault": true,
+          "embeddedId": true,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "rememberedSessions[].tokenHash",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": true,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "rememberedSessions[].expiresAt",
+          "type": "Date",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": true,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "rememberedSessions[]._id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "generated",
+            "expression": "ObjectId"
+          },
+          "hiddenByDefault": true,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "idleTrackingExempt",
+          "type": "Boolean",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": false
+          },
+          "hiddenByDefault": true,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "idlePolicyOverride.idleThresholdMinutes",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": true,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "idlePolicyOverride.autoLogoutMinutes",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": true,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "idlePolicyOverride.updatedBy",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": true,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "idlePolicyOverride.updatedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": true,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "passwordResetTokenHash",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": true,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "passwordResetExpires",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": true,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "_id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "generated",
+            "expression": "ObjectId"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "createdAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "immutable": true
+          },
+          "validators": []
+        },
+        {
+          "path": "updatedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "timeEntryEditVersion",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": 0
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "__v",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        }
+      ],
+      "indexes": [
+        {
+          "keys": {
+            "employeeId": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "keys": {
+            "email": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "keys": {
+            "idleTrackingExempt": 1
+          },
+          "options": {
+            "unique": true,
+            "partialFilterExpression": {
+              "idleTrackingExempt": true
+            }
+          }
+        },
+        {
+          "keys": {
+            "team": 1
+          },
+          "options": {}
+        },
+        {
+          "keys": {
+            "teamLead": 1
+          },
+          "options": {}
+        },
+        {
+          "keys": {
+            "role": 1
+          },
+          "options": {}
+        },
+        {
+          "keys": {
+            "updatedAt": 1
+          },
+          "options": {}
+        }
+      ]
+    },
+    {
+      "model": "Project",
+      "collection": "projects",
+      "source": "backend/src/models/Project.js",
+      "purpose": "Projects, client/team availability, linked tasks and activity-selection settings.",
+      "schemaOptions": {
+        "timestamps": true,
+        "strict": true,
+        "versionKey": "__v",
+        "autoIndex": null
+      },
+      "fields": [
+        {
+          "path": "projectCode",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true,
+            "unique": true
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "projectName",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "serviceType",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true,
+            "enum": [
+              "FTC",
+              "Tax",
+              "Bookkeeping",
+              "Audit",
+              "Business Tax Return",
+              null
+            ]
+          },
+          "validators": [
+            {
+              "type": "enum",
+              "message": "Select a valid service type"
+            }
+          ]
+        },
+        {
+          "path": "description",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": ""
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "clientName",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": ""
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "client",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "ref": "Client",
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "clients",
+          "type": "ObjectId[]",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": [],
+            "implicit": true
+          },
+          "hiddenByDefault": false,
+          "ref": "Client",
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "activityLinksVersion",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": 0
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "min": 0
+          },
+          "validators": [
+            {
+              "type": "min",
+              "message": "Path `{PATH}` ({VALUE}) is less than minimum allowed value (0)."
+            }
+          ]
+        },
+        {
+          "path": "activityMappingEnabled",
+          "type": "Boolean",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": false
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "linkedTasks",
+          "type": "ObjectId[]",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": [],
+            "implicit": true
+          },
+          "hiddenByDefault": false,
+          "ref": "Task",
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "teams",
+          "type": "ObjectId[]",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": [],
+            "implicit": true
+          },
+          "hiddenByDefault": false,
+          "ref": "Team",
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "status",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": "Active"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "Active",
+              "Completed",
+              "On Hold"
+            ]
+          },
+          "validators": [
+            {
+              "type": "enum",
+              "message": "`{VALUE}` is not a valid enum value for path `{PATH}`."
+            }
+          ]
+        },
+        {
+          "path": "deletedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "startDate",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "endDate",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "createdBy",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "_id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "generated",
+            "expression": "ObjectId"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "createdAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "immutable": true
+          },
+          "validators": []
+        },
+        {
+          "path": "updatedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "__v",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        }
+      ],
+      "indexes": [
+        {
+          "keys": {
+            "projectCode": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "keys": {
+            "teams": 1
+          },
+          "options": {}
+        },
+        {
+          "keys": {
+            "client": 1
+          },
+          "options": {}
+        },
+        {
+          "keys": {
+            "updatedAt": 1
+          },
+          "options": {}
+        }
+      ]
+    },
+    {
+      "model": "RolePermission",
+      "collection": "role_permissions",
+      "source": "backend/src/models/RolePermission.js",
+      "purpose": "Saved permission sets for configurable roles.",
+      "schemaOptions": {
+        "timestamps": true,
+        "strict": true,
+        "versionKey": "__v",
+        "autoIndex": null
+      },
+      "fields": [
+        {
+          "path": "role",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "unique": true,
+            "enum": [
+              "hr",
+              "team_lead",
+              "employee"
+            ]
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            },
+            {
+              "type": "enum",
+              "message": "`{VALUE}` is not a valid enum value for path `{PATH}`."
+            }
+          ]
+        },
+        {
+          "path": "permissions",
+          "type": "String[]",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": []
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "updatedBy",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "_id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "generated",
+            "expression": "ObjectId"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "createdAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "immutable": true
+          },
+          "validators": []
+        },
+        {
+          "path": "updatedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "__v",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        }
+      ],
+      "indexes": [
+        {
+          "keys": {
+            "role": 1
+          },
+          "options": {
+            "unique": true
+          }
+        }
+      ]
+    },
+    {
+      "model": "Schedule",
+      "collection": "schedules",
+      "source": "backend/src/models/Schedule.js",
+      "purpose": "Employee/team/shift assignments by business day.",
+      "schemaOptions": {
+        "timestamps": true,
+        "strict": true,
+        "versionKey": "__v",
+        "autoIndex": null
+      },
+      "fields": [
+        {
+          "path": "team",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Team",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "employee",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "shift",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Shift",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "scheduleTitle",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": ""
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true
+          },
+          "validators": []
+        },
+        {
+          "path": "date",
+          "type": "Date",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "scheduleDateKey",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "match": "/^\\d{4}-\\d{2}-\\d{2}$/"
+          },
+          "validators": [
+            {
+              "type": "regexp",
+              "message": "Path `{PATH}` is invalid ({VALUE})."
+            }
+          ]
+        },
+        {
+          "path": "notes",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": ""
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true
+          },
+          "validators": []
+        },
+        {
+          "path": "status",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": "Active"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "Active",
+              "Inactive"
+            ]
+          },
+          "validators": [
+            {
+              "type": "enum",
+              "message": "`{VALUE}` is not a valid enum value for path `{PATH}`."
+            }
+          ]
+        },
+        {
+          "path": "createdBy",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "_id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "generated",
+            "expression": "ObjectId"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "createdAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "immutable": true
+          },
+          "validators": []
+        },
+        {
+          "path": "updatedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "__v",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        }
+      ],
+      "indexes": [
+        {
+          "keys": {
+            "employee": 1,
+            "date": 1
+          },
+          "options": {}
+        },
+        {
+          "keys": {
+            "employee": 1,
+            "scheduleDateKey": 1
+          },
+          "options": {
+            "unique": true,
+            "partialFilterExpression": {
+              "status": "Active",
+              "scheduleDateKey": {
+                "$type": "string"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "model": "Shift",
+      "collection": "shifts",
+      "source": "backend/src/models/Shift.js",
+      "purpose": "Shift templates, timezone, hours and embedded break definitions.",
+      "schemaOptions": {
+        "timestamps": true,
+        "strict": true,
+        "versionKey": "__v",
+        "autoIndex": null
+      },
+      "fields": [
+        {
+          "path": "title",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "timezone",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "shiftType",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": "Fixed"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "Fixed",
+              "Flexible"
+            ]
+          },
+          "validators": [
+            {
+              "type": "enum",
+              "message": "`{VALUE}` is not a valid enum value for path `{PATH}`."
+            }
+          ]
+        },
+        {
+          "path": "startTime",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "endTime",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "breakType",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": "Fixed"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "Fixed",
+              "Flexible"
+            ]
+          },
+          "validators": [
+            {
+              "type": "enum",
+              "message": "`{VALUE}` is not a valid enum value for path `{PATH}`."
+            }
+          ]
+        },
+        {
+          "path": "breaks",
+          "type": "Embedded[]",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": []
+          },
+          "hiddenByDefault": false,
+          "embeddedId": true,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "breaks[].title",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "breaks[].startTime",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "breaks[].endTime",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "breaks[]._id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "generated",
+            "expression": "ObjectId"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "status",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": "Active"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "Active",
+              "Inactive"
+            ]
+          },
+          "validators": [
+            {
+              "type": "enum",
+              "message": "`{VALUE}` is not a valid enum value for path `{PATH}`."
+            }
+          ]
+        },
+        {
+          "path": "createdBy",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "_id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "generated",
+            "expression": "ObjectId"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "createdAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "immutable": true
+          },
+          "validators": []
+        },
+        {
+          "path": "updatedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "__v",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "model": "SystemSettings",
+      "collection": "systemsettings",
+      "source": "backend/src/models/SystemSettings.js",
+      "purpose": "Global idle policy and optional default activity configuration.",
+      "schemaOptions": {
+        "timestamps": true,
+        "strict": true,
+        "versionKey": "__v",
+        "autoIndex": null
+      },
+      "fields": [
+        {
+          "path": "key",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "value",
+            "value": "global"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "unique": true,
+            "enum": [
+              "global"
+            ]
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            },
+            {
+              "type": "enum",
+              "message": "`{VALUE}` is not a valid enum value for path `{PATH}`."
+            }
+          ]
+        },
+        {
+          "path": "idleThresholdMinutes",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": 5
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "min": 1,
+            "max": 240
+          },
+          "validators": [
+            {
+              "type": "min",
+              "message": "Path `{PATH}` ({VALUE}) is less than minimum allowed value (1)."
+            },
+            {
+              "type": "max",
+              "message": "Path `{PATH}` ({VALUE}) is more than maximum allowed value (240)."
+            },
+            {
+              "type": "user defined",
+              "message": "Validator failed for path `{PATH}` with value `{VALUE}`",
+              "expression": "function isInteger() { [native code] }"
+            }
+          ]
+        },
+        {
+          "path": "autoLogoutMinutes",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "min": 2,
+            "max": 480
+          },
+          "validators": [
+            {
+              "type": "min",
+              "message": "Path `{PATH}` ({VALUE}) is less than minimum allowed value (2)."
+            },
+            {
+              "type": "max",
+              "message": "Path `{PATH}` ({VALUE}) is more than maximum allowed value (480)."
+            },
+            {
+              "type": "user defined",
+              "message": "Validator failed for path `{PATH}` with value `{VALUE}`",
+              "expression": "function isInteger() { [native code] }"
+            }
+          ]
+        },
+        {
+          "path": "defaultActivity",
+          "type": "Embedded",
+          "required": false,
+          "default": {
+            "kind": "unset",
+            "explicit": true
+          },
+          "hiddenByDefault": false,
+          "embeddedId": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "defaultActivity.mapping",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "ActivityMapping",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "defaultActivity.enabled",
+          "type": "Boolean",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": false
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "defaultActivity.mode",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": "selection_only"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "selection_only"
+            ]
+          },
+          "validators": [
+            {
+              "type": "enum",
+              "message": "`{VALUE}` is not a valid enum value for path `{PATH}`."
+            }
+          ]
+        },
+        {
+          "path": "_id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "generated",
+            "expression": "ObjectId"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "createdAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "immutable": true
+          },
+          "validators": []
+        },
+        {
+          "path": "updatedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "__v",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        }
+      ],
+      "indexes": [
+        {
+          "keys": {
+            "key": 1
+          },
+          "options": {
+            "unique": true
+          }
+        }
+      ]
+    },
+    {
+      "model": "Task",
+      "collection": "tasks",
+      "source": "backend/src/models/Task.js",
+      "purpose": "Work/break tasks, team/employee assignment and soft deletion.",
+      "schemaOptions": {
+        "timestamps": true,
+        "strict": true,
+        "versionKey": "__v",
+        "autoIndex": null
+      },
+      "fields": [
+        {
+          "path": "taskCode",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true,
+            "uppercase": true,
+            "unique": true
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Task code is required"
+            }
+          ]
+        },
+        {
+          "path": "taskName",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Task name is required"
+            }
+          ]
+        },
+        {
+          "path": "description",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": ""
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true
+          },
+          "validators": []
+        },
+        {
+          "path": "taskType",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": "work"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "work",
+              "break"
+            ]
+          },
+          "validators": [
+            {
+              "type": "enum",
+              "message": "Task type must be work or break"
+            }
+          ]
+        },
+        {
+          "path": "project",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "ref": "Project",
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "team",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "ref": "Team",
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "teams",
+          "type": "ObjectId[]",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": [],
+            "implicit": true
+          },
+          "hiddenByDefault": false,
+          "ref": "Team",
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "assignedTo",
+          "type": "ObjectId[]",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": [],
+            "implicit": true
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "assignToAllEmployees",
+          "type": "Boolean",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": false
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "isActive",
+          "type": "Boolean",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": true
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "deletedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "idleLogout",
+          "type": "Boolean",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": false
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "createdBy",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "_id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "generated",
+            "expression": "ObjectId"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "createdAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "immutable": true
+          },
+          "validators": []
+        },
+        {
+          "path": "updatedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "__v",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        }
+      ],
+      "indexes": [
+        {
+          "keys": {
+            "taskCode": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "keys": {
+            "team": 1
+          },
+          "options": {}
+        },
+        {
+          "keys": {
+            "teams": 1
+          },
+          "options": {}
+        },
+        {
+          "keys": {
+            "assignedTo": 1
+          },
+          "options": {}
+        },
+        {
+          "keys": {
+            "project": 1
+          },
+          "options": {}
+        },
+        {
+          "keys": {
+            "updatedAt": 1
+          },
+          "options": {}
+        }
+      ]
+    },
+    {
+      "model": "TaskTimeLog",
+      "collection": "task_time_logs",
+      "source": "backend/src/models/TaskTimeLog.js",
+      "purpose": "Live and completed timer sessions, pauses, totals, manual entries and retry identities.",
+      "schemaOptions": {
+        "timestamps": true,
+        "strict": true,
+        "versionKey": "__v",
+        "autoIndex": null
+      },
+      "fields": [
+        {
+          "path": "employee",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "project",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Project",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "client",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "ref": "Client",
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "activityMapping",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "unset",
+            "explicit": true
+          },
+          "hiddenByDefault": false,
+          "ref": "ActivityMapping",
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "task",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Task",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "startedAt",
+          "type": "Date",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "stoppedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "note",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "maxlength": 2000,
+            "trim": true
+          },
+          "validators": [
+            {
+              "type": "maxlength",
+              "message": "[message function]"
+            }
+          ]
+        },
+        {
+          "path": "pauses",
+          "type": "Embedded[]",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": []
+          },
+          "hiddenByDefault": false,
+          "embeddedId": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "pauses[].pausedAt",
+          "type": "Date",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "pauses[].resumedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "pauses[].reason",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": "manual"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "manual",
+              "idle",
+              "break"
+            ]
+          },
+          "validators": [
+            {
+              "type": "enum",
+              "message": "`{VALUE}` is not a valid enum value for path `{PATH}`."
+            }
+          ]
+        },
+        {
+          "path": "totalPausedSeconds",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": 0
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "min": 0
+          },
+          "validators": [
+            {
+              "type": "min",
+              "message": "Path `{PATH}` ({VALUE}) is less than minimum allowed value (0)."
+            }
+          ]
+        },
+        {
+          "path": "totalIdleSeconds",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": 0
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "min": 0
+          },
+          "validators": [
+            {
+              "type": "min",
+              "message": "Path `{PATH}` ({VALUE}) is less than minimum allowed value (0)."
+            }
+          ]
+        },
+        {
+          "path": "totalWorkedSeconds",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": 0
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "min": 0
+          },
+          "validators": [
+            {
+              "type": "min",
+              "message": "Path `{PATH}` ({VALUE}) is less than minimum allowed value (0)."
+            }
+          ]
+        },
+        {
+          "path": "status",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": "running"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "running",
+              "paused",
+              "stopped"
+            ]
+          },
+          "validators": [
+            {
+              "type": "enum",
+              "message": "`{VALUE}` is not a valid enum value for path `{PATH}`."
+            }
+          ]
+        },
+        {
+          "path": "isActiveTimer",
+          "type": "Boolean",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": true
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "desktopHeartbeatAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "stopReason",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "desktop_disconnected"
+            ]
+          },
+          "validators": [
+            {
+              "type": "enum",
+              "message": "`{VALUE}` is not a valid enum value for path `{PATH}`."
+            }
+          ]
+        },
+        {
+          "path": "entrySource",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": "timer"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "timer",
+              "manual"
+            ]
+          },
+          "validators": [
+            {
+              "type": "enum",
+              "message": "`{VALUE}` is not a valid enum value for path `{PATH}`."
+            }
+          ]
+        },
+        {
+          "path": "editVersion",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": 0
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "min": 0
+          },
+          "validators": [
+            {
+              "type": "min",
+              "message": "Path `{PATH}` ({VALUE}) is less than minimum allowed value (0)."
+            }
+          ]
+        },
+        {
+          "path": "manualEntry",
+          "type": "Embedded",
+          "required": false,
+          "default": {
+            "kind": "unset",
+            "explicit": true
+          },
+          "hiddenByDefault": false,
+          "embeddedId": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "manualEntry.createdBy",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "manualEntry.createdAt",
+          "type": "Date",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "manualEntry.reason",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "maxlength": 500,
+            "trim": true
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            },
+            {
+              "type": "maxlength",
+              "message": "[message function]"
+            }
+          ]
+        },
+        {
+          "path": "manualEntry.deletedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "manualEntry.deletedBy",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "autoLogoutAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "logoutReason",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "enum": [
+              "manual",
+              "inactivity"
+            ]
+          },
+          "validators": [
+            {
+              "type": "enum",
+              "message": "`{VALUE}` is not a valid enum value for path `{PATH}`."
+            }
+          ]
+        },
+        {
+          "path": "startOperationId",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "unset",
+            "explicit": true
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "stopOperationId",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "unset",
+            "explicit": true
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "manualOperationId",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "unset",
+            "explicit": true
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "manualRequestHash",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "unset",
+            "explicit": true
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "_id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "generated",
+            "expression": "ObjectId"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "createdAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "immutable": true
+          },
+          "validators": []
+        },
+        {
+          "path": "updatedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "__v",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        }
+      ],
+      "indexes": [
+        {
+          "keys": {
+            "employee": 1,
+            "isActiveTimer": 1
+          },
+          "options": {
+            "unique": true,
+            "partialFilterExpression": {
+              "isActiveTimer": true
+            }
+          }
+        },
+        {
+          "keys": {
+            "employee": 1,
+            "startOperationId": 1
+          },
+          "options": {
+            "unique": true,
+            "partialFilterExpression": {
+              "startOperationId": {
+                "$type": "string"
+              }
+            }
+          }
+        },
+        {
+          "keys": {
+            "employee": 1,
+            "stopOperationId": 1
+          },
+          "options": {
+            "partialFilterExpression": {
+              "stopOperationId": {
+                "$type": "string"
+              }
+            }
+          }
+        },
+        {
+          "keys": {
+            "employee": 1,
+            "status": 1,
+            "startedAt": 1,
+            "stoppedAt": 1
+          },
+          "options": {}
+        },
+        {
+          "keys": {
+            "employee": 1,
+            "manualEntry.createdBy": 1,
+            "manualOperationId": 1
+          },
+          "options": {
+            "name": "manual_entry_operation",
+            "unique": true,
+            "partialFilterExpression": {
+              "manualOperationId": {
+                "$type": "string"
+              }
+            }
+          }
+        },
+        {
+          "keys": {
+            "isActiveTimer": 1,
+            "desktopHeartbeatAt": 1
+          },
+          "options": {}
+        },
+        {
+          "keys": {
+            "employee": 1,
+            "updatedAt": 1
+          },
+          "options": {}
+        },
+        {
+          "keys": {
+            "updatedAt": 1
+          },
+          "options": {}
+        },
+        {
+          "keys": {
+            "status": 1
+          },
+          "options": {}
+        }
+      ]
+    },
+    {
+      "model": "Team",
+      "collection": "teams",
+      "source": "backend/src/models/Team.js",
+      "purpose": "Teams and their primary team lead.",
+      "schemaOptions": {
+        "timestamps": true,
+        "strict": true,
+        "versionKey": "__v",
+        "autoIndex": null
+      },
+      "fields": [
+        {
+          "path": "teamName",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true,
+            "unique": true
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Team name is required"
+            }
+          ]
+        },
+        {
+          "path": "description",
+          "type": "String",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": ""
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "trim": true
+          },
+          "validators": []
+        },
+        {
+          "path": "teamLead",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": null
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "isActive",
+          "type": "Boolean",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": true
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "createdBy",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "_id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "generated",
+            "expression": "ObjectId"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "createdAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "immutable": true
+          },
+          "validators": []
+        },
+        {
+          "path": "updatedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "__v",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        }
+      ],
+      "indexes": [
+        {
+          "keys": {
+            "teamName": 1
+          },
+          "options": {
+            "unique": true
+          }
+        },
+        {
+          "keys": {
+            "updatedAt": 1
+          },
+          "options": {}
+        }
+      ]
+    },
+    {
+      "model": "TimeEntryEdit",
+      "collection": "time_entry_edits",
+      "source": "backend/src/models/TimeEntryEdit.js",
+      "purpose": "Administrative correction revisions and before/after snapshots.",
+      "schemaOptions": {
+        "timestamps": true,
+        "strict": true,
+        "versionKey": "__v",
+        "autoCreate": false,
+        "autoIndex": false
+      },
+      "fields": [
+        {
+          "path": "timeLog",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "TaskTimeLog",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "employee",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "revision",
+          "type": "Number",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "editedBy",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "reason",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "maxlength": 500
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            },
+            {
+              "type": "maxlength",
+              "message": "[message function]"
+            }
+          ]
+        },
+        {
+          "path": "before",
+          "type": "Mixed",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "after",
+          "type": "Mixed",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "_id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "generated",
+            "expression": "ObjectId"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "createdAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "immutable": true
+          },
+          "validators": []
+        },
+        {
+          "path": "updatedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "__v",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        }
+      ],
+      "indexes": [
+        {
+          "keys": {
+            "timeLog": 1,
+            "revision": 1
+          },
+          "options": {
+            "unique": true
+          }
+        }
+      ]
+    },
+    {
+      "model": "WorkingHoursPolicy",
+      "collection": "workinghourspolicies",
+      "source": "backend/src/models/WorkingHoursPolicy.js",
+      "purpose": "Effective-dated per-employee working-hours requirements.",
+      "schemaOptions": {
+        "timestamps": true,
+        "strict": true,
+        "versionKey": "__v",
+        "autoCreate": false,
+        "autoIndex": false
+      },
+      "fields": [
+        {
+          "path": "employee",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "version",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": 0
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "revisions",
+          "type": "Embedded[]",
+          "required": false,
+          "default": {
+            "kind": "value",
+            "value": []
+          },
+          "hiddenByDefault": false,
+          "embeddedId": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "revisions[].effectiveFrom",
+          "type": "String",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "revisions[].requiredSeconds",
+          "type": "Number",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "min": 0,
+            "max": 86400
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            },
+            {
+              "type": "min",
+              "message": "Path `{PATH}` ({VALUE}) is less than minimum allowed value (0)."
+            },
+            {
+              "type": "max",
+              "message": "Path `{PATH}` ({VALUE}) is more than maximum allowed value (86400)."
+            }
+          ]
+        },
+        {
+          "path": "revisions[].halfDayPercent",
+          "type": "Number",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "min": 1,
+            "max": 100
+          },
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            },
+            {
+              "type": "min",
+              "message": "Path `{PATH}` ({VALUE}) is less than minimum allowed value (1)."
+            },
+            {
+              "type": "max",
+              "message": "Path `{PATH}` ({VALUE}) is more than maximum allowed value (100)."
+            }
+          ]
+        },
+        {
+          "path": "revisions[].changedBy",
+          "type": "ObjectId",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "ref": "Employee",
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "revisions[].changedAt",
+          "type": "Date",
+          "required": true,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": [
+            {
+              "type": "required",
+              "message": "Path `{PATH}` is required."
+            }
+          ]
+        },
+        {
+          "path": "_id",
+          "type": "ObjectId",
+          "required": false,
+          "default": {
+            "kind": "generated",
+            "expression": "ObjectId"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "createdAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {
+            "immutable": true
+          },
+          "validators": []
+        },
+        {
+          "path": "updatedAt",
+          "type": "Date",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        },
+        {
+          "path": "__v",
+          "type": "Number",
+          "required": false,
+          "default": {
+            "kind": "unset"
+          },
+          "hiddenByDefault": false,
+          "constraints": {},
+          "validators": []
+        }
+      ],
+      "indexes": [
+        {
+          "keys": {
+            "employee": 1
+          },
+          "options": {
+            "unique": true
+          }
+        }
+      ]
+    }
+  ],
+  "permissionCatalog": [
+    {
+      "key": "tasks",
+      "label": "Task permissions",
+      "permissions": [
+        {
+          "key": "view_tasks",
+          "label": "View tasks",
+          "enforcement": "none",
+          "description": "Not used yet. Everyone already sees the tasks assigned to them."
+        },
+        {
+          "key": "create_tasks",
+          "label": "Create tasks",
+          "enforcement": "backend",
+          "description": "Shows “Add task”: add tasks for the team, assigned to the whole team. HR works with every team; team leads and employees only with their own team."
+        },
+        {
+          "key": "edit_tasks",
+          "label": "Edit tasks",
+          "enforcement": "backend",
+          "description": "Edit task names, type and teams. HR edits every team's tasks; team leads and employees only their own team's."
+        },
+        {
+          "key": "reassign_tasks",
+          "label": "Reassign tasks",
+          "enforcement": "backend",
+          "description": "Choose which employees of the team a task is assigned to, instead of the whole team."
+        },
+        {
+          "key": "complete_tasks",
+          "label": "Complete tasks",
+          "enforcement": "none",
+          "description": "Not used yet. There is no task completion feature."
+        },
+        {
+          "key": "archive_tasks",
+          "label": "Archive tasks",
+          "enforcement": "backend",
+          "description": "Activate, deactivate and delete tasks (HR: every team; others: their own team)."
+        },
+        {
+          "key": "view_task_timesheets",
+          "label": "View task timesheets",
+          "enforcement": "none",
+          "description": "Not used yet."
+        },
+        {
+          "key": "add_manual_entries",
+          "label": "Add manual timesheet entries",
+          "enforcement": "backend",
+          "sensitive": true,
+          "description": "Add and delete back-filled time entries from the team timesheet. HR can add entries for every employee; team leads and employees only for the employees of their own team, never for themselves."
+        }
+      ]
+    },
+    {
+      "key": "teams",
+      "label": "Team permissions",
+      "permissions": [
+        {
+          "key": "view_teams",
+          "label": "View teams",
+          "enforcement": "none",
+          "description": "Not used yet."
+        },
+        {
+          "key": "create_teams",
+          "label": "Create teams",
+          "enforcement": "backend",
+          "description": "Create teams on the Teams page (adds Teams to the menu)."
+        },
+        {
+          "key": "edit_teams",
+          "label": "Edit teams",
+          "enforcement": "backend",
+          "description": "Rename, edit and deactivate any team (adds Teams to the menu)."
+        },
+        {
+          "key": "assign_team_members",
+          "label": "Assign employees to teams",
+          "enforcement": "none",
+          "sensitive": true,
+          "description": "Not used yet. Team membership is changed by editing an employee."
+        },
+        {
+          "key": "remove_team_members",
+          "label": "Remove employees from teams",
+          "enforcement": "none",
+          "sensitive": true,
+          "description": "Not used yet. Team membership is changed by editing an employee."
+        },
+        {
+          "key": "assign_team_leads",
+          "label": "Assign team leads",
+          "enforcement": "backend",
+          "sensitive": true,
+          "description": "Assign a lead when creating a team with “Create teams”, or change an existing team's lead with “Edit teams”."
+        },
+        {
+          "key": "view_team_timesheets",
+          "label": "View team timesheets",
+          "enforcement": "backend",
+          "description": "Team overview, timesheets, attendance and reports. Team leads see their assigned employees; employees see the employees of their own team. HR accounts have no team, so HR uses “View all employee reports” instead."
+        },
+        {
+          "key": "view_team_productivity",
+          "label": "View team productivity reports",
+          "enforcement": "none",
+          "description": "Not used yet."
+        }
+      ]
+    },
+    {
+      "key": "clients_projects",
+      "label": "Client and project permissions",
+      "permissions": [
+        {
+          "key": "view_clients",
+          "label": "View clients",
+          "enforcement": "none",
+          "description": "Not used yet. Client names are always listed so employees can start timers."
+        },
+        {
+          "key": "manage_clients",
+          "label": "Create/edit clients",
+          "enforcement": "backend",
+          "description": "Add, rename and deactivate clients (adds Clients to the menu)."
+        },
+        {
+          "key": "view_projects",
+          "label": "View projects",
+          "enforcement": "none",
+          "description": "Not used yet. Projects are always listed so employees can start timers."
+        },
+        {
+          "key": "manage_projects",
+          "label": "Create/edit projects",
+          "enforcement": "backend",
+          "description": "Add, edit and delete every project, including their clients and teams (adds Projects to the menu)."
+        },
+        {
+          "key": "manage_activity_links",
+          "label": "Link projects, clients and tasks",
+          "enforcement": "backend",
+          "sensitive": true,
+          "description": "Open Task links to link or unlink existing tasks and project clients. Employees and team leads are limited to their own team; HR works across teams. Selection enforcement remains restricted to company task administrators."
+        },
+        {
+          "key": "assign_projects",
+          "label": "Assign projects",
+          "enforcement": "none",
+          "description": "Not used yet. Project teams are set with “Create/edit projects”."
+        }
+      ]
+    },
+    {
+      "key": "reports_billing",
+      "label": "Reports and billing permissions",
+      "permissions": [
+        {
+          "key": "view_personal_reports",
+          "label": "View personal reports",
+          "enforcement": "none",
+          "description": "Not used yet. Everyone can see their own timesheet."
+        },
+        {
+          "key": "view_team_reports",
+          "label": "View team reports",
+          "enforcement": "none",
+          "description": "Not used yet. Team reports follow “View team timesheets”."
+        },
+        {
+          "key": "view_all_reports",
+          "label": "View all employee reports",
+          "enforcement": "backend",
+          "sensitive": true,
+          "description": "Company-wide overview, timesheets, attendance and reports for every employee (adds the company reports to the menu)."
+        },
+        {
+          "key": "export_reports",
+          "label": "Export Excel/PDF",
+          "enforcement": "frontend",
+          "description": "Shows the Export Excel and Export PDF buttons. Exports are built in the browser from data the person can already see."
+        },
+        {
+          "key": "view_billing_amounts",
+          "label": "View billing amounts",
+          "enforcement": "backend",
+          "sensitive": true,
+          "description": "Open the Billing page and see charge amounts for every employee."
+        },
+        {
+          "key": "manage_service_rates",
+          "label": "Manage employee service rates",
+          "enforcement": "none",
+          "sensitive": true,
+          "description": "Not used yet. Charge rates are edited on the Employees page."
+        },
+        {
+          "key": "view_financial_reports",
+          "label": "View financial reports",
+          "enforcement": "none",
+          "sensitive": true,
+          "description": "Not used yet."
+        }
+      ]
+    }
+  ],
+  "defaultRolePermissions": {
+    "hr": [
+      "view_tasks",
+      "create_tasks",
+      "edit_tasks",
+      "reassign_tasks",
+      "archive_tasks",
+      "add_manual_entries",
+      "view_teams",
+      "create_teams",
+      "edit_teams",
+      "view_clients",
+      "manage_clients",
+      "view_projects",
+      "manage_projects",
+      "manage_activity_links",
+      "view_personal_reports",
+      "view_all_reports",
+      "export_reports",
+      "view_billing_amounts"
+    ],
+    "team_lead": [
+      "view_tasks",
+      "create_tasks",
+      "edit_tasks",
+      "reassign_tasks",
+      "archive_tasks",
+      "view_teams",
+      "view_team_timesheets",
+      "view_team_reports",
+      "view_clients",
+      "view_projects",
+      "view_personal_reports",
+      "export_reports"
+    ],
+    "employee": [
+      "view_tasks",
+      "view_clients",
+      "view_projects",
+      "view_personal_reports",
+      "export_reports"
+    ]
+  }
+}

@@ -34,7 +34,7 @@ const projectAllowedForTeam = (project, scope, employee) => !scope.restrictProje
   || project.teams.map(id).some(team => (scope.teamIds || (scope.hasActiveTeam ? [id(employee.team)] : [])).includes(team));
 
 async function validateActivitySelection(project, client, task, employee) {
-  const accessError = employee && clientAccessError(employee, client);
+  const accessError = employee && clientAccessError(employee, client, project);
   if (accessError) return { error: accessError };
   const clients = projectClientIds(project);
   if (client && clients.length && !clients.includes(id(client))) return { error: 'The client is not linked to the selected project.' };
@@ -48,7 +48,7 @@ async function activityOptionsForEmployee(project, employee, { workOnly = false,
   const scope = await buildEmployeeScope(employee, { projectId: project._id });
   if (!projectAllowedForTeam(project, scope, employee)) return null;
   const clientIds = projectClientIds(project);
-  const access = allowedClientIds(employee);
+  const access = allowedClientIds(employee, project);
   const restricted = clientIds.length || project.activityMappingEnabled;
   const permitted = access === null ? clientIds : restricted ? clientIds.filter(client => access.includes(client)) : access;
   const clients = await Client.find({ status: 'Active', ...((restricted || access !== null) ? { _id: { $in: permitted } } : {}) }).select('clientName status').sort('clientName').lean();
