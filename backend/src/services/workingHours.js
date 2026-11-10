@@ -1,6 +1,7 @@
 const { addDateKeyDays } = require('../utils/billingUtils');
 const fail = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode });
 const id = value => String(value?._id || value || '');
+const TARGET_EXCLUDED_ROLES = ['alpha', 'manager'];
 
 function validDate(value) {
   if (typeof value !== 'string') throw fail('Choose a valid date.');
@@ -60,7 +61,7 @@ function buildWorkingHoursOverview({ employees, policies, attendance, logs, date
   for (const log of logs) { const key = id(log.employee); if (!logMap.has(key)) logMap.set(key, []); logMap.get(key).push(log); }
   const teams = new Map();
   for (const employee of employees) {
-    if (employee.role === 'alpha') continue;
+    if (TARGET_EXCLUDED_ROLES.includes(employee.role)) continue;
     const key = id(employee), att = attendanceMap.get(key);
     if (!employee.isActive && !att && !logMap.has(key)) continue;
     const adjustment = att?.workingHoursAdjustments?.at(-1);
@@ -90,4 +91,4 @@ function buildWorkingHoursOverview({ employees, policies, attendance, logs, date
   const result = [...teams.values()].sort((a, b) => a.name.localeCompare(b.name)).map(team => ({ ...team, ...summarize(team.members) }));
   return { date, asOf: new Date(now).toISOString(), totals: summarize(result.flatMap(team => team.members)), teams: result };
 }
-module.exports = { fail, id, validDate, hoursToSeconds, policyOnDate, productiveSeconds, metrics, buildWorkingHoursOverview };
+module.exports = { fail, id, TARGET_EXCLUDED_ROLES, validDate, hoursToSeconds, policyOnDate, productiveSeconds, metrics, buildWorkingHoursOverview };
