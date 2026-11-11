@@ -11,8 +11,8 @@ import '../../styles/workingHours.css';
 
 export default function WorkingHoursSettings() {
   const { user } = useAuth();
-  return <DashboardLayout title="Working Hours Settings" hideHeader>{['admin', 'alpha'].includes(user?.role)
-    ? <SettingsEditor /> : <section className="card" role="alert"><h2>Admin access required</h2><p>Only Admin users can configure working hours.</p></section>}</DashboardLayout>;
+  return <DashboardLayout title="Working Hours Settings" hideHeader>{['admin', 'alpha', 'manager'].includes(user?.role)
+    ? <SettingsEditor /> : <section className="card" role="alert"><h2>Admin or Manager access required</h2><p>Only Admin and Manager users can configure working hours.</p></section>}</DashboardLayout>;
 }
 function SettingsEditor() {
   const [employees, setEmployees] = useState([]), [selected, setSelected] = useState([]);

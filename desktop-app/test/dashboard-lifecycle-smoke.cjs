@@ -256,9 +256,8 @@ app.whenReady().then(async () => {
     assert.equal(await evaluate("document.querySelector('.client-timesheet-employee').open"), false);
     await evaluate("document.querySelector('.client-timesheet-employee > summary').click()");
     assert.ok((await evaluate("document.querySelector('.client-timesheet-employee > summary').textContent")).includes('Worked 10m'));
-    // The client view shows worked and idle time only, never break time.
-    assert.equal(await evaluate("/Break/.test(document.querySelector('.client-timesheet').textContent)"), false);
-    assert.equal(await evaluate("document.querySelector('.admin-report-break-total')"), null);
+    assert.equal(await evaluate("document.querySelector('.client-timesheet').textContent.includes('Break / Idle')"), true);
+    assert.equal(await evaluate("document.querySelector('.admin-report-break-total').textContent.includes('Break / Idle')"), true);
     const exports = [];
     win.webContents.session.on('will-download', (_event, item) => {
       const output = path.join(uiReviewRoot, `client-timesheet-export${path.extname(item.getFilename())}`);
@@ -281,7 +280,7 @@ app.whenReady().then(async () => {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(exports[0].output);
     const sheet = workbook.worksheets[0];
-    assert.deepEqual(sheet.getRow(6).values.slice(1), ['Employee', 'Client', 'Project', 'Task', 'Sessions', 'Worked', 'Idle']);
+    assert.deepEqual(sheet.getRow(6).values.slice(1), ['Employee', 'Client', 'Project', 'Task', 'Sessions', 'Worked', 'Break / Idle']);
     assert.equal(sheet.rowCount, 10, 'four task rows, without duplicated parent totals');
     assert.deepEqual(sheet.autoFilter, 'A6:G10', 'Excel filtering includes the final task');
     assert.deepEqual(sheet.getRow(7).values.slice(1), ['John', 'ABC Corporation', 'Bookkeeping', 'Monthly', 1, '3m', '0s']);

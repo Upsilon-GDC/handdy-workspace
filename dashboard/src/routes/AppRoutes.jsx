@@ -241,8 +241,11 @@ function AppRoutes() {
 
       <Route
         path="/admin/billing"
-        element={<AdminStaffOnly needs={BILLING} grants={BILLING}><BillingPage /></AdminStaffOnly>}
+        element={<AdminStaffOnly needs={BILLING} grants={BILLING}><BillingPage key="billing" /></AdminStaffOnly>}
       />
+      <Route path="/admin/production" element={<AdminStaffOnly needs={BILLING} grants={BILLING}><BillingPage key="production" productionOnly productionScope="overview" /></AdminStaffOnly>} />
+      <Route path="/admin/production/team" element={<AdminStaffOnly needs={BILLING} grants={BILLING}><BillingPage key="team-production" productionOnly productionScope="team" /></AdminStaffOnly>} />
+      <Route path="/admin/production/employee" element={<AdminStaffOnly needs={BILLING} grants={BILLING}><BillingPage key="employee-production" productionOnly productionScope="employee" /></AdminStaffOnly>} />
 
       <Route
         path="/admin/help"

@@ -81,13 +81,13 @@ test('new attendance changes target totals without changing time records', () =>
   assert.equal(overview({ attendance: [{ employee: 'a', status: 'Absent' }] }).totals.requiredSeconds, 0);
   assert.equal(overview({ attendance: [{ employee: 'a', status: 'Present', workingHoursAdjustments: [{ type: 'leave' }, { type: 'normal' }] }] }).totals.requiredSeconds, 28800);
 });
-test('working-hours configuration uses exact admin roles even though managers normally inherit admin', () => {
+test('working-hours configuration and attendance exceptions allow Admin, Alpha and Manager only', () => {
   for (const path of ['/settings', '/adjustments']) {
     for (const route of routes.stack.filter(layer => layer.route?.path === path)) {
       for (const role of ['employee', 'team_lead', 'hr', 'manager', 'admin', 'alpha']) {
         let passed = false, code;
         route.route.stack[0].handle({ user: { role } }, { status(value) { code = value; return this; }, json() {} }, () => { passed = true; });
-        assert.equal(passed, ['admin', 'alpha'].includes(role)); if (!passed) assert.equal(code, 403);
+        assert.equal(passed, ['admin', 'alpha', 'manager'].includes(role)); if (!passed) assert.equal(code, 403);
       }
     }
   }

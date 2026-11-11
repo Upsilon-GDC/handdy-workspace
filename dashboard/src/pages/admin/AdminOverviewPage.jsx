@@ -93,7 +93,7 @@ export default function AdminOverviewPage({ teamOnly = false }) {
   const summaryScope = hours.team ? hours.data?.teams.find(row => row.key === hours.team)?.name || 'Selected team' : teamOnly ? 'Your teams' : 'All teams';
   const activityItems = summaryTotal ? [
     { label: error ? 'Working at last update' : 'Working now', value: `${summaryTotal.working} / ${summaryTotal.activeMembers}`, help: `${summaryScope} · ${summaryTotal.onBreak} on break · ${summaryTotal.idle} idle or paused` },
-    { label: 'Tracked work', value: overviewHours(summaryTotal.workedSeconds), help: `${summaryScope} · Break ${overviewHours(summaryTotal.breakSeconds)} · Idle ${overviewHours(summaryTotal.idleSeconds)}` },
+    { label: 'Tracked work', value: overviewHours(summaryTotal.workedSeconds), help: `${summaryScope} | Break / Idle ${overviewHours(summaryTotal.breakSeconds + summaryTotal.idleSeconds)}` },
   ] : [];
   const updated = snapshot ? new Intl.DateTimeFormat('en-IN', { timeZone: APP_TIMEZONE, hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(snapshot.asOf) : '';
   const selectTeam = key => {
@@ -120,10 +120,9 @@ export default function AdminOverviewPage({ teamOnly = false }) {
       {!hours.enabled && total && <ReportSummary items={[
         { label: error ? 'Working at last update' : 'Working now', value: `${total.working} / ${total.activeMembers}`, help: `${total.onBreak} on break · ${total.idle} idle or paused` },
         { label: 'Worked hours', value: overviewHours(total.workedSeconds), help: 'All teams · selected period' },
-        { label: 'Break hours', value: overviewHours(total.breakSeconds), help: 'Break tasks and intentional breaks' },
-        { label: 'Idle hours', value: overviewHours(total.idleSeconds), help: 'Idle pauses and same-day gaps' },
+        { label: 'Break / Idle', value: overviewHours(total.breakSeconds + total.idleSeconds), help: 'Breaks and idle time combined' },
       ]} />}
-      {hours.enabled && <WorkingHoursSummary hours={hours} admin={!teamOnly && ['admin', 'alpha'].includes(user?.role)} teamOnly={teamOnly} onTeamChange={chooseProductivityTeam}
+      {hours.enabled && <WorkingHoursSummary hours={hours} admin={!teamOnly && ['admin', 'alpha', 'manager'].includes(user?.role)} teamOnly={teamOnly} onTeamChange={chooseProductivityTeam}
         activityItems={activityItems} activityPeriod={snapshot ? `${snapshot.range.startDate} – ${snapshot.range.endDate}` : ''} />}
       {(snapshot || hours.data) && <>
         <section className="overview-teams-section" aria-label="Team activity">
@@ -133,7 +132,7 @@ export default function AdminOverviewPage({ teamOnly = false }) {
             {card.team && <>
               <div className="overview-team-hours"><strong>{overviewHours(card.team.workedSeconds)}</strong><span>worked in selected period</span></div>
               <div className="overview-live-counts"><span className="working"><Activity size={13} />{card.team.working} working</span><span className="break"><Coffee size={13} />{card.team.onBreak} on break</span><span>{card.team.noTimer} no active timer</span></div>
-              <div className="overview-team-time"><span>Break <strong>{overviewHours(card.team.breakSeconds)}</strong></span><span>Idle <strong>{overviewHours(card.team.idleSeconds)}</strong></span></div>
+              <div className="overview-team-time"><span>Break / Idle <strong>{overviewHours(card.team.breakSeconds + card.team.idleSeconds)}</strong></span></div>
             </>}
             {card.hours && <WorkingHoursTeamProgress row={card.hours} date={hours.date} />}
             {card.team && <p className="overview-current-projects"><BriefcaseBusiness size={14} />{card.team.projects.length ? card.team.projects.slice(0, 3).join(' · ') + (card.team.projects.length > 3 ? ` +${card.team.projects.length - 3}` : '') : 'No work timer running'}</p>}
@@ -145,10 +144,10 @@ export default function AdminOverviewPage({ teamOnly = false }) {
           {team && <>
             <header className="overview-section-heading"><div><p className="overview-eyebrow">TEAM MEMBERS</p><h2>{team.name}</h2><p>Hours: {snapshot.range.startDate} – {snapshot.range.endDate}. Status and current activity: latest refresh today.</p></div><span>{team.members.length} members</span></header>
             <div className="overview-member-filters"><label className="overview-search"><Search size={16} /><input aria-label="Search overview members" placeholder="Search name, ID, project or task" value={memberSearch} onChange={event => setMemberSearch(event.target.value)} /></label><select aria-label="Member activity status" value={status} onChange={event => setStatus(event.target.value)}>{['All', 'Working', 'On break', 'Idle', 'Paused', 'No active timer', 'Inactive account'].map(state => <option key={state}>{state}</option>)}</select></div>
-            <div className="overview-member-table"><table><thead><tr><th>Member</th><th>{error ? 'Last known status' : 'Current status'}</th><th>Current project / task</th><th>Worked</th><th>Break</th><th>Idle</th></tr></thead><tbody>{members.map(member => <tr key={member.key}>
+            <div className="overview-member-table"><table><thead><tr><th>Member</th><th>{error ? 'Last known status' : 'Current status'}</th><th>Current project / task</th><th>Worked</th><th>Break / Idle</th></tr></thead><tbody>{members.map(member => <tr key={member.key}>
               <td><strong>{member.fullName || 'Unavailable employee'}</strong><small>{member.employeeId || '—'} · {member.role?.replaceAll('_', ' ') || 'Former member'}</small></td>
               <td><span className={`overview-status ${stateClass(member.state)}`}>{member.state}</span></td><td>{member.currentProject ? <><strong>{member.currentProject}</strong><small>{member.currentTask}</small></> : '—'}</td>
-              <td>{overviewHours(member.workedSeconds)}</td><td>{overviewHours(member.breakSeconds)}</td><td>{overviewHours(member.idleSeconds)}</td>
+              <td>{overviewHours(member.workedSeconds)}</td><td>{overviewHours(member.breakSeconds + member.idleSeconds)}</td>
             </tr>)}</tbody></table></div>
             {!members.length && <p className="overview-empty">No members match these filters.</p>}
           </>}

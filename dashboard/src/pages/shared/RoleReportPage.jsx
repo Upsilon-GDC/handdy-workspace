@@ -15,7 +15,7 @@ import { getAllActiveTasksByProject } from "../../api/taskApi";
 import ReportSummary from "../../components/dashboard/ReportSummary";
 import PageHeader from "../../components/layout/PageHeader";
 import useDataRefresh from "../../hooks/useDataRefresh";
-import { buildChronologicalReportTimeline, sumTimelineSeconds } from "../../utils/timeLogTimeline";
+import { buildChronologicalReportTimeline } from "../../utils/timeLogTimeline";
 import { formatReportDateTime, formatReportDuration, reportEntryStatus } from "../../utils/reportFormatting";
 import { getWorkedSeconds, localDate as today } from "../../utils/timeLogReportHelpers";
 import { readReportState, writeReportState } from "../../utils/reportPersistence";
@@ -117,10 +117,6 @@ function RoleReportPage({ title, description, mode = "time", scope = "team", sho
   }, [mode, project]);
 
   const totalSeconds = useMemo(() => records.reduce((sum, record) => sum + getWorkedSeconds(record), 0), [records]);
-  const totalBreakSeconds = useMemo(
-    () => sumTimelineSeconds(records, "break"),
-    [records],
-  );
   const timelineRows = useMemo(
     () => buildChronologicalReportTimeline(records, {
       taskFiltered: Boolean(appliedTask),
@@ -130,6 +126,7 @@ function RoleReportPage({ title, description, mode = "time", scope = "team", sho
     }),
     [appliedProject, appliedTask, records],
   );
+  const totalBreakIdleSeconds = useMemo(() => timelineRows.filter(({ entry }) => ['break', 'idle'].includes(entry.type)).reduce((sum, { entry }) => sum + entry.durationSeconds, 0), [timelineRows]);
   const clientDetails = useMemo(
     () => showClientView && isTeamReport ? buildClientTimesheet(records, timelineRows) : [],
     [records, timelineRows, showClientView, isTeamReport],
@@ -231,7 +228,7 @@ function RoleReportPage({ title, description, mode = "time", scope = "team", sho
     <div className="admin-report-page role-report-page">
       <ReportSummary items={[
         { label: "Recorded time", value: hasRun ? duration(totalSeconds) : "—" },
-        { label: "Break time", value: hasRun ? duration(totalBreakSeconds) : "—", help: "Intentional timer breaks" },
+        { label: "Break / Idle", value: hasRun ? duration(totalBreakIdleSeconds) : "—", help: "Breaks and idle time combined" },
         { label: "Timer records", value: hasRun ? records.length : "—" },
         { label: "Workspace", value: isTeamReport ? "Your team" : "Personal", help: user?.fullName || "Your employee account" },
       ]} />
@@ -265,17 +262,17 @@ function RoleReportPage({ title, description, mode = "time", scope = "team", sho
         {!error && mode === "time" && records.length > 0 && !(showClientView && isTeamReport && teamView === "client") && (
           <div className="admin-report-table-wrap">
             <table>
-              <thead><tr>{isTeamReport && <th>Employee</th>}<th>Type</th><th>Project</th><th>Task / segment</th><th>Started</th><th>Finished</th><th>Duration</th><th>Idle</th><th>Status</th><th>Note</th></tr></thead>
+              <thead><tr>{isTeamReport && <th>Employee</th>}<th>Type</th><th>Project</th><th>Task / segment</th><th>Started</th><th>Finished</th><th>Duration</th><th>Break / Idle</th><th>Status</th><th>Note</th></tr></thead>
               <tbody>{timelineRows.map(({ record, entry, key }) => (
                 <tr className={`report-timeline-row report-${entry.type}-row`} key={key}>
                   {isTeamReport && <td>{record.employee?.fullName || "—"}</td>}
-                  <td><span className={`report-entry-badge ${entry.type}`}>{entry.type}</span></td>
+                  <td><span className={`report-entry-badge ${entry.type}`}>{["break", "idle"].includes(entry.type) ? "Break / Idle" : entry.type}</span></td>
                   <td>{record.project?.projectName || "—"}</td>
                   <td>{entry.source === "between_sessions" ? "Between tasks" : entry.type === "work" ? `${record.task?.taskName || "Task"} · Work ${entry.sequence}` : `${entry.type === "break" ? record.task?.taskName || "Break" : "Idle"} ${entry.sequence}`}</td>
                   <td><strong>{formatReportDateTime(entry.start)}</strong></td>
                   <td><strong>{entry.end ? formatReportDateTime(entry.end) : "In progress"}</strong></td>
                   <td>{duration(entry.durationSeconds)}</td>
-                  <td>{entry.type === "idle" ? duration(entry.durationSeconds) : "—"}</td>
+                  <td>{["break", "idle"].includes(entry.type) ? duration(entry.durationSeconds) : "—"}</td>
                   <td>{reportEntryStatus(record, entry)}</td>
                   <td className="report-entry-note">{entry.type === "work" ? record.note || "—" : "—"}</td>
                 </tr>

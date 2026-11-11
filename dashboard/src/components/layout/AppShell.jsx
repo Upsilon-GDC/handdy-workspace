@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Building2, CalendarDays, ChevronLeft, ClipboardList, Clock3, LayoutDashboard, Link2, LogOut, Menu, Search, Settings2, Users, WalletCards, X } from "lucide-react";
+import { Building2, CalendarDays, ChevronLeft, ClipboardList, Clock3, Factory, LayoutDashboard, Link2, LogOut, Menu, Search, Settings2, Users, WalletCards, X } from "lucide-react";
 import useAuth from "../../context/useAuth";
 import { navigationForRole, dutyNavigationFor } from "./workspaceNavigation";
 import { decideLoginRequest, getPendingLoginRequest } from "../../api/authApi";
 import { monitorLoginRequests } from "../../utils/backgroundRetry";
 
-const icons = { Workspace: LayoutDashboard, "Task linking": Link2, "Entry management": ClipboardList, "Time & attendance": Clock3, Finance: WalletCards, System: Settings2 };
+const icons = { Workspace: LayoutDashboard, "Task linking": Link2, Production: Factory, "Entry management": ClipboardList, "Time & attendance": Clock3, Finance: WalletCards, System: Settings2 };
 // Accent colour for each navigation group's icon chip (styled in workspace.css).
-const groupTones = { Workspace: "blue", "Task linking": "violet", "Entry management": "pink", "Time & attendance": "teal", Finance: "amber", System: "slate" };
+const groupTones = { Workspace: "blue", "Task linking": "violet", Production: "teal", "Entry management": "pink", "Time & attendance": "teal", Finance: "amber", System: "slate" };
 
 export default function AppShell({ children }) {
   const { user, isAuthenticated, isAuthLoading, logout, clearAuth, hasPermission } = useAuth();
@@ -61,8 +61,8 @@ export default function AppShell({ children }) {
   const current = navigation.find((item) => item.path === location.pathname || item.activePaths?.includes(location.pathname));
   const name = user?.fullName || user?.name || "Your account";
   const initials = name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("");
-  const groups = ["Workspace", "Task linking", "Entry management", "Time & attendance", "Finance", "System"].filter((group) => navigation.some((item) => item.group === group));
-  const results = search.trim() ? navigation.filter((item) => item.title.toLowerCase().includes(search.toLowerCase())) : [];
+  const groups = ["Workspace", "Task linking", "Production", "Entry management", "Time & attendance", "Finance", "System"].filter((group) => navigation.some((item) => item.group === group));
+  const results = search.trim() ? navigation.filter((item) => `${item.group} ${item.title}`.toLowerCase().includes(search.toLowerCase())) : [];
   const closeNavigation = () => { setMobileOpen(false); setSearch(""); };
   const signOut = async () => {
     setSigningOut(true);
@@ -119,7 +119,7 @@ export default function AppShell({ children }) {
       <div className="crm-stage">
         <header className="crm-topbar">
           <button className="crm-mobile-toggle" aria-label="Open navigation" onClick={() => setMobileOpen(true)}><Menu size={20} /></button>
-          <div className="crm-breadcrumb"><span>Workspace</span><span>/</span><strong>{current?.title || "Details"}</strong></div>
+          <div className="crm-breadcrumb"><span>{current?.group === 'Production' ? 'Production' : 'Workspace'}</span><span>/</span><strong>{current?.title || "Details"}</strong></div>
           <div className="crm-route-search"><Search size={16} /><input aria-label="Find a page" placeholder="Find a page…" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") setSearch(""); }} />{search && <div className="crm-search-results">{results.length ? results.map((item) => <Link key={item.path} to={item.path} onClick={closeNavigation}>{item.title}<span>Open</span></Link>) : <p>No matching pages</p>}</div>}</div>
           <div className="crm-account"><span className="crm-avatar">{initials}</span><span><strong>{name}</strong><small>{user?.role?.replaceAll("_", " ")}</small></span></div>
           {signOutError && <span className="crm-signout-error" role="alert">{signOutError}</span>}

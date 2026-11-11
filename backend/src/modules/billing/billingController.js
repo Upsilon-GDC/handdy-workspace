@@ -5,7 +5,7 @@ const Task = require("../../models/Task");
 const TaskTimeLog = require("../../models/TaskTimeLog");
 const Team = require("../../models/Team");
 const Client = require("../../models/Client");
-const { aggregateBillingLogs, aggregateBillingMembers, DEFAULT_TIMEZONE, getBillingDateRange, getBillingEmployeeAccess } = require("../../utils/billingUtils");
+const { aggregateBillingLogs, aggregateBillingMembers, productionBillingReport, DEFAULT_TIMEZONE, getBillingDateRange, getBillingEmployeeAccess } = require("../../utils/billingUtils");
 
 // Billing needs both relationships: `team` is the authoritative assignment
 // used by the Team filter, while `teamLead` is retained for access checks and
@@ -43,7 +43,7 @@ const getBillingEmployees = async (req, res) => {
   }
 };
 
-const getBillingReport = async (req, res) => {
+const getReport = async (req, res, productionOnly = false) => {
   try {
     const { employee: employeeId, startDate, endDate } = req.query;
     const allMembers = employeeId === 'all';
@@ -124,7 +124,7 @@ const getBillingReport = async (req, res) => {
       rangeEnd: range.endExclusive,
     }));
     const report = allMembers ? aggregateBillingMembers({ reports, scope, period: { startDate, endDate, timezone } }) : reports[0];
-    return res.status(200).json({ success: true, report });
+    return res.status(200).json({ success: true, report: productionOnly ? productionBillingReport(report) : report });
   } catch (error) {
     return res.status(error.name === "CastError" ? 400 : 500).json({
       success: false,
@@ -133,4 +133,6 @@ const getBillingReport = async (req, res) => {
   }
 };
 
-module.exports = { getBillingEmployees, getBillingReport };
+const getBillingReport = (req, res) => getReport(req, res);
+const getProductionReport = (req, res) => getReport(req, res, true);
+module.exports = { getBillingEmployees, getBillingReport, getProductionReport };

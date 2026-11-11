@@ -171,6 +171,7 @@ const aggregateBillingLogs = ({ logs, employee, startDate, endDate, timezone, ra
   const dailyGroups = new Map();
   let taskSeconds = 0;
   let breakSeconds = 0;
+  let pauseSeconds = 0;
 
   for (const log of logs) {
     const task = log.taskRecord || {};
@@ -233,6 +234,33 @@ const aggregateBillingLogs = ({ logs, employee, startDate, endDate, timezone, ra
       });
       dailyGroups.set(segment.date, day);
     }
+    // Website totals include saved pauses as Break / Idle. Keep the existing
+    // productive seconds and charge calculations unchanged.
+    const pauses = (log.pauses || []).filter(pause => pause.pausedAt).map(pause => [
+      Math.max(+new Date(log.startedAt), +new Date(rangeStart), +new Date(pause.pausedAt)),
+      Math.min(+new Date(log.stoppedAt), +new Date(rangeEnd), +new Date(pause.resumedAt || log.stoppedAt)),
+    ]).filter(([start, end]) => Number.isFinite(start) && Number.isFinite(end) && end > start).sort((a, b) => a[0] - b[0]);
+    const intervals = [];
+    for (const [start, end] of pauses) {
+      const previous = intervals.at(-1);
+      if (previous && start <= previous[1]) previous[1] = Math.max(previous[1], end);
+      else intervals.push([start, end]);
+    }
+    for (const [start, end] of intervals) {
+      let cursor = start;
+      while (cursor < end) {
+        const date = getDateKeyInTimezone(new Date(cursor), timezone);
+        const until = Math.min(end, +dateKeyToUtc(addDateKeyDays(date, 1), timezone));
+        const seconds = Math.floor((until - cursor) / 1000);
+        const day = dailyGroups.get(date) || { date, taskSeconds: 0, breakSeconds: 0, entries: [] };
+        pauseSeconds += seconds;
+        day.pauseSeconds = (day.pauseSeconds || 0) + seconds;
+        day.entries.push({ logId: `${log._id}:pause:${cursor}`, type: 'break', projectId: String(projectId), projectName: project.projectName || 'Deleted project', clientId: client.clientId, clientName: client.clientName,
+          taskId: String(task._id || log.task), taskName: 'Break / Idle', taskDescription: 'Saved paused time', serviceType: null, chargeRate: null, billableAmount: null, billingWarning: null,
+          startedAt: new Date(cursor).toISOString(), stoppedAt: new Date(until).toISOString(), durationSeconds: seconds });
+        dailyGroups.set(date, day); cursor = until;
+      }
+    }
   }
 
   const taskSummary = [...taskGroups.values()]
@@ -269,6 +297,8 @@ const aggregateBillingLogs = ({ logs, employee, startDate, endDate, timezone, ra
   const dailyDetails = [...dailyGroups.values()].sort((a, b) => a.date.localeCompare(b.date));
   for (const day of dailyDetails) {
     day.totalSeconds = day.taskSeconds + day.breakSeconds;
+    day.breakIdleSeconds = day.breakSeconds + (day.pauseSeconds || 0);
+    day.recordedSeconds = day.taskSeconds + day.breakIdleSeconds;
     // Each entry is priced at its own project/task rate; the day is the sum
     // of the unrounded entry amounts, rounded once, so the cents never drift.
     day.billableSeconds = day.taskSeconds;
@@ -297,6 +327,8 @@ const aggregateBillingLogs = ({ logs, employee, startDate, endDate, timezone, ra
     summary: {
       taskSeconds,
       breakSeconds,
+      breakIdleSeconds: breakSeconds + pauseSeconds,
+      recordedSeconds: taskSeconds + breakSeconds + pauseSeconds,
       totalSeconds: taskSeconds + breakSeconds,
       workingDays: dailyDetails.length,
       taskCount: new Set(taskSummary.map((task) => task.taskId)).size,
@@ -333,6 +365,7 @@ const aggregateBillingMembers = ({ reports, scope, period }) => {
     for (const day of report.dailyDetails) {
       const combined = days.get(day.date) || { date: day.date, taskSeconds: 0, breakSeconds: 0, entries: [] };
       combined.taskSeconds += day.taskSeconds; combined.breakSeconds += day.breakSeconds;
+      combined.breakIdleSeconds = (combined.breakIdleSeconds || 0) + (day.breakIdleSeconds ?? day.breakSeconds);
       combined.entries.push(...day.entries.map(entry => ({ ...entry, ...identity })));
       days.set(day.date, combined);
     }
@@ -349,6 +382,7 @@ const aggregateBillingMembers = ({ reports, scope, period }) => {
   const dailyDetails = [...days.values()].sort((a, b) => a.date.localeCompare(b.date));
   for (const day of dailyDetails) {
     day.totalSeconds = day.taskSeconds + day.breakSeconds; day.billableSeconds = day.taskSeconds;
+    day.recordedSeconds = day.taskSeconds + day.breakIdleSeconds;
     day.totalBillableAmount = roundCurrency(day.entries.reduce((sum, entry) => sum + (entry.type === 'break' || entry.billingWarning || !entry.chargeRate ? 0 : entry.durationSeconds / 3600 * entry.chargeRate), 0));
     day.hasMissingRates = day.entries.some(entry => entry.billingWarning);
     day.allRatesMissing = day.hasMissingRates && day.entries.filter(entry => entry.type !== 'break').every(entry => entry.billingWarning);
@@ -357,12 +391,24 @@ const aggregateBillingMembers = ({ reports, scope, period }) => {
   const taskSeconds = reports.reduce((sum, report) => sum + report.summary.taskSeconds, 0);
   const breakSeconds = reports.reduce((sum, report) => sum + report.summary.breakSeconds, 0);
   return { employee: null, scope: { ...scope, memberCount: members.length }, members, period, taskSummary, projects: [...projects.values()], dailyDetails, warnings,
-    summary: { taskSeconds, breakSeconds, totalSeconds: taskSeconds + breakSeconds, workingDays: dailyDetails.length,
+    summary: { taskSeconds, breakSeconds, breakIdleSeconds: reports.reduce((sum, report) => sum + (report.summary.breakIdleSeconds ?? report.summary.breakSeconds), 0), recordedSeconds: reports.reduce((sum, report) => sum + (report.summary.recordedSeconds ?? report.summary.totalSeconds), 0), totalSeconds: taskSeconds + breakSeconds, workingDays: dailyDetails.length,
       taskCount: new Set(taskSummary.map(task => task.taskId)).size, projectCount: new Set(taskSummary.map(task => task.projectId)).size,
       totalBillableAmount: roundCurrency(taskSummary.reduce((sum, task) => sum + (task.billableAmount ?? 0), 0)), missingRateCount: warnings.length } };
 };
 
+const productionBillingReport = report => {
+  const dailyDetails = report.dailyDetails.map(day => {
+    const entries = day.entries.filter(entry => entry.type === 'work');
+    return { ...day, entries, breakSeconds: 0, pauseSeconds: 0, breakIdleSeconds: 0, totalSeconds: day.taskSeconds, recordedSeconds: day.taskSeconds };
+  }).filter(day => day.entries.length);
+  return { ...report, kind: 'production', dailyDetails,
+    summary: { ...report.summary, breakSeconds: 0, breakIdleSeconds: 0, totalSeconds: report.summary.taskSeconds, recordedSeconds: report.summary.taskSeconds, workingDays: dailyDetails.length },
+    ...(report.members ? { members: report.members.map(member => ({ ...member, breakSeconds: 0, breakIdleSeconds: 0, totalSeconds: member.taskSeconds, recordedSeconds: member.taskSeconds,
+      workingDays: dailyDetails.filter(day => day.entries.some(entry => entry.memberId === member._id)).length })) } : {}) };
+};
+
 module.exports = {
+  productionBillingReport,
   aggregateBillingMembers,
   DEFAULT_TIMEZONE,
   MAX_BILLING_RANGE_DAYS,

@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const {
   aggregateBillingLogs,
   aggregateBillingMembers,
+  productionBillingReport,
   getBillingDateRange,
   getBillingEmployeeAccess,
 } = require("../src/utils/billingUtils");
@@ -67,6 +68,40 @@ test('an empty team returns a valid zero billing report', () => {
   assert.equal(result.scope.memberCount, 0);
   assert.deepEqual(result.dailyDetails, []);
   assert.deepEqual(result.members, []);
+});
+
+test('production reports include only work, retain missing-rate warnings and do not mutate billing', () => {
+  const work = log('production-work', workTask, '2026-08-01T09:00:00Z', 5400);
+  work.totalWorkedSeconds = 3600;
+  work.pauses = [{ pausedAt: '2026-08-01T09:30:00Z', resumedAt: '2026-08-01T10:00:00Z', reason: 'idle' }];
+  const report = reportFor([work, log('break-only-day', breakTask, '2026-08-02T09:00:00Z', 3600)]);
+  const before = JSON.stringify(report);
+  const production = productionBillingReport(report);
+  assert.equal(production.kind, 'production');
+  assert.equal(production.summary.taskSeconds, 3600);
+  assert.equal(production.summary.totalSeconds, 3600);
+  assert.equal(production.summary.recordedSeconds, 3600);
+  assert.equal(production.summary.breakIdleSeconds, 0);
+  assert.equal(production.summary.workingDays, 1);
+  assert.equal(production.summary.totalBillableAmount, 25);
+  assert.equal(production.dailyDetails.length, 1);
+  assert.ok(production.dailyDetails[0].entries.every(entry => entry.type === 'work'));
+  assert.equal(JSON.stringify(report), before);
+  const missing = productionBillingReport(reportFor([work], undefined, undefined, { ...employee, projectRates: [] }));
+  assert.equal(missing.summary.totalBillableAmount, 0);
+  assert.equal(missing.summary.missingRateCount, 1);
+  assert.equal(missing.taskSummary[0].billableAmount, null);
+});
+
+test('team production preserves member rates and removes member nonproduction time', () => {
+  const reports = [reportFor([log('production', workTask, '2026-08-01T09:00:00Z', 3600)]),
+    reportFor([log('break-only', breakTask, '2026-08-02T09:00:00Z', 3600)], undefined, undefined, { ...employee, _id: 'break-member' })];
+  const production = productionBillingReport(aggregateBillingMembers({ reports, scope: { label: 'Tax' }, period: reports[0].period }));
+  assert.equal(production.members.length, 2);
+  assert.equal(production.members[1].recordedSeconds, 0);
+  assert.equal(production.members[1].workingDays, 0);
+  assert.equal(production.members[0].totalBillableAmount, 25);
+  assert.equal(production.dailyDetails.length, 1);
 });
 
 test("recorded clients split shared-project billing without duplicating totals", () => {
@@ -207,6 +242,36 @@ test("paused time is not added back into a completed timer session", () => {
   const report = reportFor([pausedLog]);
   assert.equal(report.summary.taskSeconds, 3600);
   assert.equal(report.summary.totalSeconds, 3600);
+  assert.equal(report.summary.breakIdleSeconds, 1800);
+  assert.equal(report.summary.recordedSeconds, 5400);
+  assert.equal(report.summary.totalBillableAmount, 25);
+  assert.equal(report.dailyDetails[0].breakIdleSeconds, 1800);
+  assert.equal(report.dailyDetails[0].entries.find(row => row.taskName === 'Break / Idle').billableAmount, null);
+});
+
+test('billing combines break tasks and overlapping pauses once without changing productive charges', () => {
+  const work = log('work', workTask, '2026-08-01T09:00:00Z', 7200);
+  work.totalWorkedSeconds = 4500;
+  work.pauses = [{ pausedAt: '2026-08-01T09:30:00Z', resumedAt: '2026-08-01T10:00:00Z', reason: 'idle' }, { pausedAt: '2026-08-01T09:45:00Z', resumedAt: '2026-08-01T10:15:00Z', reason: 'break' }];
+  const report = reportFor([work, log('break', breakTask, '2026-08-01T11:00:00Z', 900)]);
+  assert.equal(report.summary.taskSeconds, 4500);
+  assert.equal(report.summary.breakIdleSeconds, 3600);
+  assert.equal(report.summary.recordedSeconds, 8100);
+  assert.equal(report.summary.totalBillableAmount, 31.25);
+  const team = aggregateBillingMembers({ reports: [report], scope: { label: 'Tax' }, period: report.period });
+  assert.equal(team.summary.breakIdleSeconds, 3600);
+  assert.equal(team.members[0].breakIdleSeconds, 3600);
+  assert.equal(team.dailyDetails[0].breakIdleSeconds, 3600);
+});
+
+test('combined billing pauses respect date boundaries', () => {
+  const work = log('overnight-pause', workTask, '2026-08-01T23:30:00Z', 3600);
+  work.totalWorkedSeconds = 1800;
+  work.pauses = [{ pausedAt: '2026-08-01T23:45:00Z', resumedAt: '2026-08-02T00:15:00Z', reason: 'idle' }];
+  const report = reportFor([work], '2026-08-02', '2026-08-02');
+  assert.equal(report.summary.breakIdleSeconds, 900);
+  assert.equal(report.summary.recordedSeconds, 1800);
+  assert.equal(report.summary.taskSeconds, 900);
 });
 
 test("same task and project names do not cause rates to match across project IDs", () => {

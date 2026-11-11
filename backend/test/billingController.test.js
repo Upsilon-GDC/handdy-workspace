@@ -6,13 +6,13 @@ const Task = require('../src/models/Task');
 const Project = require('../src/models/Project');
 const Client = require('../src/models/Client');
 const TaskTimeLog = require('../src/models/TaskTimeLog');
-const { getBillingReport } = require('../src/modules/billing/billingController');
+const { getBillingReport, getProductionReport } = require('../src/modules/billing/billingController');
 const teamId = '64b000000000000000000030', projectId = '64b000000000000000000020', taskId = '64b000000000000000000010';
 const members = [25, 40, 50].map((rate, index) => ({ _id: `64b00000000000000000000${index + 1}`, fullName: `Member ${index + 1}`, employeeId: `E${index + 1}`, team: index < 2 ? teamId : null, projectRates: [{ project: projectId, chargeRate: rate }] }));
 const query = rows => ({ select() { return this; }, sort() { return this; }, lean: async () => rows });
-async function invoke(params, user = { role: 'admin' }) {
+async function invoke(params, user = { role: 'admin' }, handler = getBillingReport) {
   const response = { status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
-  await getBillingReport({ user, query: { startDate: '2026-11-10', endDate: '2026-11-10', ...params } }, response);
+  await handler({ user, query: { startDate: '2026-11-10', endDate: '2026-11-10', ...params } }, response);
   return response;
 }
 function fixtures(t) {
@@ -65,4 +65,16 @@ test('individual employee billing keeps the existing response and calculation', 
   assert.equal(response.body.report.employee.fullName, members[0].fullName);
   assert.equal(response.body.report.scope, undefined);
   assert.equal(response.body.report.summary.totalBillableAmount, 25);
+});
+
+test('production endpoint retains team scope and billing authorization', async t => {
+  const seen = fixtures(t);
+  const response = await invoke({ employee: 'all', team: teamId }, { role: 'manager' }, getProductionReport);
+  assert.equal(response.code, 200);
+  assert.equal(response.body.report.kind, 'production');
+  assert.equal(response.body.report.scope.memberCount, 2);
+  assert.equal(response.body.report.summary.totalBillableAmount, 65);
+  assert.deepEqual(seen.employeeFilter, { team: teamId });
+  assert.ok(response.body.report.dailyDetails.every(day => day.entries.every(entry => entry.type === 'work')));
+  assert.equal((await invoke({ employee: 'all', team: teamId }, { role: 'employee' }, getProductionReport)).code, 403);
 });

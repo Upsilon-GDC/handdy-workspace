@@ -7,8 +7,8 @@ test('working hour durations display decimal fractions correctly including secon
   assert.equal(hoursPreview('8.5'), '8h 30m'); assert.equal(hoursPreview('7.83'), '7h 49m 48s');
   assert.equal(workingDuration(-5), '0h 0m'); assert.match(hoursPreview('24.1'), /0–24/);
 });
-test('working hours settings navigation is available only for Admin and Alpha', () => {
+test('working hours settings navigation is available to Admin, Alpha and Manager', () => {
   for (const role of ['admin', 'alpha', 'manager', 'hr', 'team_lead', 'employee']) {
-    assert.equal(navigationForRole(role, () => true).some(row => row.path === '/admin/working-hours'), ['admin', 'alpha'].includes(role));
+    assert.equal(navigationForRole(role, () => true).some(row => row.path === '/admin/working-hours'), ['admin', 'alpha', 'manager'].includes(role));
   }
 });

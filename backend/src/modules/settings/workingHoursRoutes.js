@@ -3,10 +3,9 @@ const { protect } = require('../../middleware/authMiddleware');
 const { requirePermission } = require('../../middleware/authorizeRoles');
 const controller = require('./workingHoursController');
 
-// Managers normally inherit admin permissions in this application. Working
-// hour configuration intentionally uses an exact role gate instead.
-const settingsAdmin = (req, res, next) => ['admin', 'alpha'].includes(req.user?.role)
-  ? next() : res.status(403).json({ success: false, message: 'Only Admin users can configure working hours.' });
+// Configuration and attendance exceptions are available to Admin and Manager.
+const settingsAdmin = (req, res, next) => ['admin', 'alpha', 'manager'].includes(req.user?.role)
+  ? next() : res.status(403).json({ success: false, message: 'Only Admin and Manager users can configure working hours.' });
 const reportStaff = (req, res, next) => ['admin', 'alpha', 'manager'].includes(req.user?.role)
   ? next() : res.status(403).json({ success: false, message: 'Only authorized Admin and Manager users can view productivity.' });
 router.use(protect);

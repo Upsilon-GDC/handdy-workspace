@@ -59,6 +59,7 @@ const buildGroupedRows = (records, groupBy, gapRows = []) => {
         tasks: new Set(),
         workedSeconds: 0,
         idleSeconds: 0,
+        breakSeconds: 0,
       });
     }
 
@@ -69,6 +70,7 @@ const buildGroupedRows = (records, groupBy, gapRows = []) => {
     group.tasks.add(record.task?._id || "unassigned");
     group.workedSeconds += getWorkedSeconds(record);
     group.idleSeconds += getIdleSeconds(record);
+    group.breakSeconds += sumTimelineSeconds([record], "break");
   });
 
   gapRows.filter(({ entry }) => entry.source === "between_sessions").forEach(({ record, entry }) => {
@@ -276,13 +278,11 @@ function AdminReportContent({
   // "My timesheet": only the totals for the period (worked, break, idle).
   const summaryRows = useMemo(() => variant === "summary" ? [
     { label: "Work time", value: formatDuration(totalSeconds) },
-    { label: "Break time", value: formatDuration(totalBreakSeconds) },
-    { label: "Idle time", value: formatDuration(totalIdleSeconds) },
+    { label: "Break / Idle", value: formatDuration(totalBreakSeconds + totalIdleSeconds) },
     { label: "Days worked", value: String(countWorkedDays(records)) },
     { label: "Timer sessions", value: String(records.length) },
   ] : [], [variant, records, totalSeconds, totalBreakSeconds, totalIdleSeconds]);
   // The client view reports worked and idle time per task only.
-  const showBreakTotals = !(variant === "team" && teamView === "client");
 
   const resultCount = variant === "team"
     ? teamRows.length
@@ -456,31 +456,31 @@ function AdminReportContent({
 
     if (variant === "team") {
       if (teamView === "client") return {
-        columns: ["Employee", "Client", "Project", "Task", "Sessions", "Worked", "Idle"],
+        columns: ["Employee", "Client", "Project", "Task", "Sessions", "Worked", "Break / Idle"],
         rows: flattenClientTimesheet(clientDetails).map((row) => [
           row.employee, row.client, row.project, row.task, row.sessions,
-          formatDuration(row.workedSeconds), formatDuration(row.idleSeconds),
+          formatDuration(row.workedSeconds), formatDuration(row.breakSeconds + row.idleSeconds),
         ]),
       };
       return {
-        columns: ["Employee", "Sessions", "Projects", "Tasks", "Worked", "Idle"],
+        columns: ["Employee", "Sessions", "Projects", "Tasks", "Worked", "Break / Idle"],
         rows: teamRows.map((row) => [
           row.label, row.sessions, row.projects.size, row.tasks.size,
-          formatDuration(row.workedSeconds), formatDuration(row.idleSeconds),
+          formatDuration(row.workedSeconds), formatDuration(row.breakSeconds + row.idleSeconds),
         ]),
       };
     }
 
     if (variant === "project") {
       return {
-        columns: ["Employee", "Project", "Sessions", "Worked", "Break", "Idle"],
+        columns: ["Employee", "Project", "Sessions", "Worked", "Break / Idle"],
         rows: projectDetails.flatMap((employeeRow) => [
           ...employeeRow.projects.map((row) => [
             employeeRow.name, row.name, row.sessions,
-            formatDuration(row.workedSeconds), formatDuration(row.breakSeconds), formatDuration(row.idleSeconds),
+            formatDuration(row.workedSeconds), formatDuration(row.breakSeconds + row.idleSeconds),
           ]),
           [employeeRow.name, "Employee total", "", formatDuration(employeeRow.workedSeconds),
-            formatDuration(employeeRow.breakSeconds), formatDuration(employeeRow.idleSeconds)],
+            formatDuration(employeeRow.breakSeconds + employeeRow.idleSeconds)],
         ]),
       };
     }
@@ -488,19 +488,19 @@ function AdminReportContent({
     return {
       columns: [
         ...(scope === "company" ? ["Employee"] : []),
-        "Entry type", "Project", "Task", "Started", "Finished", "Duration", "Idle", "Status", "Note",
+        "Entry type", "Project", "Task", "Started", "Finished", "Duration", "Break / Idle", "Status", "Note",
       ],
       rows: timelineRows.map(({ record, entry }) => {
         const employeeCell = scope === "company" ? [record.employee?.fullName || "-"] : [];
         return [
           ...employeeCell,
-          entry.type === "break" ? "Break" : entry.type === "idle" ? "Idle" : "Work",
+          ["break", "idle"].includes(entry.type) ? "Break / Idle" : "Work",
           record.project?.projectName || "-",
           entry.source === "between_sessions" ? "Between tasks" : entry.type === "work" ? `${record.task?.taskName || "Task"} - Work ${entry.sequence}` : `${entry.type === "break" ? record.task?.taskName || "Break" : "Idle"} ${entry.sequence}`,
           formatReportDateTime(entry.start),
           entry.end ? formatReportDateTime(entry.end) : "In progress",
           formatReportDuration(entry.durationSeconds),
-          entry.type === "idle" ? formatReportDuration(entry.durationSeconds) : "-",
+          ["break", "idle"].includes(entry.type) ? formatReportDuration(entry.durationSeconds) : "-",
           reportEntryStatus(record, entry),
           entry.type === "work" ? record.note || "-" : "-",
         ];
@@ -524,8 +524,7 @@ function AdminReportContent({
           { label: variant === "detailed" && mode === "time" ? "Timeline entries" : variant === "project" ? "Employees" : "Records", value: resultCount },
           ...(mode === "time" ? [
             { label: "Worked", value: formatDuration(totalSeconds) },
-            ...(showBreakTotals ? [{ label: "Break", value: formatDuration(totalBreakSeconds) }] : []),
-            { label: "Idle", value: formatDuration(totalIdleSeconds) },
+            { label: "Break / Idle", value: formatDuration(totalBreakSeconds + totalIdleSeconds) },
           ] : []),
         ],
       };
@@ -545,8 +544,7 @@ function AdminReportContent({
         {variant !== "summary" && (!entryManagement || hasRun) && <ReportSummary items={mode === "time" ? [
           { label: variant === "detailed" ? "Timeline entries" : "Records", value: hasRun ? resultCount : "—", help: variant === "detailed" ? `${records.length} timer sessions` : undefined },
           { label: "Worked time", value: hasRun ? formatDuration(totalSeconds) : "—" },
-          { label: "Break time", value: hasRun ? formatDuration(totalBreakSeconds) : "—", help: "Intentional timer breaks" },
-          { label: "Idle time", value: hasRun ? formatDuration(totalIdleSeconds) : "—" },
+          { label: "Break / Idle", value: hasRun ? formatDuration(totalBreakSeconds + totalIdleSeconds) : "—", help: "Breaks and idle time combined" },
         ] : [
           { label: "Records", value: hasRun ? records.length : "—" },
           { label: "Report scope", value: scope === "personal" ? "Personal" : "Company", help: "Access follows your role" },
@@ -664,8 +662,7 @@ function AdminReportContent({
               {mode === "time" && variant !== "detailed" && (
                 <div className="admin-report-totals">
                   <strong><Clock3 size={16} />Worked {formatDuration(totalSeconds)}</strong>
-                  {showBreakTotals && <strong className="admin-report-break-total"><Clock3 size={16} />Break {formatDuration(totalBreakSeconds)}</strong>}
-                  <strong className="admin-report-idle-total"><Activity size={16} />Idle {formatDuration(totalIdleSeconds)}</strong>
+                  <strong className="admin-report-break-total"><Clock3 size={16} />Break / Idle {formatDuration(totalBreakSeconds + totalIdleSeconds)}</strong>
                 </div>
               )}
               <div className="admin-report-export-actions" aria-label="Export report">
@@ -731,9 +728,9 @@ function AdminReportContent({
           {!error && mode === "time" && records.length > 0 && variant === "team" && teamView === "employee" && (
             <div className="admin-report-table-wrap">
               <table>
-                <thead><tr><th>Employee</th><th>Sessions</th><th>Projects</th><th>Tasks</th><th>Worked</th><th>Idle</th>{canAddEntry && <th>Actions</th>}</tr></thead>
+                <thead><tr><th>Employee</th><th>Sessions</th><th>Projects</th><th>Tasks</th><th>Worked</th><th>Break / Idle</th>{canAddEntry && <th>Actions</th>}</tr></thead>
                 <tbody>{teamRows.map((row) => (
-                  <tr key={row.key}><td>{row.label}</td><td>{row.sessions}</td><td>{row.projects.size}</td><td>{row.tasks.size}</td><td>{formatDuration(row.workedSeconds)}</td><td>{formatDuration(row.idleSeconds)}</td>
+                  <tr key={row.key}><td>{row.label}</td><td>{row.sessions}</td><td>{row.projects.size}</td><td>{row.tasks.size}</td><td>{formatDuration(row.workedSeconds)}</td><td>{formatDuration(row.breakSeconds + row.idleSeconds)}</td>
                     {canAddEntry && <td>{canAddFor(row.employee) && <div className="report-manual-actions">
                       <button type="button" className="report-add-entry-button" onClick={() => setEntryEmployee({ id: row.key, name: row.label })}><Plus size={14} />Add Entry</button>
                       {manualEntryCount(row.key) > 0 && <button type="button" className="secondary-button" onClick={() => setManualEntryEmployee({ id: row.key, name: row.label })}>Manual entries ({manualEntryCount(row.key)})</button>}
@@ -758,20 +755,18 @@ function AdminReportContent({
                   <h3>{employeeRow.name}</h3>
                   <div className="admin-report-table-wrap">
                     <table>
-                      <thead><tr><th>Project</th><th>Sessions</th><th>Worked</th><th>Break</th><th>Idle</th></tr></thead>
+                      <thead><tr><th>Project</th><th>Sessions</th><th>Worked</th><th>Break / Idle</th></tr></thead>
                       <tbody>
                         {employeeRow.projects.map((row) => (
                           <tr key={row.key}>
                             <td>{row.name}</td><td>{row.sessions}</td>
                             <td>{formatDuration(row.workedSeconds)}</td>
-                            <td>{formatDuration(row.breakSeconds)}</td>
-                            <td className="project-work-idle">{formatDuration(row.idleSeconds)}</td>
+                            <td className="project-work-idle">{formatDuration(row.breakSeconds + row.idleSeconds)}</td>
                           </tr>
                         ))}
                         <tr className="project-work-total"><td>Employee total</td><td>—</td>
                           <td>{formatDuration(employeeRow.workedSeconds)}</td>
-                          <td>{formatDuration(employeeRow.breakSeconds)}</td>
-                          <td className="project-work-idle">{formatDuration(employeeRow.idleSeconds)}</td>
+                          <td className="project-work-idle">{formatDuration(employeeRow.breakSeconds + employeeRow.idleSeconds)}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -798,17 +793,17 @@ function AdminReportContent({
           {!error && mode === "time" && records.length > 0 && variant === "detailed" && (
             <div className="admin-report-table-wrap">
               <table>
-                <thead><tr>{scope === "company" && <th>Employee</th>}<th>Type</th><th>Project</th><th>Task / segment</th><th>Started</th><th>Finished</th><th>Duration</th><th>Idle</th><th>Status</th><th>Note</th>{canEditEntries && <th>Actions</th>}</tr></thead>
+                <thead><tr>{scope === "company" && <th>Employee</th>}<th>Type</th><th>Project</th><th>Task / segment</th><th>Started</th><th>Finished</th><th>Duration</th><th>Break / Idle</th><th>Status</th><th>Note</th>{canEditEntries && <th>Actions</th>}</tr></thead>
                 <tbody>{timelineRows.map(({ record, entry, key }) => (
                       <tr className={`report-timeline-row report-${entry.type}-row`} key={key}>
                         {scope === "company" && <td>{record.employee?.fullName || "—"}</td>}
-                        <td><span className={`report-entry-badge ${entry.type}`}>{entry.type}</span></td>
+                        <td><span className={`report-entry-badge ${entry.type}`}>{["break", "idle"].includes(entry.type) ? "Break / Idle" : entry.type}</span></td>
                         <td>{record.project?.projectName || "—"}</td>
                         <td>{entry.source === "between_sessions" ? "Between tasks" : entry.type === "work" ? `${record.task?.taskName || "Task"} · Work ${entry.sequence}` : `${entry.type === "break" ? record.task?.taskName || "Break" : "Idle"} ${entry.sequence}`}</td>
                         <td><strong>{formatReportDateTime(entry.start)}</strong></td>
                         <td><strong>{entry.end ? formatReportDateTime(entry.end) : "In progress"}</strong></td>
                         <td>{formatReportDuration(entry.durationSeconds)}</td>
-                        <td>{entry.type === "idle" ? formatReportDuration(entry.durationSeconds) : "—"}</td>
+                        <td>{["break", "idle"].includes(entry.type) ? formatReportDuration(entry.durationSeconds) : "—"}</td>
                         <td>{reportEntryStatus(record, entry)}</td>
                         <td className="report-entry-note">{entry.type === "work" ? record.note || "—" : "—"}</td>
                         {canEditEntries && <td><button type="button" className="secondary-button report-edit-entry-button" disabled={record.status !== 'stopped' || !record.stoppedAt || record.isActiveTimer === true} onClick={() => setEditingEntry({ record, entry })}>{entry.source === 'between_sessions' ? 'Edit gap' : 'Edit entry'}</button></td>}

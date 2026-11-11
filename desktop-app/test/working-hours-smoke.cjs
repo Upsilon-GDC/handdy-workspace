@@ -166,13 +166,25 @@ app.whenReady().then(async () => {
     await evaluate(`document.querySelector('.wh-overview').scrollIntoView({block:'start'})`); await screenshot('productivity-mobile.png');
     user = { _id: 'manager', fullName: 'Authorized Manager', role: 'manager' };
     const before = settingsReads.length;
-    await visit('/admin/working-hours'); await until(`document.body.textContent.includes('Admin access required')`);
-    assert.equal(settingsReads.length, before, 'Manager route must not read configuration');
-    assert.equal(await evaluate(`!!document.querySelector('.crm-nav a[href="/admin/working-hours"]')`), false);
+    await visit('/admin/working-hours'); await until(`!!document.querySelector('[data-working-hours-team="wcpa"]')`);
+    assert.ok(settingsReads.length > before, 'Managers can load configuration');
+    assert.equal(await evaluate(`!!document.querySelector('.crm-nav a[href="/admin/working-hours"]')`), true);
+    await evaluate(`document.querySelector('[data-working-hours-team="wcpa"]').click()`);
+    await until(`document.querySelectorAll('.wh-team-group tbody tr').length===2`);
+    await click('Whole team (2)'); await fill('[aria-label="Required daily hours"]','7.5');
+    const beforeWrites = writes.length;
+    await click('Save working hours'); await until(`!!document.querySelector('.wh-success') && !document.querySelector('.wh-settings-forms fieldset').disabled`);
+    assert.equal(writes.length,beforeWrites+1); assert.equal(writes.at(-1).requiredHours,'7.5');
+    assert.deepEqual(writes.at(-1).employeeIds,['a','b']);
+    await evaluate(`document.querySelector('[aria-label="Select Asha Rao"]').click()`);
+    await click('Daily exception'); await select('[aria-label="Daily attendance exception"]','leave');
+    await fill('[aria-label="Working hours exception reason"]','Manager approved leave');
+    await click('Save daily exception'); await until(`document.querySelector('.wh-success')?.textContent.includes('Daily exceptions') && !document.querySelector('.wh-settings-forms fieldset').disabled`);
+    assert.equal(writes.at(-1).type,'leave'); assert.deepEqual(writes.at(-1).employeeIds,['a']);
     await visit('/admin/dashboard'); await until(`document.querySelectorAll('[data-productivity-team]').length === 2`);
-    assert.equal(await evaluate(`!!document.querySelector('.wh-overview a[href="/admin/working-hours"]')`), false);
+    assert.equal(await evaluate(`!!document.querySelector('.wh-overview a[href="/admin/working-hours"]')`), true);
     assert.deepEqual(errors.filter(message => !/Failed to load resource.*(409|503)/.test(message)), []);
-    console.log('PASS: grouped Admin settings, decimal/bulk/individual saves, persistence, failed-save selection, daily exception, productivity drilldown, date/team filters, outage state, mobile layout and Manager read-only access. Mock API only.');
+    console.log('PASS: Admin and Manager settings; decimal/bulk/individual saves; Manager hours and leave saves; persistence; failed-save retention; daily exception; overview links; date/team filters; outages; mobile. Mock API only.');
   } catch (error) { console.error(error); code = 1; }
   finally { win?.destroy(); server.close(); app.exit(code); }
 });

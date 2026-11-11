@@ -18,7 +18,7 @@ const employees = [
 const teams = [{ _id: 'wcpa', teamName: 'WCPA', isActive: true }, { _id: 'tax', teamName: 'Tax', isActive: true }, { _id: 'software', teamName: 'Software', isActive: true }];
 const iso = offset => new Date(now + offset).toISOString();
 const closed = { _id: 'closed', employee: employees[0], project: { projectName: 'Audit' }, task: { taskName: 'Preparation', taskType: 'work' }, status: 'stopped', isActiveTimer: false,
-  startedAt: iso(-7200000), stoppedAt: iso(-3600000), totalWorkedSeconds: 3600, totalIdleSeconds: 0, pauses: [] };
+  startedAt: iso(-7200000), stoppedAt: iso(-3600000), totalWorkedSeconds: 3600, totalIdleSeconds: 120, pauses: [] };
 const current = [closed,
   { ...closed, _id: 'live', status: 'running', isActiveTimer: true, startedAt: iso(-1800000), stoppedAt: null, totalWorkedSeconds: 1800, task: { taskName: 'Review', taskType: 'work' } },
   { ...closed, _id: 'lunch', employee: employees[1], status: 'running', isActiveTimer: true, startedAt: iso(-600000), stoppedAt: null, totalWorkedSeconds: 600, task: { taskName: 'Lunch', taskType: 'break' } },
@@ -87,13 +87,15 @@ app.whenReady().then(async () => {
     assert.equal(await evaluate(`document.querySelector('.crm-stat-strip article').textContent.includes('1 / 3')`), true);
     assert.equal(await evaluate(`document.querySelectorAll('.wh-combined-overview .crm-stat-strip article').length`), 6, 'Activity and daily targets share six cards');
     assert.equal(await evaluate(`document.querySelectorAll('.admin-team-overview > .crm-stat-strip').length`), 0, 'No duplicate activity strip outside the combined overview');
-    assert.equal(await evaluate(`document.querySelectorAll('.crm-stat-strip article')[1].textContent.includes('Break') && document.querySelectorAll('.crm-stat-strip article')[1].textContent.includes('Idle')`), true, 'Tracked work retains break and idle totals');
+    assert.equal(await evaluate(`document.querySelectorAll('.crm-stat-strip article')[1].textContent.includes('Break / Idle')`), true, 'Tracked work retains break and idle totals');
     assert.equal(await evaluate(`document.body.textContent.includes('Hidden Alpha Account')`), false);
     assert.equal(await evaluate(`document.querySelector('[data-overview-team="wcpa"]').textContent.includes('1h 30m')`), true);
     await evaluate(`document.documentElement.style.scrollBehavior='auto'; window.scrollTo({top:0,behavior:'instant'}); new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
     fs.writeFileSync(path.join(output,'overview-home.png'),(await win.webContents.capturePage()).toPNG());
     await evaluate(`document.querySelector('[data-overview-team="wcpa"]').click()`);
     await until(`document.querySelectorAll('.overview-member-table tbody tr').length===2`);
+    assert.equal(await evaluate(`document.querySelector('.overview-member-table thead').textContent.includes('Break / Idle')`),true);
+    assert.equal(await evaluate(`document.querySelector('[data-overview-team="wcpa"] .overview-team-time').textContent.includes('0h 34m')`),true,'The combined value includes stored idle and between-task gaps');
     assert.equal(await evaluate(`document.querySelector('.overview-member-table').textContent.includes('Review')`), true);
     await input('[aria-label="Search overview members"]', 'C No');
     await until(`document.querySelectorAll('.overview-member-table tbody tr').length===1`);

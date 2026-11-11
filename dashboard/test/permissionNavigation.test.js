@@ -53,6 +53,19 @@ test("HR menu follows report and billing permissions", () => {
   }
 });
 
+test('production navigation follows billing permission for roles and delegated employees', () => {
+  for (const role of ['admin', 'alpha', 'manager', 'hr']) {
+    assert.equal(paths(role, ['view_billing_amounts']).includes('/admin/production'), true);
+    const section = navigationForRole(role, grants(role, ['view_billing_amounts'])).filter(item => item.group === 'Production');
+    assert.deepEqual(section.map(item => item.path), ['/admin/production','/admin/production/team','/admin/production/employee']);
+    assert.equal(navigationForRole(role, grants(role, ['view_billing_amounts'])).some(item => item.group === 'Finance' && item.path.startsWith('/admin/production')),false);
+  }
+  assert.equal(paths('hr', []).includes('/admin/production'), false);
+  assert.equal(menu('employee', ['view_billing_amounts']).includes('/admin/production'), true);
+  for (const path of ['/admin/production/team','/admin/production/employee']) assert.equal(menu('employee', ['view_billing_amounts']).includes(path),true);
+  assert.equal(menu('employee', []).includes('/admin/production'), false);
+});
+
 test("team lead team reports follow View team timesheets; personal pages and attendance stay", () => {
   const granted = paths("team_lead", ["view_team_timesheets"]);
   assert.ok(granted.includes("/team-lead/dashboard") && granted.includes("/team-lead/timesheets/team"));
