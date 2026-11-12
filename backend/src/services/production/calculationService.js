@@ -15,7 +15,7 @@ const { getBillingDateRange } = require('../../utils/billingUtils');
 // scope and financial team grants before calling this service. Never infer
 // authorization from query-string flags. No company-wide default.
 async function loadProductionCalculation({ employeeIds, startDate, endDate, timezone = process.env.APP_TIMEZONE || 'Asia/Kolkata',
-  includeBilling = false, filters = {}, now = Date.now(), allowedTeamIds = null, billingTeamIds = null, session = null, includeSources = false }) {
+  includeBilling = false, includeOptionalWork = false, filters = {}, now = Date.now(), allowedTeamIds = null, billingTeamIds = null, session = null, includeSources = false }) {
   if (!Array.isArray(employeeIds) || employeeIds.length > 1000) throw fail('Provide an authorized employee selection of at most 1000 people.');
   const read = async queries => {
     if (!session) return Promise.all(queries);
@@ -59,10 +59,11 @@ async function loadProductionCalculation({ employeeIds, startDate, endDate, time
   const teamIds = unique([...employees.map(employee => employee.team), ...tasks.flatMap(task => [task.team, ...(task.teams || [])]),
     ...projects.flatMap(project => project.teams || []), ...allocations.map(row => row.team)]);
   const settings = await Revision.find({ team: { $in: teamIds }, effectiveFrom: { $lte: endDate },
-    kind: { $in: includeBilling ? ['classification', 'team-billing'] : ['classification'] } }).limit(50001).session(session).lean();
+    kind: { $in: ['classification', 'team-billing'] } })
+    .select(includeBilling ? '' : '-values.currency -values.approvalRequired').limit(50001).session(session).lean();
   if (settings.length > 50000) throw fail('Production settings history is too large for this selection. Narrow the report.', 413);
   const result = calculateProduction({ employees, logs, policies, attendance, tasks, projects, allocations, settings,
-    startDate, endDate, timezone, includeBilling, filters: selectedFilters, now, allowedTeamIds, billingTeamIds });
+    startDate, endDate, timezone, includeBilling, includeOptionalWork, filters: selectedFilters, now, allowedTeamIds, billingTeamIds });
   if (includeSources) result.sources = { logs, tasks, projects, allocations, settings };
   return result;
 }

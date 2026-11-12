@@ -98,6 +98,8 @@ app.whenReady().then(async () => {
     assert.equal(await evaluate(`!!document.querySelector('.crm-nav a[href="/admin/billing"]')`), false);
     await select('Billing date period', 'yesterday');
     assert.equal(await evaluate(`document.querySelector('[aria-label="Billing from date"]').value`), date);
+    await until(`document.querySelector('[aria-label="Billing team"]').options.length === 2`);
+    assert.equal(await evaluate(`[...document.querySelector('[aria-label="Billing team"]').options].some(row=>row.textContent.includes('Renau'))`), false, 'Only billing-enabled teams can prepare new reports');
     await select('Billing team', String(team._id));
     assert.equal(await evaluate(`[...document.querySelector('[aria-label="Billing employee"]').options].some(row=>row.value==='all')`), true);
     assert.equal(await evaluate(`[...document.querySelector('[aria-label="Billing employee"]').options].some(row=>row.textContent.includes('Hours Only Member'))`), false);
@@ -304,6 +306,27 @@ app.whenReady().then(async () => {
     await evaluate(`document.querySelectorAll('.crm-stage,.crm-nav').forEach(node=>node.getAnimations().forEach(animation=>animation.finish()));new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
     assert.equal(await evaluate(`document.documentElement.scrollWidth <= innerWidth + 1`), true);
     fs.writeFileSync(path.join(reportOutput, 'billing-team-review-mobile.png'), (await win.webContents.capturePage()).toPNG());
+    // Optional Admin inclusion changes only this live report and its downloads.
+    const optionalTask = await Task.create({ taskCode: 'OPTIONAL-ADMIN', taskName: 'Admin Work-Billable', teams: [team._id], createdBy: adminId });
+    await Revision.create(setting('classification', `${team._id}:task:${optionalTask._id}`, { category: 'excluded', billable: false, reportOptionalBillable: true }));
+    await Log.create({ employee: employee._id, project: project._id, client: client._id, task: optionalTask._id, startedAt: `${date}T11:00:00Z`, stoppedAt: `${date}T12:00:00Z`, status: 'stopped', isActiveTimer: false });
+    win.setSize(1440, 1050); await openReports(admin);
+    await select('Report type', 'employee'); await select('Team', String(team._id)); await select('Employee', String(employee._id));
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Include optional Admin work"]').checked`), false);
+    await generateReport();
+    assert.equal(summaryValue(await workbook(await download('Export Excel', 'admin-excluded-')), 'Estimated USD'), 40);
+    await evaluate(`document.querySelector('[aria-label="Include optional Admin work"]').click()`);
+    assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(node=>node.textContent==='Export Excel').disabled`), true, 'Changed inclusion must regenerate before export');
+    await generateReport();
+    assert.equal(await evaluate(`[...document.querySelectorAll('.prod-card')].find(node=>node.querySelector('span')?.textContent==='Production').querySelector('strong').textContent`), '2:00:00');
+    assert.equal(summaryValue(await workbook(await download('Export Excel', 'admin-included-')), 'Estimated USD'), 80);
+    await evaluate(`window.scrollTo(0,0);new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`); win.webContents.invalidate(); await pause(200);
+    fs.writeFileSync(path.join(reportOutput, 'optional-admin-report.png'), (await win.webContents.capturePage()).toPNG());
+    await evaluate(`document.querySelector('[aria-label="Include optional Admin work"]').click()`); await generateReport();
+    assert.equal(summaryValue(await workbook(await download('Export Excel', 'admin-excluded-again-')), 'Estimated USD'), 40);
+    assert.equal((await Batch.findById(batch._id).lean()).snapshot.summary.billing.estimates[0].estimatedAmount, 25);
+    await select('Report source', 'finalized');
+    assert.equal(await evaluate(`!!document.querySelector('[aria-label="Include optional Admin work"]')`), false);
     fs.writeFileSync(path.join(reportOutput, 'export-manifest.json'), JSON.stringify({ files, source: 'Synthetic local test database', originalFinalizedUSD: 25, historicalAdjustmentUSD: 15, adjustedUSD: 40 }, null, 2));
     console.log('PASS: Stage 5 real API/UI reports and Excel/PDF exports: all pages, exact hours, hours-only privacy, original/adjusted/delta separation, export permission revocation and mobile. Synthetic local data only.');
     console.log('PASS: Real local billing API/UI: draft, allocation verification, personal submission, manager rejection/resubmission/approval, Admin finalization, previewed historical adjustment, immutable original values, financial redaction and mobile. Temporary database only.');

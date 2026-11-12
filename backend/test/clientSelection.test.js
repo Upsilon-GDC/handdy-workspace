@@ -45,9 +45,9 @@ for (const role of ["employee", "team_lead"]) {
   test(`${role} timer start records the selected client ID for an unlinked shared project`, async (t) => {
     t.mock.method(TaskTimeLog, "find", () => ({ lean: async () => [] }));
     t.mock.method(Project, "findById", async () => ({ status: "Active", deletedAt: null, teams: ["team"], clients: [], client: null }));
-    t.mock.method(Client, "exists", async filter => {
+    t.mock.method(Client, "findOne", filter => {
       assert.deepEqual(filter, { _id: "client-b", status: "Active" });
-      return { _id: "client-b" };
+      return { select: async () => ({ _id: "client-b" }) };
     });
     t.mock.method(Team, "exists", async () => ({ _id: "team" }));
     t.mock.method(Task, "findOne", async filter => {

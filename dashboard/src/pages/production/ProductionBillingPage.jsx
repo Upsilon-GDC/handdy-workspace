@@ -38,10 +38,16 @@ export default function ProductionBillingPage() {
   const reviewRef = useRef(null);
   useEffect(() => {
     const controller = new AbortController();
-    getProduction({ startDate, endDate, view: 'employee', limit: 1 }, controller.signal).then(data => setChoices(data.choices))
+    if (!draft.startDate || !draft.endDate || draft.endDate < draft.startDate) return () => controller.abort();
+    getProduction({ startDate: draft.startDate, endDate: draft.endDate, view: 'employee', limit: 1 }, controller.signal).then(data => {
+      if (controller.signal.aborted) return;
+      setChoices(data.choices);
+      setDraft(previous => previous.team && !data.choices.teams.some(team => team._id === previous.team && team.billingEnabled)
+        ? { ...previous, team: '', employee: '' } : previous);
+    })
       .catch(error => { if (!controller.signal.aborted) setError(getApiErrorMessage(error)); });
     return () => controller.abort();
-  }, [startDate, endDate]);
+  }, [draft.startDate, draft.endDate]);
   useEffect(() => {
     const controller = new AbortController(); setLoading(true); setError('');
     getProductionBilling({ ...query, limit: 25 }, controller.signal).then(setListing).catch(error => {
@@ -115,7 +121,7 @@ export default function ProductionBillingPage() {
     <section className="prod-panel prod-settings-form"><h2>Billing report</h2><p>Choose a team, members and period. Generate a report to review before approval.</p>
       <form onSubmit={create} aria-label="Prepare billing period"><fieldset disabled={busy || !listing}>
         <div className="billing-filters" aria-label="Billing report filters">
-          <label><span>Team</span><select aria-label="Billing team" required value={draft.team} onChange={event => { inputDraft('team', event.target.value); setOtherTeams(false); setDraft(previous => ({ ...previous, employee: '' })); }}><option value="">Choose team</option>{choices.teams.map(row => <option key={row._id} value={row._id}>{row.teamName}</option>)}</select></label>
+          <label><span>Team</span><select aria-label="Billing team" required value={draft.team} onChange={event => { inputDraft('team', event.target.value); setOtherTeams(false); setDraft(previous => ({ ...previous, employee: '' })); }}><option value="">Choose billing-enabled team</option>{choices.teams.filter(row => row.billingEnabled).map(row => <option key={row._id} value={row._id}>{row.teamName}</option>)}</select></label>
           <label><span>Employee</span><select aria-label="Billing employee" disabled={!draft.team} required value={draft.employee} onChange={event => inputDraft('employee', event.target.value)}><option value="">{draft.team ? 'Choose employees' : 'Choose a team first'}</option>{draft.team && !otherTeams && reviewTeam && <option value="all">All members ({createEmployees.length})</option>}{createEmployees.map(row => <option key={row._id} value={row._id}>{row.fullName} ({row.employeeId})</option>)}</select></label>
           <label><span>Date period</span><select aria-label="Billing date period" value={draft.period} onChange={event => inputDraft('period', event.target.value)}>{[['today','Today'],['yesterday','Yesterday'],['this-week','This week'],['last-week','Last week'],['this-month','This month'],['last-month','Last month'],['custom','Custom date range']].map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
           <label><span>From date</span><input aria-label="Billing from date" required type="date" value={draft.startDate} onChange={event => inputDraft('startDate', event.target.value)} /></label>

@@ -36,7 +36,7 @@ function pageNumber(value, fallback, max) {
 function errorResponse(res, error) {
   return res.status(error.statusCode || 500).json({ success: false, message: error.statusCode ? error.message : 'Unable to load Production. Please try again.' });
 }
-async function productionReportData(user, query, { allRows = false } = {}) {
+async function productionReportData(user, query, { allRows = false, includeOptionalWork = false } = {}) {
     const { startDate, endDate } = query;
     if (typeof startDate !== 'string' || typeof endDate !== 'string') throw fail('Choose a valid date range.');
     try { getBillingDateRange(startDate, endDate, process.env.APP_TIMEZONE || 'Asia/Kolkata'); } catch (error) { throw fail(error.message); }
@@ -55,7 +55,7 @@ async function productionReportData(user, query, { allRows = false } = {}) {
     for (const key of ['team', 'client', 'project', 'task']) if (query[key] !== undefined && query[key] !== 'all') filters[key] = objectId(query[key], key);
     if (filters.team && access.teamIds && !access.teamIds.includes(filters.team)) throw fail('Team is outside your Production access.', 403);
     const result = await loadProductionCalculation({ employeeIds: selected.map(id), startDate, endDate, filters,
-      allowedTeamIds: access.teamIds, billingTeamIds: access.billingTeamIds, includeBilling: access.includeBilling });
+      allowedTeamIds: access.teamIds, billingTeamIds: access.billingTeamIds, includeBilling: access.includeBilling, includeOptionalWork });
     if (filters.team || filters.client || filters.project || filters.task) result.members = result.members.filter(row => row.actualSeconds > 0 || (filters.team && row.team === filters.team && !filters.client && !filters.project && !filters.task));
     let rows = result[kinds[view]];
     if (view === 'details') rows = groupedWorkDetails(rows).sort((a, b) => b.date.localeCompare(a.date) || a.client?.localeCompare(b.client || '') || a.project.localeCompare(b.project) || a.task.localeCompare(b.task));
@@ -87,7 +87,7 @@ async function productionReportData(user, query, { allRows = false } = {}) {
       period: result.period, asOf: result.asOf, provisional: true,
       warnings: result.warnings.map(({ code, count }) => ({ code, count })),
       scope: { mode: access.mode, financialAccess: access.includeBilling, canConfigure: ['admin', 'alpha'].includes(user.role) },
-      choices: includeChoices ? { employees: roster, teams, clients, projects, tasks } : undefined, selectionLabels, targetBasis: result.targetBasis, filterTargetBasis: result.filterTargetBasis };
+      choices: includeChoices ? { employees: roster, teams: teams.map(team => ({ ...team, billingEnabled: result.billingEnabledTeamIds.includes(id(team)) })), clients, projects, tasks } : undefined, selectionLabels, targetBasis: result.targetBasis, filterTargetBasis: result.filterTargetBasis };
 }
 async function getReport(req, res) {
   try { return res.json({ success: true, report: await productionReportData(req.user, req.query) }); }

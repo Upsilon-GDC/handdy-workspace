@@ -10,7 +10,7 @@ const { startTimerSweep, SWEEP_INTERVAL_MS } = require("../src/jobs/timerSweep")
 test("every module loads and keeps its URL", () => {
   assert.deepEqual(apiModules.map(([prefix]) => prefix), [
     "/api/auth", "/api/employees", "/api/attendance", "/api/projects", "/api/tasks", "/api/time-logs",
-    "/api/shifts", "/api/schedules", "/api/teams", "/api/clients", "/api/billing", "/api/settings",
+    "/api/shifts", "/api/schedules", "/api/teams", "/api/clients", "/api/billing", "/api/production", "/api/settings",
     "/api/working-hours", "/api/client-access", "/api/permissions", "/api/metrics",
   ]);
   for (const [prefix, router] of apiModules) {

@@ -1,12 +1,13 @@
 const Batch = require('../../models/ProductionBillingBatch');
 const Team = require('../../models/Team');
+const Revision = require('../../models/ProductionSettingsRevision');
 const { productionAccess, scopedEmployees } = require('./access');
 const { createBilling, transaction, assertScope, publicBatch } = require('./billingWorkflow');
 const { reportExportToken } = require('./reportTokens');
 const { column } = require('./reportTables');
 const { operation } = require('./billingRules');
-const { objectId, fail } = require('./settingsValidation');
-const { getBillingDateRange } = require('../../utils/billingUtils');
+const { objectId, fail, effectiveRevision } = require('./settingsValidation');
+const { getBillingDateRange, addDateKeyDays } = require('../../utils/billingUtils');
 const id = value => String(value?._id || value || '');
 const issueLabels = { 'hours-only-team': 'Team billing is disabled', 'no-billable-work': 'No eligible billable work',
   'missing-or-mismatched-rate': 'Employee project rate is missing', 'billing-configuration-needs-review': 'Billing configuration needs review',
@@ -20,6 +21,12 @@ async function prepareReview(user, body) {
   try { getBillingDateRange(body.startDate, body.endDate, process.env.APP_TIMEZONE || 'Asia/Kolkata'); } catch (error) { throw fail(error.message); }
   if (access.teamIds && !access.teamIds.includes(team)) throw fail('Team is outside your billing access.', 403);
   if (!await Team.exists({ _id: team, isActive: true })) throw fail('Choose an active team.', 404);
+  const billingSettings = await Revision.find({ kind: 'team-billing', key: team, effectiveFrom: { $lte: body.endDate } }).select('effectiveFrom version values.billingEnabled').lean();
+  let enabled = false;
+  for (let date = body.startDate; date <= body.endDate; date = addDateKeyDays(date, 1)) {
+    if (effectiveRevision(billingSettings, date)?.values.billingEnabled === true) { enabled = true; break; }
+  }
+  if (!enabled) throw fail('Billing is disabled for this team in the selected dates. Enable it in Production settings before preparing billing.');
   const roster = await scopedEmployees(access, body.employee);
   const selected = body.employee === 'all' ? roster.filter(row => row.isActive && id(row.team) === team) : roster;
   if (!selected.length) throw fail('No active employees are available in this team.');

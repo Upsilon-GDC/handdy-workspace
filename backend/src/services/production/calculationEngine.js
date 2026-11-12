@@ -86,7 +86,7 @@ function summarizeProduction(rows, targetRows = [], includeBilling = false) {
 }
 
 function calculateProduction({ employees = [], logs = [], tasks = [], projects = [], allocations = [], settings = [],
-  policies = [], attendance = [], startDate, endDate, timezone = 'Asia/Kolkata', now = Date.now(), includeBilling = false, filters = {}, allowedTeamIds = null, billingTeamIds = null }) {
+  policies = [], attendance = [], startDate, endDate, timezone = 'Asia/Kolkata', now = Date.now(), includeBilling = false, includeOptionalWork = false, filters = {}, allowedTeamIds = null, billingTeamIds = null }) {
   let range;
   try { range = getBillingDateRange(startDate, endDate, timezone); } catch (error) { throw fail(error.message); }
   const asOf = +new Date(now);
@@ -103,7 +103,13 @@ function calculateProduction({ employees = [], logs = [], tasks = [], projects =
   const attendanceMap = new Map(attendance.map(row => [`${id(row.employee)}:${row.date}`, row]));
   const resolve = settingsResolver(settings), warnings = new Map(), details = [];
   const choiceIds = { clients: new Set(), projects: new Set(), tasks: new Set() };
-  const warn = (code, log, subject) => {
+  const warn = (code, log, subject, date) => {
+    if (log && !warningApplicable(log, date)) return;
+    if (subject) {
+      const person = employeeMap.get(subject.slice(0, -11)), day = subject.slice(-10), team = id(person?.team);
+      if ((allowedTeams && !allowedTeams.has(team)) || (filters.team && filters.team !== team)
+        || resolve('team-billing', team, day)?.values.billingEnabled !== true) return;
+    }
     if (!warnings.has(code)) warnings.set(code, { code, timeLogIds: new Set(), subjects: new Set() });
     if (log) warnings.get(code).timeLogIds.add(id(log));
     if (subject) warnings.get(code).subjects.add(subject);
@@ -117,6 +123,18 @@ function calculateProduction({ employees = [], logs = [], tasks = [], projects =
     && (!filters.client || row.client === filters.client) && (!filters.project || row.project === filters.project)
     && (!filters.task || row.task === filters.task);
   const configOn = (team, date) => team && (!moneyTeams || moneyTeams.has(team)) ? resolve('team-billing', team, date) : null;
+  // The home team is used only to route an unresolved record's review notice;
+  // it never assigns its work, production credit or billing to that team.
+  const warningApplicable = (log, date) => {
+    const allocation = resolveWorkTeam(log, taskMap.get(id(log.task)), projectMap.get(id(log.project)), allocationMap.get(id(log)));
+    const team = allocation.team || id(employeeMap.get(id(log.employee))?.team);
+    if (!allowed({ team, client: id(log.client), project: id(log.project), task: id(log.task) })) return false;
+    const enabled = day => resolve('team-billing', team, day)?.values.billingEnabled === true;
+    if (date) return enabled(date);
+    const start = +new Date(log.startedAt), stop = log.stoppedAt ? +new Date(log.stoppedAt) : asOf;
+    if (!Number.isFinite(start) || !Number.isFinite(stop)) return enabled(startDate);
+    return dayBounds.some(day => start < day.end && stop > day.start && enabled(day.date));
+  };
   const classificationOn = (log, team, date) => team && (log.activityMapping
     ? resolve('classification', `${team}:activity:${id(log.activityMapping)}`, date) : null)
     || (team ? resolve('classification', `${team}:task:${id(log.task)}`, date) : null);
@@ -130,8 +148,12 @@ function calculateProduction({ employees = [], logs = [], tasks = [], projects =
     if (!Number.isFinite(start) || !Number.isFinite(stop) || stop <= start) { warn('invalid-or-empty-interval', log); continue; }
     const task = taskMap.get(id(log.task)), project = projectMap.get(id(log.project));
     const allocation = resolveWorkTeam(log, task, project, allocationMap.get(id(log)));
-    if (!allocation.team) warn('needs-team-allocation', log);
-    else if (allocation.source === 'current-relationships') warn('team-inferred-from-current-relationships', log);
+    // Explicit Break/Lunch tasks never enter production or billing, even when
+    // shared across teams. Their team links do not need a production review.
+    if (task?.taskType !== 'break') {
+      if (!allocation.team) warn('needs-team-allocation', log);
+      else if (allocation.source === 'current-relationships') warn('team-inferred-from-current-relationships', log);
+    }
     const pauses = [];
     for (const pause of log.pauses || []) {
       if (!pause.pausedAt) { warn('invalid-pause', log); continue; }
@@ -169,8 +191,10 @@ function calculateProduction({ employees = [], logs = [], tasks = [], projects =
       const candidates = [...active].map(item => {
         const classification = classificationOn(item.log, item.team, date);
         let category = !item.team ? 'unallocated' : classification?.values.category || 'unclassified';
+        const optionalIncluded = includeOptionalWork === true && category === 'excluded' && classification?.values.reportOptionalBillable === true;
+        if (optionalIncluded) category = 'productive';
         if (item.task?.taskType === 'break' || paused.get(item) > 0) category = 'break-idle';
-        return { item, category, classification };
+        return { item, category, classification, optionalIncluded };
       });
       // Exclusions take precedence over simultaneous work. Conflicting work
       // tuples are held for review rather than credited or billed twice.
@@ -179,8 +203,8 @@ function calculateProduction({ employees = [], logs = [], tasks = [], projects =
       const chosen = candidates[0], item = chosen.item, log = item.log;
       let category = chosen.category;
       const tuple = candidate => [candidate.item.team, id(candidate.item.log.client), id(candidate.item.log.project), id(candidate.item.log.task), id(candidate.item.log.activityMapping)].join(':');
-      if (category === 'productive' && new Set(candidates.map(tuple)).size > 1) { category = 'conflict'; for (const entry of candidates) warn('overlapping-work-needs-review', entry.item.log); }
-      if (category === 'unclassified') warn('needs-activity-classification', log);
+      if (category === 'productive' && new Set(candidates.map(tuple)).size > 1) { category = 'conflict'; for (const entry of candidates) warn('overlapping-work-needs-review', entry.item.log, null, date); }
+      if (category === 'unclassified') warn('needs-activity-classification', log, null, date);
       const seconds = (until - at) / 1000;
       const row = { employee, date, team: category === 'conflict' ? null : item.team,
         client: id(log.client) || null, project: id(log.project), task: id(log.task),
@@ -189,7 +213,7 @@ function calculateProduction({ employees = [], logs = [], tasks = [], projects =
       const metric = { productive: 'productionSeconds', training: 'trainingSeconds', 'break-idle': 'breakIdleSeconds',
         excluded: 'excludedSeconds', unclassified: 'unclassifiedSeconds', unallocated: 'unallocatedSeconds', conflict: 'conflictSeconds' }[category];
       row[metric] = seconds;
-      const eligible = category === 'productive' && chosen.classification?.values.billable === true;
+      const eligible = category === 'productive' && (chosen.classification?.values.billable === true || chosen.optionalIncluded);
       row.eligibleClientWorkSeconds = eligible ? seconds : 0;
       row.nonBillableProductiveSeconds = category === 'productive' && !eligible ? seconds : 0;
       if (!allowedTeams || allowedTeams.has(row.team)) {
@@ -206,7 +230,7 @@ function calculateProduction({ employees = [], logs = [], tasks = [], projects =
           if (eligible) {
             const rate = resolveRate(employeeMap.get(employee), row.project);
             Object.assign(row.billing, rate);
-            if (rate.status !== 'estimated') warn(rate.status, log);
+            if (rate.status !== 'estimated') warn(rate.status, log, null, date);
           }
         }
       }
@@ -256,8 +280,9 @@ function calculateProduction({ employees = [], logs = [], tasks = [], projects =
     client: rows[0].client, project: rows[0].project, task: rows[0].task,
     employeeCount: new Set(rows.map(row => row.employee)).size, ...summarize(rows, []),
   }));
-  const visibleLogIds = new Set(prepared.filter(row => !allowedTeams || allowedTeams.has(row.team)).map(row => id(row.log)));
   return { kind: 'production', calculationVersion: 2, provisional: true, period: { startDate, endDate, timezone },
+    billingEnabledTeamIds: [...new Set(settings.filter(row => row.kind === 'team-billing').map(row => id(row.team) || row.key))]
+      .filter(team => dates.some(date => resolve('team-billing', team, date)?.values.billingEnabled === true)),
     asOf: new Date(asOf).toISOString(), targetBasis: 'existing-attendance-policy; targets assigned once to employee home team',
     filterTargetBasis: 'employee daily target; client/project/task filters restrict work, not the daily target',
     totals: summarize(details, targets), members, teams, daily, weekly, monthly, details,
@@ -265,7 +290,7 @@ function calculateProduction({ employees = [], logs = [], tasks = [], projects =
     clientProjects: groupDetails(row => `${row.client || ''}:${row.project}`),
     tasks: groupDetails(row => row.task),
     warnings: [...warnings.values()].filter(warning => includeBilling || !['missing-rate', 'currency-mismatch'].includes(warning.code))
-      .map(warning => { const ids = [...warning.timeLogIds].filter(value => visibleLogIds.has(value));
+      .map(warning => { const ids = [...warning.timeLogIds];
         return { code: warning.code, count: ids.length || warning.subjects.size, timeLogIds: ids.sort().slice(0, 20) }; })
       .filter(warning => warning.count > 0) };
 }

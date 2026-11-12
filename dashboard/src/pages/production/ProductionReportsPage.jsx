@@ -20,7 +20,7 @@ const reportHeadlines = {
 };
 export default function ProductionReportsPage() {
   const [from, to] = productionDates('today');
-  const [draft, setDraft] = useState({ basis: 'live', type: 'daily', period: 'today', startDate: from, endDate: to, team: 'all', employee: 'all', client: 'all', project: 'all', task: 'all' });
+  const [draft, setDraft] = useState({ basis: 'live', type: 'daily', period: 'today', startDate: from, endDate: to, team: 'all', employee: 'all', client: 'all', project: 'all', task: 'all', includeOptionalWork: false });
   const [query, setQuery] = useState(() => ({ ...draft })), [report, setReport] = useState(null), [page, setPage] = useState(1);
   const [choices, setChoices] = useState({ teams: [], employees: [], clients: [], projects: [], tasks: [] });
   const [loading, setLoading] = useState(true), [exporting, setExporting] = useState(false), [error, setError] = useState('');
@@ -41,7 +41,7 @@ export default function ProductionReportsPage() {
     return () => controller.abort();
   }, [query]);
   const update = (key, value) => setDraft(previous => ({ ...previous, [key]: value,
-    ...(key === 'team' ? { employee: 'all' } : {}), ...(key === 'basis' && value !== 'live' ? { client: 'all', project: 'all', task: 'all' } : {}) }));
+    ...(key === 'team' ? { employee: 'all' } : {}), ...(key === 'basis' && value !== 'live' ? { client: 'all', project: 'all', task: 'all', includeOptionalWork: false } : {}) }));
   const generate = event => { event.preventDefault(); setQuery({ ...draft }); };
   const pending = JSON.stringify(draft) !== JSON.stringify(query);
   const exportFile = async format => {
@@ -66,6 +66,7 @@ export default function ProductionReportsPage() {
       {draft.basis === 'live' && <label>Report type<select aria-label="Report type" value={draft.type} onChange={event => update('type', event.target.value)}>{Object.entries(types).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}
     </div>
     <ProductionWorkFilters draft={draft} choices={choices} view={draft.basis === 'live' ? productionReportView(draft.type) : 'saved'} onChange={patch => setDraft(previous => ({ ...previous, ...patch }))} />
+    {draft.basis === 'live' && <div className="prod-optional-work"><label className="prod-checkbox"><input aria-label="Include optional Admin work" type="checkbox" checked={draft.includeOptionalWork} onChange={event => update('includeOptionalWork', event.target.checked)} />Include optional Admin work in production and billing</label><p className="prod-filter-hint">Off by default. Applies only to activities marked optional in Settings and uses employee project rates. Training and Break / Idle stay excluded.</p></div>}
     <div className="prod-filter-actions"><span>{pending ? 'Generate the report to apply your changed filters.' : 'Dates and filters apply to both the screen and downloads.'}</span><button className="prod-primary">{loading ? 'Preparing…' : 'Generate report'}</button></div></fieldset></form>
     {loading && <p className="prod-status" role="status">Preparing report…</p>}
     {error && <p className="prod-error" role="alert">{error}</p>}

@@ -63,7 +63,7 @@ test("legacy timer start, manual pause, resume and stop preserve work and break 
   let inserts = 0;
   t.mock.method(Project, "findById", async () => ({ _id: "project", status: "Active", teams: ["team"] }));
   t.mock.method(Team, "exists", async () => true);
-  t.mock.method(Client, "exists", async () => true);
+  t.mock.method(Client, "findOne", () => query({ _id: 'client' }));
   t.mock.method(Task, "findOne", async () => ({ _id: "task", isActive: true }));
   t.mock.method(TaskTimeLog, "find", () => ({ lean: async () => [] }));
   t.mock.method(TaskTimeLog, "findOne", (filter) => query(timer && (
@@ -125,11 +125,11 @@ test("existing session authentication rejects revoked sessions and unauthorized 
   assert.equal(revoked.body.code, "SESSION_REVOKED");
 });
 
-test("desktop heartbeat reads only the timer ID and preserves its legacy acknowledgement", async (t) => {
+test("desktop heartbeat reads limited timer fields and preserves its legacy acknowledgement", async (t) => {
   t.mock.method(TaskTimeLog, "find", () => ({ lean: async () => [] }));
   t.mock.method(TaskTimeLog, "findOneAndUpdate", async (_filter, update, options) => {
     assert.ok(update.$set.desktopHeartbeatAt instanceof Date);
-    assert.deepEqual(options.projection, { _id: 1 });
+    assert.deepEqual(options.projection, { _id: 1, task: 1, status: 1 });
     assert.equal(options.returnDocument, "after");
     return { _id: "timer" };
   });

@@ -22,7 +22,7 @@ test("1.4 a live heartbeat is one conditional update that never extends an expir
   t.mock.method(TaskTimeLog, "findOneAndUpdate", async (query, update, options) => {
     filter = query;
     assert.ok(update.$set.desktopHeartbeatAt instanceof Date);
-    assert.deepEqual(options.projection, { _id: 1 });
+    assert.deepEqual(options.projection, { _id: 1, task: 1, status: 1 });
     return { _id: "timer" };
   });
   const before = Date.now();

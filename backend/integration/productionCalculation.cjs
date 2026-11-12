@@ -68,11 +68,12 @@ test('loader requires an explicit valid employee scope and never fetches company
   assert.equal(result.totals.actualSeconds, 7200); assert.deepEqual(result.totals.billing, { applicable: false });
   const empty = await loadProductionCalculation(options({ employeeIds: [] })); assert.equal(empty.totals.actualSeconds, 0);
 });
-test('hours-only loader never queries financial settings and omits financial output', async t => {
+test('hours-only loader reads billing activation for scoped notices without financial fields', async t => {
   const original = Revision.find; let kinds;
   t.mock.method(Revision, 'find', function (filter) { kinds = filter.kind.$in; return original.call(this, filter); });
-  const result = await loadProductionCalculation(options({ includeBilling: false }));
-  assert.deepEqual(kinds, ['classification']); assert.equal(result.totals.billing, undefined);
+  const result = await loadProductionCalculation(options({ includeBilling: false, includeSources: true }));
+  assert.deepEqual(kinds, ['classification', 'team-billing']); assert.equal(result.totals.billing, undefined);
+  assert.ok(result.sources.settings.filter(row => row.kind === 'team-billing').every(row => row.values.currency === undefined && row.values.approvalRequired === undefined));
   assert.equal(JSON.stringify(result).includes('rateHundredths'), false);
 });
 test('latest explicit allocation wins, and filters restrict credited work without duplicating targets', async () => {

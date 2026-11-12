@@ -42,7 +42,7 @@ async function assertInitialized() {
   }
 }
 async function assertReferences(setting, session) {
-  if (!await Team.exists({ _id: setting.team, ...(setting.historicalCorrection ? {} : { isActive: true }) }).session(session)) throw fail('Team not found or unavailable for this change.', 404);
+  if (!await Team.exists({ _id: setting.team, ...(setting.historicalCorrection && setting.kind !== 'access' ? {} : { isActive: true }) }).session(session)) throw fail('Team not found or unavailable for this change.', 404);
   const { values } = setting;
   if (setting.kind === 'access' && !await Employee.exists({ _id: values.employee, isActive: true }).session(session)) throw fail('Active employee not found.', 404);
   if (setting.kind === 'classification') {
@@ -52,6 +52,7 @@ async function assertReferences(setting, session) {
     const task = values.targetType === 'task' ? target : await Task.findById(target.task).select('taskType').session(session).lean();
     if (!task) throw fail('Classification task not found.', 404);
     if (task.taskType === 'break' && !['break-idle', 'excluded'].includes(values.category)) throw fail('Break tasks must remain excluded from production and billing.');
+    if (task.taskType === 'break' && values.reportOptionalBillable) throw fail('Break tasks cannot offer optional production or billing.');
   }
   if (setting.kind === 'rate') {
     for (const [field, Model] of [['client', Client], ['employee', Employee]]) {
@@ -80,7 +81,7 @@ async function saveSetting(kind, body, actor, { historical = false } = {}) {
   // Production configuration is restricted to actual admin/alpha accounts.
   if (!['admin', 'alpha'].includes(actor?.role)) throw fail('Only an Admin can configure Production.', 403);
   const actorId = objectId(String(actor._id || ''), 'administrator');
-  if (historical && !['team-billing', 'classification', 'rate'].includes(kind)) throw fail('Historical correction does not apply to access grants.');
+  if (historical && !['team-billing', 'classification', 'rate', 'access'].includes(kind)) throw fail('Historical correction is not supported for this setting.');
   const setting = validateSetting(kind, body, historical ? { earliestDate: '1900-01-01' } : undefined);
   if (historical && setting.effectiveFrom > today()) throw fail('Use normal settings for future effective dates.');
   if (historical && setting.reason.length < 10) throw fail('Explain the historical correction in at least 10 characters.');
@@ -120,6 +121,7 @@ async function saveClassificationBatch(body, actor, { historical = false } = {})
       const tasks = await Task.find({ _id: { $in: settings.map(row => row.values.target) }, ...await taskTeamScope(first.team, session) }).select('taskType').session(session).lean();
       if (tasks.length !== settings.length) throw fail('Some tasks are missing or no longer linked to the selected team. Reload before saving.', 409);
       if (tasks.some(task => task.taskType === 'break') && !['break-idle', 'excluded'].includes(first.values.category)) throw fail('Deselect break tasks or classify the selection as Break / Idle or excluded.');
+      if (tasks.some(task => task.taskType === 'break') && first.values.reportOptionalBillable) throw fail('Deselect break tasks before enabling optional report billing.');
       const previous = await Revision.aggregate([
         { $match: { kind: 'classification', key: { $in: settings.map(row => row.key) } } },
         { $sort: { version: -1 } }, { $group: { _id: '$key', revision: { $first: '$$ROOT' } } },
