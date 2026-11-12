@@ -89,12 +89,31 @@ app.whenReady().then(async () => {
     async function loginAs(user, id = '') {
       currentUser = user; await win.loadURL(`${base}/login`);
       await evaluate(`localStorage.setItem('token','fixture');localStorage.setItem('user',${JSON.stringify(JSON.stringify(user))});`);
-      await win.loadURL(`${base}/admin/production/billing${id ? `?id=${id}` : ''}`);
+      await win.loadURL(`${base}/admin/production/billing${id ? `?id=${id}` : '?history=1'}`);
       await until(`!!document.querySelector('[aria-label="Billing periods"]') && !document.querySelector('[aria-label="Prepare billing period"] fieldset').disabled`);
     }
     await loginAs(admin);
     await win.loadURL(`${base}/admin/billing`);
-    await until(`location.pathname==='/admin/production/billing' && !!document.querySelector('[aria-label="Billing report filters"]') && !document.querySelector('[aria-label="Prepare billing period"] fieldset').disabled`);
+    await until(`location.pathname==='/admin/production/billing' && document.querySelector('[aria-label="Report team"]')?.options.length===3`);
+    assert.equal(await evaluate(`!!document.querySelector('[aria-label="Bulk employee review"]')`), false);
+    assert.equal(await evaluate(`!!document.querySelector('[aria-label="Prepare billing period"]')`), false);
+    await select('Report team', String(team._id)); await select('Report period', 'yesterday'); await click('View report');
+    await until(`!!document.querySelector('[aria-label="Team work report"]')`);
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Team work report"]').textContent.includes('Ada Member')`), true);
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Team work report"]').textContent.includes('Hours Only Member')`), false);
+    assert.equal(await Batch.countDocuments(), 0, 'Simple report does not create billing drafts');
+    const simpleDownload = new Promise(resolve => win.webContents.session.once('will-download', (_event, item) => {
+      const file = path.join(output, 'simple-team-work.xlsx'); item.setSavePath(file);
+      item.once('done', (_event, state) => { assert.equal(state, 'completed'); resolve(file); });
+    }));
+    await click('Download Excel');
+    const simpleBook = new ExcelJS.Workbook(); await simpleBook.xlsx.readFile(await simpleDownload);
+    assert.ok(simpleBook.getWorksheet('Employee task details'));
+    assert.ok(simpleBook.getWorksheet('Employee contributions'));
+    assert.equal(await Batch.countDocuments(), 0, 'Download needs no approvals');
+    win.webContents.invalidate(); await pause(150);
+    fs.writeFileSync(path.join(output, 'simple-team-work-report.png'), (await win.webContents.capturePage()).toPNG());
+    await loginAs(admin);
     assert.equal(await evaluate(`!!document.querySelector('.crm-nav a[href="/admin/billing"]')`), false);
     await select('Billing date period', 'yesterday');
     assert.equal(await evaluate(`document.querySelector('[aria-label="Billing from date"]').value`), date);
