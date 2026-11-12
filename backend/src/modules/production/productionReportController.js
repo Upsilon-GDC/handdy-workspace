@@ -84,6 +84,7 @@ async function productionReportData(user, query, { allRows = false, includeOptio
       ...(row.task ? { taskCode: taskCodes.get(row.task) || row.task } : {}),
       ...(row.project ? { projectCode: projectCodes.get(row.project) || row.project } : {}) }));
     return { summary: { ...result.totals, employeeCount: result.members.length }, rows, total, page, limit, view,
+      ...(view === 'overview' ? { teamHighlights: result.teams.map(row => ({ ...row, teamName: maps.team.get(row.team) || 'Needs team allocation' })) } : {}),
       period: result.period, asOf: result.asOf, provisional: true,
       warnings: result.warnings.map(({ code, count }) => ({ code, count })),
       scope: { mode: access.mode, financialAccess: access.includeBilling, canConfigure: ['admin', 'alpha'].includes(user.role) },

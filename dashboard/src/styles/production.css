@@ -146,3 +146,49 @@
 .prod-preparation-note summary { cursor:pointer; margin-bottom:10px; }
 .production-billing .billing-report .prod-section-heading { flex-wrap:wrap; }
 @media(max-width:560px) { .production-billing .billing-summary-grid { grid-template-columns:1fr; } }
+
+/* Keep the report close to its controls on every Production tab. */
+.production-module { gap:14px; }
+.production-module .prod-filter-form { padding:12px 16px; }
+.production-module .prod-filter-grid.prod-main-filters { margin-top:0; }
+.production-module .prod-filter-hint { margin:6px 0; font-size:11px; }
+.production-module .prod-filter-actions { margin-top:8px; }
+.production-module .prod-summary-grid { grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+.production-module .prod-card { padding:12px 16px; min-height:82px; gap:8px; }
+.production-module .prod-card > strong,.production-module .prod-card .prod-estimates { font-size:23px; }
+.production-module .prod-section-heading { padding:14px 16px; }
+.production-module .prod-table :is(th,td) { padding:11px 14px; }
+.production-module .prod-pagination { padding:10px 16px; }
+.production-module .prod-intro p { margin:0; font-size:12px; }
+.prod-highlights-heading { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; }
+.prod-highlights-heading h2 { margin:0; }
+.prod-highlights-heading > span { color:#748098; font-size:11px; }
+.prod-team-card-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+.prod-team-card { padding:18px; min-width:0; border-top:3px solid #4b6ee8 !important; }
+.prod-team-card:nth-child(3n+2) { border-top-color:#9865d7 !important; }
+.prod-team-card:nth-child(3n) { border-top-color:#149589 !important; }
+.prod-team-card header { display:flex; align-items:center; gap:10px; }
+.prod-team-icon { display:grid; place-items:center; flex:none; width:38px; height:38px; border-radius:10px; background:#edf2ff; color:#2853dc; }
+.prod-team-card header > div { flex:1; min-width:0; }
+.prod-team-card h3 { margin:0 0 4px; overflow-wrap:anywhere; }
+.prod-team-card header span:not(.prod-team-icon) { font-size:11px; color:#64738c; }
+.prod-team-card a { color:#2853dc; text-decoration:none; }
+.prod-team-card a:focus-visible { outline:3px solid #adbfff; outline-offset:3px; }
+.prod-team-production { display:grid; gap:3px; margin:16px 0 12px; }
+.prod-team-production > strong { font-size:29px; letter-spacing:-.03em; }
+.prod-team-production > span { color:#64738c; font-size:11px; }
+.prod-team-metrics { display:flex; flex-wrap:wrap; gap:7px 12px; font-size:11px; color:#64738c; }
+.prod-team-metrics b { color:#273751; margin-left:3px; }
+.prod-team-progress { background:#f5f7fc; border:1px solid #e9edf5; border-radius:9px; padding:12px; margin-top:14px; display:grid; gap:6px; }
+.prod-team-progress > div { display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#64738c; }
+.prod-team-progress strong { font-size:18px; color:#182338; }
+.prod-team-progress progress { width:100%; height:7px; border:0; border-radius:8px; overflow:hidden; accent-color:#2853dc; }
+.prod-team-progress progress::-webkit-progress-bar { background:#e7ecf8; }
+.prod-team-progress progress::-webkit-progress-value { background:#2853dc; border-radius:8px; }
+.prod-team-progress small { color:#64738c; font-size:11px; }
+.prod-team-card footer { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:end; gap:10px; margin-top:14px; padding-top:12px; border-top:1px solid #e0e6f0; font-size:11px; }
+.prod-team-card footer > div { display:grid; gap:3px; color:#64738c; }
+.prod-team-card footer strong { color:#182338; font-size:15px; }
+.prod-team-card footer a { display:inline-flex; align-items:center; gap:5px; }
+@media(max-width:1100px) { .prod-team-card-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:560px) { .prod-team-card-grid { grid-template-columns:1fr; } .prod-highlights-heading { align-items:flex-start; flex-direction:column; } .production-module .prod-summary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }

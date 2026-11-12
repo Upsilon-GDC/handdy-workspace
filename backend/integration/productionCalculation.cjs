@@ -97,6 +97,12 @@ async function report(user, query = {}) {
   return res;
 }
 test('Production API paginates and returns labeled real records without exposing raw datasets', async () => {
+  const overview = await report({ _id: actor, role: 'admin' }, { view: 'overview' });
+  assert.equal(overview.body.report.teamHighlights.length, 2);
+  assert.ok(overview.body.report.teamHighlights.every(row => row.teamName && Number.isFinite(row.productionSeconds)));
+  const personalOverview = await report(second, { view: 'overview' });
+  assert.ok(personalOverview.body.report.teamHighlights.every(row => row.billing === undefined));
+  assert.ok(personalOverview.body.report.teamHighlights.every(row => row.team === String(renau._id)));
   const res = await report({ _id: actor, role: 'admin' }, { limit: '1' });
   assert.equal(res.code, 200); assert.equal(res.body.report.total, 2); assert.equal(res.body.report.rows.length, 1);
   assert.equal(res.body.report.rows[0].fullName, first.fullName);

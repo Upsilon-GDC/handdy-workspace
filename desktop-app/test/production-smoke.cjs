@@ -47,6 +47,7 @@ function fixtureReport(query) {
     employeeName: employees.find(person => person._id === row.employee)?.fullName, teamName: teams.find(team => team._id === row.team)?.teamName || 'Needs team allocation',
     taskName: tasks.find(task => task._id === row.task)?.taskName, projectName: 'Audit', clientName: 'Acme Client' }));
   return { summary: { ...report.totals, employeeCount: report.members.length }, rows, total, page, limit, view,
+    ...(view === 'overview' ? { teamHighlights: report.teams.map(row => ({ ...row, teamName: teams.find(team => team._id === row.team)?.teamName || 'Needs team allocation' })) } : {}),
     period: report.period, asOf: report.asOf, provisional: true, warnings: report.warnings,
     scope: { mode: role === 'employee' ? 'personal' : 'company', canConfigure: role === 'admin', financialAccess: role === 'admin' },
     choices: { employees: roster, teams, clients, projects, tasks } };
@@ -111,6 +112,9 @@ app.whenReady().then(async () => {
       await win.loadURL(`${base}${route}`);
     }
     await loginAs('admin'); await ready('overview');
+    assert.equal(await evaluate(`document.querySelectorAll('.prod-team-card').length`), 2);
+    assert.equal(await evaluate(`document.querySelector('.prod-team-card progress').getAttribute('max')`), '100');
+    assert.equal(await evaluate(`document.querySelector('.prod-team-card').getBoundingClientRect().top < 600`), true, 'Team results appear without scrolling on desktop');
     assert.equal(await evaluate(`document.querySelectorAll('.crm-nav details[aria-label="Production"] a').length`), 8);
     assert.equal(await evaluate(`document.querySelector('.prod-money-card').textContent.includes('25.00')`), true);
     assert.equal(await evaluate(`[...document.querySelectorAll('.prod-card')].find(node=>node.firstChild.textContent==='Production hours').textContent.includes('2h 00m')`), true);
