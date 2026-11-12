@@ -112,6 +112,9 @@ app.whenReady().then(async () => {
     let batch = await Batch.findOne({ employee: employee._id }).lean(); assert.ok(batch);
     assert.equal(await evaluate(`document.querySelector('[aria-label="Billing review"]').textContent.includes('reviewer must verify')`), true);
     await click('Select all task entries (1)');
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Billable work"]').closest('details').open`), false, 'Detailed work starts collapsed');
+    assert.ok(await evaluate(`document.querySelector('.prod-assignment-scroll').getBoundingClientRect().height <= 261`));
+    assert.ok(await evaluate(`document.querySelector('[aria-label="Review note"]').compareDocumentPosition(document.querySelector('[aria-label="Team assignment review"]')) & Node.DOCUMENT_POSITION_FOLLOWING`), 'Review controls precede the task list');
     assert.equal(await evaluate(`document.querySelector('[aria-label="Team assignment review"] input[type="checkbox"]').checked`), true);
     await input('Review note', 'Verified work belongs to WCPA'); await click('Verify selected entries & refresh');
     await until(`!!document.querySelector('[aria-label="Billing review"]') && !document.querySelector('[aria-label="Team assignment review"]')`);
@@ -299,6 +302,8 @@ app.whenReady().then(async () => {
     assert.equal(await evaluate(`document.querySelector('[aria-label="Prepared employee reviews"]').textContent.includes('Hours Only Member')`), false);
     assert.equal(await evaluate(`document.querySelector('.prod-billing-history').open`), false);
     assert.equal(await evaluate(`!!document.querySelector('[aria-label="Project-wise billing summary"] .billing-project')`), true);
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Project-wise billing summary"] .billing-project').open`), false, 'Project task tables are collapsed by default');
+    await evaluate(`document.querySelector('[aria-label="Project-wise billing summary"] .billing-project > summary').click()`);
     assert.equal(await evaluate(`!!document.querySelector('[aria-label="Billing daily details"] details')`), true);
     await evaluate(`document.querySelector('[aria-label="Billing daily details"] summary').click()`);
     assert.equal(await evaluate(`document.querySelector('[aria-label="Billing daily details"] tbody').rows.length`), 1);
