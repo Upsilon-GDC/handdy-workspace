@@ -255,3 +255,8 @@
 .crm-content .production-billing .billing-summary-grid > article { padding:12px; }
 @media(max-width:1000px) { .crm-content .production-billing .billing-filters { grid-template-columns:repeat(3,minmax(0,1fr)); } }
 @media(max-width:560px) { .crm-content .production-billing .billing-filters { grid-template-columns:repeat(2,minmax(0,1fr)); } .crm-content .production-billing .billing-generate { grid-column:1/-1; } }
+.prod-bulk-result details { margin-top: 8px; }
+.prod-bulk-result summary { cursor: pointer; }
+.prod-bulk-result-list { max-height: 240px; overflow-y: auto; margin-top: 8px; }
+.prod-bulk-result-list > div { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(180px, 3fr) auto; gap: 12px; align-items: center; padding: 10px 0; }
+@media (max-width: 700px) { .prod-bulk-result-list > div { grid-template-columns: 1fr; } }

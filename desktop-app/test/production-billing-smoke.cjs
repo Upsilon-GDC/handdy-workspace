@@ -326,12 +326,22 @@ app.whenReady().then(async () => {
     const extra = await Employee.findOne({ employeeId: 'EXTRA-0' }).lean();
     await Employee.updateOne({ _id: extra._id }, { $set: { projectRates: [{ project: project._id, chargeRate: 25 }] } });
     await Log.create({ employee: extra._id, project: project._id, client: client._id, task: task._id, startedAt: `${date}T18:00:00Z`, stoppedAt: `${date}T19:00:00Z`, status: 'stopped', isActiveTimer: false });
+    const activeEmployee = await Employee.findOne({ employeeId: 'EXTRA-1' }).lean();
+    await Log.create({ employee: activeEmployee._id, project: project._id, client: client._id, task: task._id, startedAt: `${date}T17:00:00Z`, status: 'running', isActiveTimer: true });
     assert.equal(await evaluate(`!!document.querySelector('[aria-label="Employee bulk action"]')`), false, 'No technical action dropdown');
     await click('Select all employees'); await click('Prepare 27 for approval');
-    await until(`document.querySelector('.prod-success')?.textContent.includes('1 of 27') && !!document.querySelector('[aria-label="Billing review steps"]')`);
+    await until(`document.querySelector('.prod-bulk-result')?.textContent.includes('1 of 27') && !!document.querySelector('[aria-label="Billing review steps"]')`);
     assert.equal((await Batch.findOne({ employee: extra._id }).lean()).status, 'Submitted');
+    assert.equal(await evaluate(`document.querySelector('.prod-bulk-result').classList.contains('prod-warning')`), true, 'Partial failure is a warning, not success');
+    assert.equal(await evaluate(`document.querySelector('.prod-bulk-result').textContent.includes('Stop the active timer')`), true);
+    const activeBatch = await Batch.findOne({ employee: activeEmployee._id }).lean();
+    assert.equal(activeBatch.status, 'Draft');
+    assert.equal(activeBatch.snapshot.entries.some(entry => entry.verified), false, 'Blocked preparation does not verify assignments');
+    await evaluate(`document.querySelector('.prod-bulk-result summary').click()`);
+    win.setSize(1440, 1050); await pause(150);
+    fs.writeFileSync(path.join(reportOutput, 'billing-preparation-attention.png'), (await win.webContents.capturePage()).toPNG());
     await click('2. Approve billing (1)'); await click('Select all employees'); await click('Approve 1 employees');
-    await until(`document.querySelector('.prod-success')?.textContent.includes('1 of 1') && !!document.querySelector('[aria-label="Billing review steps"]')`);
+    await until(`document.querySelector('.prod-bulk-result')?.textContent.includes('1 of 1') && !!document.querySelector('[aria-label="Billing review steps"]')`);
     assert.equal((await Batch.findOne({ employee: extra._id }).lean()).status, 'Approved');
     assert.equal((await Batch.findById(batch._id).lean()).status, 'Finalized', 'Bulk actions leave finalized periods unchanged');
     // Optional Admin inclusion changes only this live report and its downloads.

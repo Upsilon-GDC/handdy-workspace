@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { getProductionBillingPeriod, actOnProductionBilling } from '../../api/productionApi';
 import getApiErrorMessage from '../../utils/getApiErrorMessage';
+import { preparationIssues } from '../../utils/billingPreparation';
 
 export default function BillingBulkActions({ review, onBusy, onDone }) {
   const [selected, setSelected] = useState([]);
@@ -27,15 +28,17 @@ export default function BillingBulkActions({ review, onBusy, onDone }) {
         if (stage === 'approve') await send(batch, 'approve');
         else {
           batch = await send(batch, 'refresh');
+          const issues = preparationIssues(batch);
+          if (issues.length) throw new Error(issues.join(' '));
           const allocations = batch.snapshot.entries.filter(entry => !entry.verified).map(entry => ({ timeLog: entry.timeLog, expectedVersion: entry.allocationVersion }));
           if (allocations.length) batch = await send(batch, 'verify-allocations', { verificationHash: batch.verificationHash, allocations });
           await send(batch, 'submit');
         }
         saved++;
-      } catch (error) { failures.push(`${row.snapshot.employeeName}: ${getApiErrorMessage(error, error.message || 'Unable to save')}`); }
+      } catch (error) { failures.push({ id: row._id, employee: row.snapshot.employeeName, message: error.isAxiosError || error.response ? getApiErrorMessage(error, 'Unable to save') : error.message || 'Unable to save' }); }
     }
     setSelected([]); setBusy(false); onBusy(false);
-    onDone(`${saved} of ${chosen.length} employee periods ${stage === 'prepare' ? 'submitted for approval' : 'approved'}.${failures.length ? ` Needs attention: ${failures.join(' ? ')}` : ''}`);
+    onDone({ summary: `${saved} of ${chosen.length} employee periods ${stage === 'prepare' ? 'submitted for approval' : 'approved'}.`, failures });
   };
   return <div className="prod-bulk-actions" aria-label="Bulk employee review">
     <div className="prod-simple-steps" role="group" aria-label="Billing review steps"><button type="button" aria-pressed={stage === 'prepare'} disabled={busy} onClick={() => changeStage('prepare')}>1. Prepare for approval</button><button type="button" aria-pressed={stage === 'approve'} disabled={busy} onClick={() => changeStage('approve')}>2. Approve billing ({eligible('approve').length})</button></div>

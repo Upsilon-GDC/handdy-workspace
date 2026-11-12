@@ -7,16 +7,12 @@ import getApiErrorMessage from '../../utils/getApiErrorMessage';
 import { productionTeamEmployees, productionDates, productionDuration as duration, productionMoney as money } from '../../utils/production';
 import ProductionBillingReport from '../../components/production/ProductionBillingReport';
 import BillingBulkActions from '../../components/production/BillingBulkActions';
+import { billingBlockerMessages } from '../../utils/billingPreparation';
 import { billingPeriodDates } from '../../utils/billingReviewGroups';
 import '../../styles/billingPage.css';
 import '../../styles/production.css';
 
-const blockers = { 'hours-only-team': 'Billing is disabled for this team in the selected period.', 'no-billable-work': 'No eligible billable work was found.',
-  'missing-or-mismatched-rate': 'Configure valid rates in the team’s currency, then refresh the estimate.', 'billing-configuration-needs-review': 'Ask an authorized billing reviewer to check the billing configuration.',
-  'running-timer': 'Stop the active timer before submitting this period.', 'unverified-team-allocation': 'A billing reviewer must verify the team assignments.',
-  'needs-team-allocation': 'Some work has an ambiguous team assignment.', 'needs-activity-classification': 'Some work needs an activity classification.',
-  'overlapping-work-needs-review': 'Conflicting work intervals need review.', 'future-period': 'Choose a period ending today or earlier.',
-  'invalid-pause': 'Some pause records need review.', 'invalid-or-empty-interval': 'Some time intervals need review.' };
+const blockers = billingBlockerMessages;
 const labels = { refresh: 'Refresh estimate', submit: 'Submit for review', approve: 'Approve', reject: 'Reject', finalize: 'Finalize billing' };
 function Amounts({ billing }) {
   if (!billing?.applicable) return <span className="prod-muted">Not applicable</span>;
@@ -26,6 +22,7 @@ export default function ProductionBillingPage() {
   const [params, setParams] = useSearchParams();
   const selectedId = params.get('id');
   const reviewIds = params.get('review') || '';
+  const [bulkResult, setBulkResult] = useState(null);
   const [review, setReview] = useState(null), [reviewLoading, setReviewLoading] = useState(false), [exporting, setExporting] = useState(false);
   const [startDate, endDate] = productionDates('today');
   const [draft, setDraft] = useState({ team: '', employee: '', period: 'today', startDate, endDate, reason: '' });
@@ -84,7 +81,7 @@ export default function ProductionBillingPage() {
     finally { setExporting(false); }
   };
   const create = async event => {
-    event.preventDefault(); setBusy(true); setError(''); setMessage('');
+    event.preventDefault(); setBulkResult(null); setBusy(true); setError(''); setMessage('');
     try { const result = await prepareProductionBillingReview({ ...draft, reason: draft.reason.trim() || 'Prepare billing review report', requestId: createRequest.current }); createRequest.current = crypto.randomUUID(); setParams({ review: result.ids.join(','), ...(result.ids.length === 1 ? { id: result.ids[0] } : {}) }, { replace: true }); setRefresh(value => value + 1); setMessage(`Prepared ${result.ids.length} employee ${result.ids.length === 1 ? 'period' : 'periods'} for review. Resolve any review items before submitting.`); }
     catch (error) { setError(getApiErrorMessage(error)); }
     finally { setBusy(false); }
@@ -136,6 +133,7 @@ export default function ProductionBillingPage() {
     </section>;
   return <DashboardLayout title="Billing management"><section className="production-module production-billing billing-page">
     {error && <div className="prod-error" role="alert">{error}<button className="prod-secondary" disabled={busy} onClick={() => setRefresh(value => value + 1)}>Reload</button></div>}
+    {bulkResult && <div className={`prod-bulk-result ${bulkResult.failures.length ? 'prod-warning' : 'prod-success'}`} role="status"><strong>{bulkResult.summary}</strong>{bulkResult.failures.length > 0 && <details><summary>{bulkResult.failures.length} employees need attention: view next steps</summary><div className="prod-bulk-result-list">{bulkResult.failures.map(row => <div key={row.id}><strong>{row.employee}</strong><span>{row.message}</span><button type="button" className="prod-secondary" disabled={busy} onClick={() => open(row.id)}>Review employee</button></div>)}</div></details>}</div>}
     {message && <p className="prod-success" role="status">{message}</p>}
     <section className="prod-panel prod-settings-form"><h2>Billing report</h2>
       <form onSubmit={create} aria-label="Prepare billing period"><fieldset disabled={busy || !listing}>
@@ -154,7 +152,7 @@ export default function ProductionBillingPage() {
     </section>
     {!review && !reviewLoading && !selectedId && <section className="billing-empty prod-panel"><h3>Choose a team, members and period</h3><p>Select All members for a combined team report, or choose one employee.</p></section>}
     {reviewLoading && <p role="status" className="prod-status">Preparing review report...</p>}
-    {review && !reviewLoading && <ProductionBillingReport review={review} reviewPanel={billingReview}><section className="prod-panel billing-report" aria-label="Prepared billing review report"><div className="prod-section-heading prod-billing-list-heading"><div><h2>{review.data.selection.team} / Billing review</h2><p>{review.items.length} employees / {review.data.period.startDate} to {review.data.period.endDate}</p><p>Check each employee before submitting for approval. Excel includes all work rows.</p></div>{review.canExport && <button type="button" className="prod-primary" disabled={busy || exporting} onClick={downloadReview}>{exporting ? 'Downloading...' : 'Download review Excel'}</button>}</div><BillingBulkActions key={reviewIds} review={review} onBusy={setBusy} onDone={result => { setMessage(result); setRefresh(value => value + 1); }} /><div className="prod-table-wrap prod-employee-review-scroll"><table className="prod-table" aria-label="Prepared employee reviews"><thead><tr><th>Employee</th><th>Eligible work</th><th>Billing</th><th>Status</th><th>Review items</th><th>Review</th></tr></thead><tbody>{review.items.map(row => <tr key={row._id}><td>{row.snapshot.employeeName}</td><td>{duration(row.snapshot.summary.eligibleClientWorkSeconds)}</td><td>{row.financialAccess ? <Amounts billing={row.snapshot.summary.billing} /> : 'Amounts restricted'}</td><td><span className={`prod-billing-status is-${row.status.toLowerCase()}`}>{row.status}</span></td><td>{row.snapshot.blockers.length ? `${row.snapshot.blockers.length} to resolve` : 'Ready for review'}</td><td><button type="button" className="prod-secondary" disabled={busy || exporting} onClick={() => open(row._id)}>Review employee</button></td></tr>)}</tbody></table></div></section></ProductionBillingReport>}
+    {review && !reviewLoading && <ProductionBillingReport review={review} reviewPanel={billingReview}><section className="prod-panel billing-report" aria-label="Prepared billing review report"><div className="prod-section-heading prod-billing-list-heading"><div><h2>{review.data.selection.team} / Billing review</h2><p>{review.items.length} employees / {review.data.period.startDate} to {review.data.period.endDate}</p><p>Check each employee before submitting for approval. Excel includes all work rows.</p></div>{review.canExport && <button type="button" className="prod-primary" disabled={busy || exporting} onClick={downloadReview}>{exporting ? 'Downloading...' : 'Download review Excel'}</button>}</div><BillingBulkActions key={reviewIds} review={review} onBusy={setBusy} onDone={result => { setMessage(''); setBulkResult(result); setRefresh(value => value + 1); }} /><div className="prod-table-wrap prod-employee-review-scroll"><table className="prod-table" aria-label="Prepared employee reviews"><thead><tr><th>Employee</th><th>Eligible work</th><th>Billing</th><th>Status</th><th>Review items</th><th>Review</th></tr></thead><tbody>{review.items.map(row => <tr key={row._id}><td>{row.snapshot.employeeName}</td><td>{duration(row.snapshot.summary.eligibleClientWorkSeconds)}</td><td>{row.financialAccess ? <Amounts billing={row.snapshot.summary.billing} /> : 'Amounts restricted'}</td><td><span className={`prod-billing-status is-${row.status.toLowerCase()}`}>{row.status}</span></td><td>{row.snapshot.blockers.length ? `${row.snapshot.blockers.length} to resolve` : 'Ready for review'}</td><td><button type="button" className="prod-secondary" disabled={busy || exporting} onClick={() => open(row._id)}>Review employee</button></td></tr>)}</tbody></table></div></section></ProductionBillingReport>}
     <details className="prod-panel prod-billing-history"><summary>Previous billing reports</summary><div className="prod-section-heading prod-billing-list-heading"><h2>Billing periods</h2><div className="prod-billing-list-filters">
       <label>Team<select aria-label="Billing list team" disabled={loading || busy} value={query.team} onChange={event => setQuery(previous => ({ ...previous, team: event.target.value, employee: 'all', page: 1 }))}><option value="all">All available teams</option>{choices.teams.map(row => <option key={row._id} value={row._id}>{row.teamName}</option>)}</select></label>
       <label>Employee<select aria-label="Billing list employee" disabled={loading || busy} value={query.employee} onChange={event => setQuery(previous => ({ ...previous, employee: event.target.value, page: 1 }))}><option value="all">All available employees</option>{productionTeamEmployees(choices.employees, query.team).map(row => <option key={row._id} value={row._id}>{row.fullName}</option>)}</select></label>
