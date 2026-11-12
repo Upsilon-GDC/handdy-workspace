@@ -1,4 +1,7 @@
 .production-module { color:#182338; display:grid; gap:20px; min-width:0; }
+.crm-page:has(> .production-module) > .crm-page-header { margin-bottom:10px; padding:0; }
+.production-module > .prod-intro { margin:0; padding:0; }
+.production-module > .prod-intro .prod-kicker { display:none; }
 .production-module *, .production-settings * { box-sizing:border-box; }
 .prod-intro { display:flex; justify-content:space-between; align-items:center; gap:16px; }
 .prod-intro p { margin:4px 0; color:#66738b; font-size:13px; }
