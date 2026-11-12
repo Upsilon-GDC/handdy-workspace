@@ -252,7 +252,7 @@ function harness({ role = "employee", clock } = {}) {
         return json({ serverNow: state.startServerNow, replayed: state.startReplayed, timeLog: {
           _id: "log-1", status: "running", startedAt: state.startStartedAt || new Date().toISOString(),
           project: { _id: body.project }, client: body.client ? { _id: body.client } : null,
-          task: { _id: body.task, taskType: "work" }, pauses: [],
+          task: { _id: body.task, taskType: state.startTaskType || "work" }, pauses: [],
         } });
       }
       if (url.includes("/time-logs/stop")) {
@@ -271,25 +271,136 @@ function harness({ role = "employee", clock } = {}) {
   return { state, context, intervals, project: nodes.get("projectSelect"), client: nodes.get("clientSelect"), task: nodes.get("taskSelect"), run: (source) => vm.runInContext(source, context) };
 }
 
-test("Training waits for a confirmed start before counting, with no speculative clock to reset", async () => {
-  const h = harness();
+test("Training starts its local display and unlocks immediately while saving the timer", async () => {
+  const clock = { now: Date.parse('2026-11-12T10:00:00.000Z') };
+  const h = harness({ clock });
   h.state.tasks.p1[0].taskName = "Training";
   await h.context.loadClients(); await h.context.loadProjects();
   await h.project.choose("p1"); await h.client.choose("client-a"); await h.task.choose("t1");
+  h.run('timerStateConfirmed = true;');
   let release;
   h.state.pendingStart = new Promise(resolve => { release = resolve; });
   const starting = h.context.startTimer();
   assert.equal(h.run("timerStatus.textContent"), "Starting...");
   assert.equal(h.run("timerDuration.textContent"), "00:00:00");
-  assert.equal(h.intervals.size, 0, "network wait must not start an unrecorded clock");
+  assert.equal(h.run('getTimerLockState()'), 'running');
+  assert.equal(h.run('currentTimeLog'), null, 'Preview must not fabricate a saved timer');
+  assert.equal(h.intervals.size, 1);
+  clock.now += 1500;
+  for (const interval of h.intervals.values()) interval.callback();
+  assert.equal(h.run('timerDuration.textContent'), '00:00:01');
+  h.state.startStartedAt = new Date(clock.now).toISOString();
   release(); await starting;
   assert.equal(h.state.startRequests.length, 1);
   assert.equal(h.run("timerStatus.textContent"), "Working");
+  assert.equal(h.run('timerDuration.textContent'), '00:00:01', 'Confirmation must not reset the displayed preview to zero');
   assert.equal(h.intervals.size, 1);
+  assert.equal(h.run('pendingStartPreview'), null);
   assert.equal([...h.intervals.values()][0].delay, 200);
   const start = h.run("new Date(currentTimeLog.startedAt).getTime()");
   assert.equal(h.context.calculateCurrentWorkSeconds(h.run("currentTimeLog"), start + 2000), 2);
   assert.equal(h.context.calculateCurrentWorkSeconds(h.run("currentTimeLog"), start + 3000), 3);
+});
+
+for (const taskType of ['work', 'break']) {
+  test(`${taskType} counter never jumps backwards when a delayed Start is confirmed`, async () => {
+    const clock = { now: Date.parse('2026-11-12T10:00:00.000Z') };
+    const h = harness({ clock });
+    h.state.tasks.p1[0].taskType = taskType; h.state.startTaskType = taskType;
+    await readyToStart(h);
+    let release;
+    h.state.pendingStart = new Promise(resolve => { release = resolve; });
+    const starting = h.context.runTimerAction(h.context.startTimer);
+    const shown = () => h.run(taskType === 'break' ? 'breakDuration.textContent' : 'timerDuration.textContent');
+    clock.now += 2500;
+    for (const interval of h.intervals.values()) interval.callback();
+    assert.equal(shown(), '00:00:02');
+    h.state.startStartedAt = new Date(clock.now).toISOString(); h.state.startServerNow = h.state.startStartedAt;
+    release(); await starting;
+    assert.equal(shown(), '00:00:02', 'The handoff must preserve the last displayed value');
+    assert.equal(h.run('currentTimeLog.startedAt'), h.state.startStartedAt);
+    assert.equal(h.context.calculateCurrentWorkSeconds(h.run('currentTimeLog')), 0, 'Recorded elapsed time is unchanged');
+    clock.now += 1000;
+    for (const interval of h.intervals.values()) interval.callback();
+    assert.equal(shown(), '00:00:02');
+    clock.now += 2000;
+    for (const interval of h.intervals.values()) interval.callback();
+    assert.equal(shown(), '00:00:03', 'The saved clock takes over once it catches up');
+    await h.context.runTimerAction(h.context.stopTimer);
+    assert.equal(h.run('timerDuration.textContent'), '00:00:00');
+    assert.equal(h.run('breakDuration.textContent'), '00:00:00');
+    await h.task.choose('t1');
+    h.state.pendingStart = null;
+    h.state.startStartedAt = new Date(clock.now).toISOString(); h.state.startServerNow = h.state.startStartedAt;
+    await h.context.runTimerAction(h.context.startTimer);
+    assert.equal(shown(), '00:00:00', 'The display floor must not carry into a new timer');
+  });
+}
+
+for (const failure of ['refused', 'offline']) {
+  test(`an immediate Start preview is cleared after ${failure}, and double clicks do not create another start`, async () => {
+    const clock = { now: Date.parse('2026-11-12T10:00:00.000Z') };
+    const h = harness({ clock });
+    await readyToStart(h);
+    h.run('timerStateConfirmed = true; timerStatus.textContent = "Not Started";');
+    let release;
+    h.state.pendingStart = new Promise(resolve => { release = resolve; });
+    if (failure === 'offline') h.state.startFailures = 1;
+    else h.state.startError = { status: 403, body: { message: 'This task is no longer available.' } };
+    const starting = h.context.runTimerAction(h.context.startTimer);
+    await h.context.runTimerAction(h.context.startTimer);
+    assert.equal(h.state.startRequests.length, 1);
+    assert.equal(h.run('getTimerLockState()'), 'running');
+    assert.equal(h.run('stopTimerButton.disabled'), true);
+    clock.now += 2500;
+    for (const interval of h.intervals.values()) interval.callback();
+    assert.equal(h.run('timerDuration.textContent'), '00:00:02');
+    release(); await starting;
+    assert.equal(h.run('pendingStartPreview'), null);
+    assert.equal(h.run('currentTimeLog'), null);
+    assert.equal(h.intervals.size, 0);
+    assert.equal(h.run('timerDuration.textContent'), '00:00:00');
+    assert.equal(h.run('timerStatus.textContent'), 'Not Started');
+    assert.equal(h.run('getTimerLockState()'), failure === 'refused' ? 'locked' : 'inactive');
+    assert.match(h.run('timerMessage.textContent'), failure === 'refused' ? /no longer available/ : /Unable to reach/);
+    assert.equal(h.state.startBodies[0].startedAt, undefined, 'Local preview time is not sent as recorded work');
+  });
+}
+
+test('Break starts its own preview immediately while Work time stays at zero', async () => {
+  const clock = { now: Date.parse('2026-11-12T10:00:00.000Z') };
+  const h = harness({ clock });
+  h.state.tasks.p1[0].taskType = 'break'; h.state.startTaskType = 'break';
+  await readyToStart(h);
+  h.run('timerStateConfirmed = true;');
+  let release;
+  h.state.pendingStart = new Promise(resolve => { release = resolve; });
+  const starting = h.context.runTimerAction(h.context.startTimer);
+  clock.now += 2100;
+  for (const interval of h.intervals.values()) interval.callback();
+  assert.equal(h.run('getTimerLockState()'), 'running');
+  assert.equal(h.run('timerDuration.textContent'), '00:00:00');
+  assert.equal(h.run('breakDuration.textContent'), '00:00:02');
+  assert.equal(h.run('stopBreakButton.hidden'), true, 'Wait for the saved timer before enabling Stop Break');
+  h.state.startStartedAt = new Date(clock.now).toISOString(); h.state.startServerNow = h.state.startStartedAt;
+  release(); await starting;
+  assert.equal(h.run('pendingStartPreview'), null);
+  assert.equal(h.intervals.size, 1);
+  assert.equal(h.run('stopBreakButton.disabled'), false);
+  assert.equal(h.run('currentTimeLog.startedAt'), h.state.startStartedAt);
+});
+
+test('session cleanup cancels the preview and ignores a late Start response', async () => {
+  const h = harness(); await readyToStart(h);
+  let release;
+  h.state.pendingStart = new Promise(resolve => { release = resolve; });
+  const starting = h.context.runTimerAction(h.context.startTimer);
+  h.run('localStorage.removeItem("token"); clearSessionLoops();');
+  assert.equal(h.run('pendingStartPreview'), null);
+  assert.equal(h.intervals.size, 0);
+  release(); await starting;
+  assert.equal(h.run('currentTimeLog'), null);
+  assert.equal(h.run('getTimerLockState()'), 'inactive');
 });
 
 test("desktop client selector uses all active clients and starts promptly", async () => {

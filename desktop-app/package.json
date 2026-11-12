@@ -1,6 +1,6 @@
 {
   "name": "handdy-desktop-app",
-  "version": "2.0.9",
+  "version": "2.0.12",
   "description": "Employee Time & Attendance System Desktop App",
   "main": "main.js",
   "scripts": {
@@ -44,6 +44,7 @@
       "login-startup.js",
       "app-updater.js",
       "timer-lock.js",
+      "timer-diagnostics.js",
       "lock-overlay.html",
       "preload.js",
       "api-config.js",

@@ -112,6 +112,49 @@ let idleAcknowledgedAt = null;
 let pendingIdleStop = null;
 let idlePolicy = null;
 let currentTimeLog = null;
+let pendingStartPreview = null;
+let pendingStartInterval = null;
+let startDisplayMinimum = null;
+const previewClockNow = () => globalThis.performance?.now?.() ?? Date.now();
+
+function liveDisplaySeconds(timeLog, seconds, clock) {
+  const minimum = startDisplayMinimum;
+  if (!minimum || minimum.clock !== clock) return seconds;
+  if (minimum.id !== String(timeLog?._id || '') || minimum.startedAt !== timeLog?.startedAt
+    || timeLog?.status !== 'running' || timeLog?.pauses?.length) {
+    startDisplayMinimum = null;
+    return seconds;
+  }
+  // Keep the last preview value until the saved clock reaches it. This is
+  // display-only: never add request latency to recorded work or timestamps.
+  if (seconds >= minimum.seconds) startDisplayMinimum = null;
+  return Math.max(seconds, minimum.seconds);
+}
+
+function pendingStartSeconds() {
+  return pendingStartPreview ? Math.max(0, Math.floor((previewClockNow() - pendingStartPreview.startedAt) / 1000)) : 0;
+}
+
+function stopPendingStartPreview() {
+  if (pendingStartInterval !== null) clearInterval(pendingStartInterval);
+  pendingStartInterval = null;
+  pendingStartPreview = null;
+}
+
+function startPendingStartPreview(isBreak) {
+  stopPendingStartPreview();
+  if (!currentTimeLog) startDisplayMinimum = null;
+  pendingStartPreview = { token: getToken(), startedAt: previewClockNow(), isBreak };
+  const paint = () => {
+    if (!pendingStartPreview) return;
+    if (pendingStartPreview.token !== getToken()) { stopPendingStartPreview(); return; }
+    if (currentTimeLog) return; // A confirmed record owns the saved/live clock.
+    timerDuration.textContent = formatDuration(isBreak ? 0 : pendingStartSeconds());
+    updateBreakUI();
+  };
+  paint();
+  pendingStartInterval = setInterval(paint, 200);
+}
 let serverClockOffsetMs = 0;
 function syncServerClock(serverNow, confirmedStart) {
   let at = typeof serverNow === 'string' ? Date.parse(serverNow) : NaN;
@@ -408,8 +451,9 @@ function getTimerLockState() {
   if (isLoginPage || !getToken() || logoutPending || appClosePending) return "inactive";
   if (!timerStateConfirmed || !serverReachable) return "inactive";
   if (pendingIdleStop) return "locked";
-  // A pending Start request is not a running timer. Keep the screen locked
-  // until the backend confirms the start; refused starts must never unlock it.
+  // Match 2.0.1: let the employee continue immediately while Start is sent.
+  // The preview is separate from saved time and is removed if Start fails.
+  if (pendingStartPreview) return "running";
   return currentTimeLog?.status === "running" || isIntentionalBreak(currentTimeLog) ? "running" : "locked";
 }
 
@@ -428,6 +472,8 @@ function noteServerResponse(response) {
 
 function clearSessionLoops() {
   syncTimerLock("inactive");
+  stopPendingStartPreview();
+  startDisplayMinimum = null;
   reportSnapshots.clear();
   serverClockOffsetMs = 0;
   profileRefreshed = timesheetRefreshed = null;
@@ -1160,7 +1206,8 @@ async function loadTasks(projectId, { background = false } = {}) {
 }
 
 function renderAvailableTasks(tasks) {
-    if (tasks.length === 0) {
+    const activeTask = currentTimeLog?.task;
+    if (tasks.length === 0 && !activeTask?._id) {
       renderTaskPlaceholder("No tasks available for this project");
       if (!currentTimeLog) setSelectedTaskId("", "loadTasks: project has no available tasks");
       return;
@@ -1191,21 +1238,27 @@ function renderAvailableTasks(tasks) {
       setSelectedTaskId("", "loadTasks: task is no longer active or assigned");
     }
 
+    if (activeTask?._id && String(activeTask._id) === selectedTaskId) {
+      ensureOption(taskSelect, activeTask._id, activeTask.taskName);
+    }
     taskSelect.value = selectedTaskId;
     taskSelect.disabled = Boolean(currentTimeLog);
     workSelectionMessage.textContent = "";
 }
+
+const timesheetTimeFormatter = new Intl.DateTimeFormat(undefined, {
+  hour: "2-digit", minute: "2-digit", second: "2-digit",
+});
+const timesheetDayFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit",
+});
 
 function formatTime(value) {
   if (!value) {
     return "—";
   }
 
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).format(new Date(value));
+  return timesheetTimeFormatter.format(new Date(value));
 }
 
 function endRevokedDeviceSession(reason = "This account is now active on another device.") {
@@ -1592,9 +1645,7 @@ function buildChronologicalTimeline(timeLogs, now = Date.now()) {
       || first.timeLogIndex - second.timeLogIndex
       || first.entryIndex - second.entryIndex
     );
-  const dayKey = (time) => new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit",
-  }).format(new Date(time));
+  const dayKey = (time) => timesheetDayFormatter.format(new Date(time));
   const timeline = [];
   let previousEnd = null;
   let previousTimeLog = null;
@@ -1661,6 +1712,7 @@ function getTimesheetView(timeLogs, { type = "all", taskId = "", status = "all" 
 }
 
 function renderTodayTimesheet(timeLogs, reportDate) {
+  const renderStartedAt = previewClockNow();
   todayTimesheetLogs = timeLogs;
   todayTimesheetReportDate = reportDate;
   const reportNow = Date.now();
@@ -1691,11 +1743,10 @@ function renderTodayTimesheet(timeLogs, reportDate) {
   todaySessions.textContent = String(timeLogs.length);
   todayTasks.textContent = String(taskIds.size);
   todayTimesheetBody.textContent = "";
-  const view = getTimesheetView(timeLogs, {}, reportNow);
-  todayTimesheetEmpty.hidden = view.timeline.length > 0;
+  todayTimesheetEmpty.hidden = timeline.length > 0;
   todayTimesheetEmpty.textContent = "No task time has been recorded today.";
 
-  view.timeline.forEach(({ timeLog, entry }) => {
+  timeline.forEach(({ timeLog, entry }) => {
       const row = document.createElement("tr");
       row.className = `timesheet-timeline-row timesheet-${entry.type}-row`;
       appendTimelineTypeCell(row, entry, timeLog);
@@ -1731,6 +1782,8 @@ function renderTodayTimesheet(timeLogs, reportDate) {
       appendTimesheetCell(row, formatDuration(entry.seconds));
       todayTimesheetBody.appendChild(row);
   });
+  const renderMilliseconds = previewClockNow() - renderStartedAt;
+  if (renderMilliseconds >= 100) console.debug('[timer-render]', JSON.stringify({ renderMilliseconds: Math.round(renderMilliseconds) }));
 }
 
 async function loadTodayTimesheet({ background = false, force = !background } = {}) {
@@ -1847,14 +1900,16 @@ function calculateBreakSeconds(timeLog) {
 }
 
 function updateBreakUI(timeLog = currentTimeLog) {
-  const onBreak = isBreakTask(timeLog) || isIntentionalBreak(timeLog);
+  const preview = !timeLog && pendingStartPreview;
+  const onBreak = preview ? preview.isBreak : isBreakTask(timeLog) || isIntentionalBreak(timeLog);
   const activeBreak = onBreak && ["running", "paused"].includes(timeLog?.status);
   if (stopBreakButton) {
     stopBreakButton.hidden = !activeBreak;
     stopBreakButton.disabled = !activeBreak || Boolean(timerAction) || logoutPending || appClosePending;
   }
   if (breakClock) breakClock.hidden = false;
-  const currentBreakDuration = formatDuration(calculateBreakSeconds(timeLog));
+  const currentBreakDuration = formatDuration(preview?.isBreak ? pendingStartSeconds()
+    : liveDisplaySeconds(timeLog, calculateBreakSeconds(timeLog), 'break'));
   if (breakDuration) breakDuration.textContent = currentBreakDuration;
   if (timesheetBreakDuration) timesheetBreakDuration.textContent = currentBreakDuration;
   setClassState(timerStatus, "status-break", onBreak);
@@ -1950,7 +2005,7 @@ function startLiveDuration(timeLog) {
     // A break-typed task never accrues "worked" time - its elapsed time is
     // shown under the break clock instead (see calculateBreakSeconds).
     timerDuration.textContent =
-      formatDuration(isBreakTask(timeLog) ? 0 : workedSeconds);
+      formatDuration(isBreakTask(timeLog) ? 0 : liveDisplaySeconds(timeLog, workedSeconds, 'work'));
     updateBreakUI(timeLog);
   };
 
@@ -1998,6 +2053,7 @@ async function loadActiveTimer() {
     stopLiveDuration();
     if (!data.timeLog) {
       currentTimeLog = null;
+      startDisplayMinimum = null;
       pendingIdleStop = null;
       automaticIdlePause = false;
       activeTaskIdleLogout = false;
@@ -2043,7 +2099,8 @@ async function loadActiveTimer() {
       selectedClientId = String(timeLog.client?._id || timeLog.client || "");
       updateClientName();
 
-      await loadTasks(timeLog.project._id);
+      // Restore confirmed work immediately; refresh dropdowns independently.
+      void loadTasks(timeLog.project._id, { background: true });
     }
 
     if (timeLog.task) {
@@ -2085,6 +2142,7 @@ async function loadActiveTimer() {
 }
 function completeStoppedTimer(timeLog, idleSeconds = 0) {
     stopLiveDuration();
+    startDisplayMinimum = null;
 
     currentTimeLog = null;
     timerStateConfirmed = true;
@@ -2395,16 +2453,15 @@ async function startTimer() {
 
   const previousStatus = timerStatus.textContent;
   const isStartingBreak = taskSelect.selectedOptions[0]?.dataset.taskType === "break";
+  let responseParsedAt = null;
   try {
     startTimerButton.disabled = true;
+    if (!currentTimeLog) stopTimerButton.disabled = true;
     timerStatus.textContent = "Starting...";
     timerMessage.textContent = "Starting timer...";
-    if (!isStartingBreak) {
-      // Request/validation time is not recorded work. Wait for the server's
-      // startedAt instead of displaying a speculative clock that jumps back
-      // when a slow start request completes.
-      timerDuration.textContent = "00:00:00";
-    }
+    // Immediate local feedback, as in 2.0.1. Do not fabricate currentTimeLog,
+    // send extra starts, or change the server's recorded startedAt.
+    startPendingStartPreview(isStartingBreak);
 
     syncTimerLock();
     const requestStartedAt = globalThis.performance?.now?.() ?? Date.now();
@@ -2432,8 +2489,10 @@ async function startTimer() {
     noteServerResponse(response);
 
     const data = await response.json();
+    if (getToken() !== token) return;
+    responseParsedAt = previewClockNow();
     console.debug('[timer-start]', JSON.stringify({ requestMilliseconds: Math.round((globalThis.performance?.now?.() ?? Date.now()) - requestStartedAt),
-      serverProcessingMilliseconds: data.startProcessingMilliseconds ?? null }));
+      serverProcessingMilliseconds: data.startProcessingMilliseconds ?? null, status: response.status }));
     if (response.ok) syncServerClock(data.serverNow, data.replayed ? undefined : data.timeLog?.startedAt);
     if (response.status < 500) pendingStartOperation = null;
 
@@ -2442,7 +2501,7 @@ async function startTimer() {
         // Usually an earlier start whose response was lost. Show the timer
         // the server is running instead of an error.
         await loadActiveTimer();
-        await loadTodayTimesheet();
+        void loadTodayTimesheet();
         timerMessage.textContent = "A timer was already running. It is shown again.";
         return;
       }
@@ -2458,7 +2517,7 @@ async function startTimer() {
     if (data.replayed && !["running", "paused"].includes(data.timeLog?.status)) {
       // The earlier start went through and has been stopped since.
       await loadActiveTimer();
-      await loadTodayTimesheet();
+      void loadTodayTimesheet();
       timerMessage.textContent = "That timer was already started and stopped. Your timesheet has been refreshed.";
       return;
     }
@@ -2467,6 +2526,13 @@ async function startTimer() {
 
     currentTimeLog = data.timeLog;
     timerStateConfirmed = true;
+    const previewSeconds = pendingStartSeconds();
+    const onBreak = isBreakTask(data.timeLog);
+    startDisplayMinimum = pendingStartPreview && !data.replayed && previewSeconds > 0
+      && pendingStartPreview.isBreak === onBreak && data.timeLog.status === 'running'
+      ? { id: String(data.timeLog._id), startedAt: data.timeLog.startedAt,
+        clock: onBreak ? 'break' : 'work', seconds: previewSeconds }
+      : null;
     clearNoteDraft();
     activeTaskIdleLogout = data.timeLog.task?.idleLogout === true
       || taskSelect.selectedOptions[0]?.dataset.idleLogout === "true";
@@ -2498,9 +2564,17 @@ async function startTimer() {
     startTimerButton.disabled = false;
   } finally {
     // runTimerAction re-reports the lock from the confirmed state.
-    if (!currentTimeLog) {
-      timerStatus.textContent = previousStatus;
-      timerDuration.textContent = "00:00:00";
+    if (responseParsedAt !== null) console.debug('[timer-confirm]', JSON.stringify({
+      confirmationMilliseconds: Math.round(previewClockNow() - responseParsedAt),
+    }));
+    stopPendingStartPreview();
+    if (getToken() === token) {
+      if (!currentTimeLog) {
+        timerStatus.textContent = previousStatus;
+        timerDuration.textContent = "00:00:00";
+      }
+      updateBreakUI();
+      syncTimerLock();
     }
   }
 }
