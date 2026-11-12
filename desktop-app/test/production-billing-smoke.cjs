@@ -206,8 +206,14 @@ app.whenReady().then(async () => {
     const headerIndex = (sheet, label) => sheet.getRow(1).values.findIndex(value => value === label);
     const summaryValue = (book, label) => { let value; book.getWorksheet('Summary').eachRow(row => { if (row.getCell(1).value === label) value = row.getCell(2).value; }); return value; };
     win.setSize(1440, 1050); await openReports(admin); await select('Report type', 'employee'); await generateReport();
+    assert.equal(await evaluate(`document.querySelectorAll('.prod-report-record').length`), 25, 'Cards are the default report view');
+    assert.equal(await evaluate(`document.querySelector('.prod-report-record dl').children.length === document.querySelector('[aria-label="Production report data"] thead tr').children.length - 1`), true, 'Cards retain every report field');
+    assert.equal(await evaluate(`!!document.querySelector('.production-reports > .prod-footnote')`), false, 'Bottom explanatory lines removed');
+    await click('Table'); assert.equal(await evaluate(`document.querySelector('[aria-label="Production report data"]').closest('[hidden]') === null`), true);
+    await click('Cards');
     assert.equal(await evaluate(`document.querySelector('[aria-label="Production report data"] tbody').rows.length`), 25);
     await click('Next'); assert.equal(await evaluate(`document.querySelector('[aria-label="Production report data"] tbody').rows.length`), 5);
+    assert.equal(await evaluate(`document.querySelectorAll('.prod-report-record').length`), 5);
     const live = await workbook(await download('Export Excel'));
     assert.equal(live.getWorksheet('Report data').rowCount, 31, 'Export includes all 30 employees, not only the visible page');
     assert.equal(summaryValue(live, 'Estimated USD'), 40);
