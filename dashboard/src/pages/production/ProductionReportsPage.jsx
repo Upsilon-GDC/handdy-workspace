@@ -30,7 +30,7 @@ export default function ProductionReportsPage() {
       if (controller.signal.aborted) return;
       // Preserve the exact signed data separately; translated UI warnings must
       // not change the exported snapshot or its integrity hash.
-      setReport({ ...value, uiWarnings: value.data.warnings.map(row => ({ ...row, message: productionWarnings[row.code] || row.code })) });
+      setReport({ ...value, uiWarnings: value.data.warnings.filter(row => row.code !== 'team-inferred-from-current-relationships').map(row => ({ ...row, message: productionWarnings[row.code] || row.code })) });
       if (value.choices) setChoices(previous => ({ ...value.choices,
         ...Object.fromEntries([['clients', 'client'], ['projects', 'project'], ['tasks', 'task']].map(([plural, singular]) => {
           const rows = value.choices[plural], selected = previous[plural].find(row => row._id === query[singular]);
