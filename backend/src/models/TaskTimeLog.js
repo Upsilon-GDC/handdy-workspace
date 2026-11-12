@@ -108,6 +108,8 @@ const taskTimeLogSchema = new mongoose.Schema(
     // Set by the server for every new live start. Null remains valid for
     // historical records and completed manual entries; do not backfill it.
     desktopHeartbeatAt: { type: Date, default: null },
+    // Last OS-idle sample only; no input contents or activity history.
+    desktopIdleSample: { type: new mongoose.Schema({ seconds: Number, observedAt: Date, appVersion: String }, { _id: false }), default: undefined },
     stopReason: { type: String, enum: ["desktop_disconnected"], default: null },
 
     // Records created by an authorized manager/admin instead of a live timer.

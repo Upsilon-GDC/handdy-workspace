@@ -4,7 +4,6 @@
 // the item without them (the route explains why if it is opened directly).
 const ALL_REPORTS = ["view_all_reports"];
 const TEAM_REPORTS = ["view_team_timesheets"];
-const BILLING = ["view_billing_amounts"];
 const WORK_SETUP_PATHS = ["/admin/project-client-links", "/admin/task-links", "/admin/client-access"];
 
 export const workspaceNavigation = [
@@ -23,10 +22,6 @@ export const workspaceNavigation = [
   { path: "/admin/timesheets/detailed", title: "Detailed timesheet", role: "admin", group: "Time & attendance", needs: ALL_REPORTS },
   { path: "/admin/timesheets/project-hours", title: "Project hours", role: "admin", group: "Time & attendance", needs: ALL_REPORTS },
   { path: "/admin/timesheets/attendance", title: "Attendance", role: "admin", group: "Time & attendance" },
-  { path: "/admin/production", title: "Overview", role: "admin", group: "Production", needs: BILLING },
-  { path: "/admin/production/team", title: "By team", role: "admin", group: "Production", needs: BILLING },
-  { path: "/admin/production/employee", title: "By employee", role: "admin", group: "Production", needs: BILLING },
-  { path: "/admin/billing", title: "Billing", role: "admin", group: "Finance", needs: BILLING },
   { path: "/admin/help", title: "Help", role: "admin", group: "System" },
   { path: "/admin/settings", title: "Idle & logout", role: "admin", group: "System" },
   { path: "/admin/working-hours", title: "Working Hours Settings", role: "admin", group: "System" },
@@ -64,10 +59,6 @@ export const workspaceNavigation = [
   { path: "/admin/timesheets/detailed", title: "Detailed timesheet", role: "manager", group: "Time & attendance", needs: ALL_REPORTS },
   { path: "/admin/timesheets/project-hours", title: "Project hours", role: "manager", group: "Time & attendance", needs: ALL_REPORTS },
   { path: "/admin/timesheets/attendance", title: "Attendance", role: "manager", group: "Time & attendance" },
-  { path: "/admin/production", title: "Overview", role: "manager", group: "Production", needs: BILLING },
-  { path: "/admin/production/team", title: "By team", role: "manager", group: "Production", needs: BILLING },
-  { path: "/admin/production/employee", title: "By employee", role: "manager", group: "Production", needs: BILLING },
-  { path: "/admin/billing", title: "Billing", role: "manager", group: "Finance", needs: BILLING },
   { path: "/admin/help", title: "Help", role: "manager", group: "System" },
   { path: "/admin/settings", title: "Idle & logout", role: "manager", group: "System" },
   { path: "/admin/working-hours", title: "Working Hours Settings", role: "manager", group: "System" },
@@ -87,11 +78,17 @@ export const workspaceNavigation = [
   { path: "/admin/timesheets/detailed", title: "Detailed timesheet", role: "hr", group: "Time & attendance", needs: ALL_REPORTS },
   { path: "/admin/timesheets/project-hours", title: "Project hours", role: "hr", group: "Time & attendance", needs: ALL_REPORTS },
   { path: "/admin/timesheets/attendance", title: "Attendance", role: "hr", group: "Time & attendance" },
-  { path: "/admin/production", title: "Overview", role: "hr", group: "Production", needs: BILLING },
-  { path: "/admin/production/team", title: "By team", role: "hr", group: "Production", needs: BILLING },
-  { path: "/admin/production/employee", title: "By employee", role: "hr", group: "Production", needs: BILLING },
-  { path: "/admin/billing", title: "Billing", role: "hr", group: "Finance", needs: BILLING },
   { path: "/admin/help", title: "Help", role: "hr", group: "System" },
+  ...['admin', 'manager', 'hr', 'team_lead', 'employee'].flatMap(role => [
+    { path: "/admin/production", title: 'Overview', role, group: 'Production' },
+    { path: "/admin/production/employee", title: 'Employees', activePaths: ['/admin/production/employee', '/admin/production/employee/details'], role, group: 'Production' },
+    { path: "/admin/production/team", title: 'Teams', role, group: 'Production' },
+    { path: "/admin/production/clients", title: 'Clients & projects', role, group: 'Production' },
+    { path: "/admin/production/tasks", title: 'Tasks', role, group: 'Production' },
+    { path: "/admin/production/billing", title: 'Billing management', role, group: 'Production' },
+    { path: "/admin/production/reports", title: 'Reports', role, group: 'Production' },
+    ...(role === 'admin' ? [{ path: "/admin/production/settings", title: 'Settings', role, group: 'Production' }] : []),
+  ]),
 ];
 
 // The menu for a role (alpha uses the admin menu), narrowed to the items
@@ -126,10 +123,6 @@ export const dutyNavigation = [
   { path: "/admin/timesheets/detailed", title: "Company detailed timesheet", group: "Time & attendance", anyOf: ALL_REPORTS },
   { path: "/admin/timesheets/project-hours", title: "Company project hours", group: "Time & attendance", anyOf: ALL_REPORTS },
   { path: "/admin/timesheets/attendance", title: "Company attendance", group: "Time & attendance", anyOf: ALL_REPORTS },
-  { path: "/admin/production", title: "Overview", group: "Production", anyOf: BILLING },
-  { path: "/admin/production/team", title: "By team", group: "Production", anyOf: BILLING },
-  { path: "/admin/production/employee", title: "By employee", group: "Production", anyOf: BILLING },
-  { path: "/admin/billing", title: "Billing", group: "Finance", anyOf: BILLING },
 ];
 
 // Duty pages for a person, leaving out anything their role menu already has.

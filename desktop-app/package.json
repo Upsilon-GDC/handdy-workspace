@@ -1,10 +1,12 @@
 {
   "name": "handdy-desktop-app",
-  "version": "2.0.6",
+  "version": "2.0.9",
   "description": "Employee Time & Attendance System Desktop App",
   "main": "main.js",
   "scripts": {
-    "test:billing": "set \"ELECTRON_RUN_AS_NODE=\" && electron test/billing-smoke.cjs",
+    "test:billing": "set \"ELECTRON_RUN_AS_NODE=\" && electron test/production-billing-smoke.cjs",
+    "test:production": "set \"ELECTRON_RUN_AS_NODE=\" && electron test/production-smoke.cjs",
+    "test:production-billing": "set \"ELECTRON_RUN_AS_NODE=\" && electron test/production-billing-smoke.cjs",
     "test": "node --test --test-isolation=none test/*.test.js && npm run test:electron && npm run test:startup && npm run test:dashboard && npm run test:activity-links && npm run test:manual-entry && npm run test:entry-edit && npm run test:overview && npm run test:project-tasks && npm run test:batch-links && npm run test:working-hours && npm run test:client-access && npm run test:catalog-cache && npm run test:collections",
     "test:collections": "set \"ELECTRON_RUN_AS_NODE=\" && electron test/collection-pages-smoke.cjs",
     "test:catalog-cache": "set \"ELECTRON_RUN_AS_NODE=\" && electron test/catalog-cache-smoke.cjs",

@@ -52,7 +52,7 @@ function getPersistentDeviceInfo() {
 }
 
 ipcMain.on("config:get-device-info", (event) => {
-  event.returnValue = getPersistentDeviceInfo();
+  event.returnValue = { ...getPersistentDeviceInfo(), appVersion: require('./package.json').version };
 });
 
 const APP_ORIGIN = PRODUCTION_APP_ORIGIN;

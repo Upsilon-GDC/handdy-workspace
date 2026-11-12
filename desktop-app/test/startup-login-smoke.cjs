@@ -66,7 +66,7 @@ app.whenReady().then(async () => {
   try {
     const api = 'https://crm-startup.invalid/api';
     ipcMain.on('config:get-api-base-url', event => { event.returnValue = api; });
-    ipcMain.on('config:get-device-info', event => { event.returnValue = { deviceId: 'startup-test-device', clientType: 'desktop' }; });
+    ipcMain.on('config:get-device-info', event => { event.returnValue = { deviceId: 'startup-test-device', clientType: 'desktop', appVersion: require('../package.json').version }; });
     ipcMain.handle('system:get-idle-time', () => 0);
     ipcMain.handle('system:idle-defaults', () => require('../idle-policy-defaults.json'));
     ipcMain.on('timer-lock:set', (_event, state) => { lockReports.push(state); });

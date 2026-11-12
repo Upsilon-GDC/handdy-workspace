@@ -35,8 +35,9 @@ const noSweep = (t) => t.mock.method(TaskTimeLog, "find", () => ({ lean: async (
 
 test('mapped timer starts reject an unlinked task without creating time', async t => {
   noSweep(t);
+  t.mock.method(TaskTimeLog, 'findOne', async () => null);
   t.mock.method(Project, 'findById', async () => ({ _id: 'project', status: 'Active', teams: ['team'], clients: ['client'], activityMappingEnabled: true }));
-  t.mock.method(Client, 'exists', async () => ({ _id: 'client' }));
+  t.mock.method(Client, 'findOne', () => ({ select: async () => ({ _id: 'client', clientName: 'Client' }) }));
   t.mock.method(Team, 'exists', async () => ({ _id: 'team' }));
   t.mock.method(Task, 'findOne', async () => ({ _id: 'task' }));
   t.mock.method(ActivityMapping, 'findOne', () => ({ select() { return this; }, lean: async () => null }));
@@ -123,11 +124,25 @@ test("stop totals close an open pause at the stop time and add reported idle tim
 function startMocks(t) {
   t.mock.method(Project, "findById", async () => ({ _id: "project", status: "Active", teams: ["team"] }));
   t.mock.method(Team, "exists", async () => true);
-  t.mock.method(Client, "exists", async () => true);
+  t.mock.method(Client, 'findOne', () => ({ select: async () => ({ _id: 'client', clientName: 'Client' }) }));
   t.mock.method(Task, "findOne", async () => ({ _id: "task", isActive: true }));
   noSweep(t);
 }
 const startedDoc = (extra = {}) => ({ ...running({ startOperationId: OP }), populate: async () => {}, ...extra });
+
+test('a fresh start reuses validated references without exposing private metadata or repopulating them', async t => {
+  startMocks(t);
+  t.mock.method(Project, 'findById', async () => ({ _id: 'project', status: 'Active', teams: ['team'], projectName: 'Audit', projectCode: 'P1', description: 'private project notes' }));
+  t.mock.method(Task, 'findOne', async () => ({ _id: 'task', taskName: 'Break', taskType: 'break', idleLogout: true, assignedTo: ['private-employee'] }));
+  t.mock.method(Client, 'findOne', () => ({ select: async () => ({ _id: 'client', clientName: 'Client', email: 'private@example.invalid' }) }));
+  t.mock.method(TaskTimeLog, 'findOne', async () => null);
+  t.mock.method(TaskTimeLog, 'create', async data => startedDoc({ ...data, populate: async () => assert.fail('fresh start must not repeat validated-reference reads') }));
+  const res = await call(startTimer, { project: 'project', task: 'task', client: 'client' });
+  assert.equal(res.statusCode, 201);
+  assert.deepEqual(res.body.timeLog.project, { _id: 'project', projectName: 'Audit', projectCode: 'P1' });
+  assert.deepEqual(res.body.timeLog.task, { _id: 'task', taskName: 'Break', taskType: 'break', idleLogout: true });
+  assert.deepEqual(res.body.timeLog.client, { _id: 'client', clientName: 'Client' });
+});
 
 test("all new live starts are leased despite omitted, web or forged client metadata", async (t) => {
   startMocks(t);

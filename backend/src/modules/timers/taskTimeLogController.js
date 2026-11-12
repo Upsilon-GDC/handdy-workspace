@@ -17,6 +17,9 @@ const { withEmployeeTimeWrite } = require('../../services/timeEntryWrites');
 const { beginReportSync, changedTimeLogFilter, deltaRows, reportChecksum, wantsChecksum } = require("../../services/reportSync");
 const { teamMemberFilter } = require("../../services/teamScope");
 
+const { getSettings } = require('../../services/idlePolicySettings');
+const { resolveIdlePolicy } = require('../../utils/idlePolicy');
+
 const APP_TIMEZONE = process.env.APP_TIMEZONE || "Asia/Kolkata";
 // Expose existing client relationships for reports; no new data or permissions.
 const reportProjectPopulation = {
@@ -146,10 +149,25 @@ const readOperationId = (value) => {
 const sameId = (a, b) => String(a?._id || a || "") === String(b?._id || b || "");
 
 const populateStartedTimer = async (timeLog) => {
-    await timeLog.populate("project", "projectCode projectName serviceType");
-    await timeLog.populate("client", "clientName");
-    await timeLog.populate("task", "taskCode taskName idleLogout taskType");
+    await timeLog.populate([
+        { path: 'project', select: 'projectCode projectName serviceType' },
+        { path: 'client', select: 'clientName' },
+        { path: 'task', select: 'taskCode taskName idleLogout taskType' },
+    ]);
     return timeLog;
+};
+
+// A fresh start already validated these records. Reuse that snapshot instead
+// of paying for three more database lookups before the desktop can start its
+// clock. Keep exactly the same reference-field allowlists as replay population.
+const startedTimerResponse = (timeLog, project, task, client) => {
+    const reference = (record, fields) => record ? Object.fromEntries(['_id', ...fields].filter(key => record[key] !== undefined).map(key => [key, record[key]])) : null;
+    return {
+        ...(typeof timeLog.toObject === 'function' ? timeLog.toObject() : timeLog),
+        project: reference(project, ['projectCode', 'projectName', 'serviceType']),
+        task: reference(task, ['taskCode', 'taskName', 'idleLogout', 'taskType']),
+        client: reference(client, ['clientName']),
+    };
 };
 
 // A start that already happened under this operation ID: return it, unless the
@@ -167,6 +185,7 @@ const replayStart = async (res, timeLog, { project, task, client }) => {
         replayed: true,
         message: "Timer started successfully.",
         timeLog: await populateStartedTimer(timeLog),
+        serverNow: new Date().toISOString(),
     });
 };
 
@@ -208,6 +227,7 @@ const computeStopValues = (timer, stoppedAt, reportedIdleSeconds) => {
 
 // Start Timer
 const startTimer = async (req, res) => withEmployeeTimeWrite(req.user._id, async () => {
+    const processingStarted = performance.now();
     try {
         const employeeId = req.user._id;
         const { project, task, note, client } = req.body;
@@ -230,9 +250,12 @@ const startTimer = async (req, res) => withEmployeeTimeWrite(req.user._id, async
             if (earlier) return replayStart(res, earlier, { project, task, client });
         }
 
-        await closeStaleDesktopTimers(new Date(), employeeId);
-
-        const projectExists = await Project.findById(project);
+        const [projectExists, clientExists, workScope] = await Promise.all([
+            Project.findById(project),
+            client ? Client.findOne({ _id: client, status: 'Active' }).select('clientName') : Promise.resolve(null),
+            buildEmployeeScope(req.user, { projectId: project }),
+            closeStaleDesktopTimers(new Date(), employeeId),
+        ]);
 
         if (!projectExists || projectExists.status !== "Active" || projectExists.deletedAt) {
             return res.status(404).json({
@@ -241,11 +264,10 @@ const startTimer = async (req, res) => withEmployeeTimeWrite(req.user._id, async
             });
         }
 
-        if (client && !await Client.exists({ _id: client, status: "Active" })) {
+        if (client && !clientExists) {
             return res.status(400).json({ success: false, message: "Select a valid active client." });
         }
 
-        const workScope = await buildEmployeeScope(req.user, { projectId: projectExists._id });
         if (!projectAllowedForTeam(projectExists, workScope, req.user)) {
             return res.status(403).json({ success: false, message: "This project is not available to your work teams." });
         }
@@ -273,12 +295,11 @@ const startTimer = async (req, res) => withEmployeeTimeWrite(req.user._id, async
             });
         }
 
-        const activitySelection = await validateActivitySelection(projectExists, client, task, req.user);
+        const [activitySelection, activeTimer] = await Promise.all([
+            validateActivitySelection(projectExists, client, task, req.user),
+            TaskTimeLog.findOne({ employee: employeeId, status: { $in: ['running', 'paused'] } }),
+        ]);
         if (activitySelection.error) return res.status(400).json({ success: false, message: activitySelection.error });
-        const activeTimer = await TaskTimeLog.findOne({
-            employee: employeeId,
-            status: { $in: ["running", "paused"] },
-        });
 
         if (activeTimer) {
             return res.status(400).json({
@@ -309,7 +330,9 @@ const startTimer = async (req, res) => withEmployeeTimeWrite(req.user._id, async
         return res.status(201).json({
             success: true,
             message: "Timer started successfully.",
-            timeLog: await populateStartedTimer(timeLog),
+            timeLog: startedTimerResponse(timeLog, projectExists, taskExists, clientExists),
+            serverNow: new Date().toISOString(),
+            startProcessingMilliseconds: Math.round(performance.now() - processingStarted),
         });
     } catch (error) {
         if (error.code === 11000) {
@@ -340,6 +363,13 @@ const sweepBeforeReport = (employeeId) => (isOn("reportsSkipSweep")
 const heartbeatTimer = async (req, res) => {
     try {
         const employeeId = req.user._id;
+        const sample = req.body?.osIdleSeconds;
+        const requestedTimer = req.body?.timeLogId;
+        if (requestedTimer !== undefined && !mongoose.isValidObjectId(requestedTimer)) return res.status(400).json({ success: false, message: 'Invalid timer heartbeat.' });
+        const timerMatch = requestedTimer ? { _id: requestedTimer } : {};
+        if (sample !== undefined && (!Number.isSafeInteger(sample) || sample < 0 || sample > 604800)) return res.status(400).json({ success: false, message: 'Invalid computer inactivity sample.' });
+        const sampleUpdate = sample === undefined ? {} : { desktopIdleSample: { seconds: sample, observedAt: new Date(),
+          appVersion: typeof req.body?.appVersion === 'string' ? req.body.appVersion.slice(0, 32) : '' } };
         if (isOn("heartbeatSingleWrite")) {
             // One write in the normal case: extend the lease only while it is
             // still live. A lease already past the 90 s limit is not extended;
@@ -347,32 +377,51 @@ const heartbeatTimer = async (req, res) => {
             const now = new Date();
             const extended = await TaskTimeLog.findOneAndUpdate(
                 {
-                    employee: employeeId,
+                    employee: employeeId, ...timerMatch,
                     isActiveTimer: true,
                     status: { $in: ["running", "paused"] },
                     desktopHeartbeatAt: { $type: "date", $gt: new Date(now.getTime() - HEARTBEAT_TIMEOUT_MS) },
                 },
-                { $set: { desktopHeartbeatAt: now } },
-                { returnDocument: "after", projection: { _id: 1 } },
+                { $set: { desktopHeartbeatAt: now, ...sampleUpdate } },
+                { returnDocument: "after", projection: { _id: 1, task: 1, status: 1 } },
             );
-            if (extended) return res.status(200).json({ success: true, timeLogId: extended._id });
+            if (extended) {
+                if (await stopForHeartbeatIdle(req, res, extended, sample)) return;
+                return res.status(200).json({ success: true, timeLogId: extended._id });
+            }
             await closeStaleDesktopTimers(now, employeeId);
             return res.status(404).json({ success: false, message: "No active desktop timer found." });
         }
         await closeStaleDesktopTimers(new Date(), employeeId);
         const timeLog = await TaskTimeLog.findOneAndUpdate(
-            { employee: employeeId, isActiveTimer: true, status: { $in: ["running", "paused"] }, desktopHeartbeatAt: { $type: "date" } },
-            { $set: { desktopHeartbeatAt: new Date() } },
+            { employee: employeeId, ...timerMatch, isActiveTimer: true, status: { $in: ["running", "paused"] }, desktopHeartbeatAt: { $type: "date" } },
+            { $set: { desktopHeartbeatAt: new Date(), ...sampleUpdate } },
             // The API acknowledges only the ID. Avoid downloading notes and
             // the complete pause history from Atlas every twenty seconds.
-            { returnDocument: "after", projection: { _id: 1 } },
+            { returnDocument: "after", projection: { _id: 1, task: 1, status: 1 } },
         );
         if (!timeLog) return res.status(404).json({ success: false, message: "No active desktop timer found." });
+        if (await stopForHeartbeatIdle(req, res, timeLog, sample)) return;
         return res.status(200).json({ success: true, timeLogId: timeLog._id });
     } catch (error) {
         return sendErrorResponse(res, error, "Unable to confirm desktop timer activity.");
     }
 };
+
+// Independent safeguard: a live heartbeat must not keep crediting work after
+// the computer reports the configured idle threshold. Never infer idle from
+// session length, a hidden window, or a missing heartbeat.
+async function stopForHeartbeatIdle(req, res, timer, seconds) {
+    if (seconds === undefined || seconds < 60 || req.user.idleTrackingExempt || timer.status !== 'running') return false;
+    const policy = resolveIdlePolicy(await getSettings(), req.user);
+    if (seconds < policy.idleThresholdMinutes * 60) return false;
+    const task = await Task.findById(timer.task).select('taskType').lean();
+    if (!task || task.taskType === 'break') return false;
+    const reply = { statusCode: 200, body: null, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
+    await stopTimer({ ...req, idleHeartbeatOnly: true, body: { timeLogId: String(timer._id), idleSeconds: Math.min(seconds, 43200) } }, reply);
+    res.status(reply.statusCode).json({ ...reply.body, ...(reply.statusCode === 200 && reply.body?.timeLog?.status === 'stopped' ? { idleStopped: true, idleSeconds: seconds } : {}) });
+    return true;
+}
 
 // Pause Timer
 const pauseTimer = async (req, res) => {
@@ -580,6 +629,9 @@ const stopTimer = async (req, res) => withEmployeeTimeWrite(req.user._id, async 
             });
         }
 
+        if (req.idleHeartbeatOnly && activeTimer.status !== 'running') {
+            return res.status(200).json({ success: true, skipped: true });
+        }
         const stoppedAt = new Date();
         const values = computeStopValues(activeTimer, stoppedAt, Number(req.body?.idleSeconds));
         const logout = req.body?.logoutReason === "inactivity"
@@ -711,6 +763,7 @@ const getActiveTimer = async (req, res) => {
         return res.status(200).json({
             success: true,
             timeLog: activeTimer || null,
+            serverNow: new Date().toISOString(),
         });
     } catch (error) {
         return sendErrorResponse(res, error, "Unable to fetch active timer.");

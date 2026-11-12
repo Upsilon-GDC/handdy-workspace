@@ -14,6 +14,10 @@ function getApiErrorMessage(error, fallbackMessage) {
   const status = error.response.status;
   const backendMessage = error.response.data?.message;
 
+  if (status === 503 && error.response.data?.code === 'PRODUCTION_INITIALIZATION_REQUIRED') {
+    return 'Production setup is incomplete. Initialize Production before saving settings.';
+  }
+
   if (status >= 500) {
     return statusMessages[500];
   }

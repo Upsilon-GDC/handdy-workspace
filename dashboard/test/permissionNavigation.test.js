@@ -33,7 +33,7 @@ test('work setup has one menu entry covering all three existing pages', () => {
 test("admin-level roles keep the full menu whatever the grants", () => {
   for (const role of ["admin", "alpha", "manager"]) {
     const menu = paths(role, []);
-    for (const path of ["/admin/dashboard", "/admin/timesheets/team", "/admin/billing", "/admin/timesheets/attendance"]) {
+    for (const path of ["/admin/dashboard", "/admin/timesheets/team", "/admin/production/billing", "/admin/timesheets/attendance"]) {
       assert.ok(menu.includes(path), `${role}: ${path}`);
     }
   }
@@ -42,7 +42,7 @@ test("admin-level roles keep the full menu whatever the grants", () => {
 
 test("HR menu follows report and billing permissions", () => {
   const all = paths("hr", ["view_all_reports", "view_billing_amounts"]);
-  assert.ok(all.includes("/admin/dashboard") && all.includes("/admin/billing") && all.includes("/admin/timesheets/team"));
+  assert.ok(all.includes("/admin/dashboard") && all.includes("/admin/production/billing") && all.includes("/admin/timesheets/team"));
   const none = paths("hr", []);
   for (const path of ["/admin/dashboard", "/admin/timesheets/team", "/admin/timesheets/detailed", "/admin/timesheets/project-hours", "/admin/billing"]) {
     assert.equal(none.includes(path), false, path);
@@ -53,17 +53,15 @@ test("HR menu follows report and billing permissions", () => {
   }
 });
 
-test('production navigation follows billing permission for roles and delegated employees', () => {
-  for (const role of ['admin', 'alpha', 'manager', 'hr']) {
-    assert.equal(paths(role, ['view_billing_amounts']).includes('/admin/production'), true);
-    const section = navigationForRole(role, grants(role, ['view_billing_amounts'])).filter(item => item.group === 'Production');
-    assert.deepEqual(section.map(item => item.path), ['/admin/production','/admin/production/team','/admin/production/employee']);
-    assert.equal(navigationForRole(role, grants(role, ['view_billing_amounts'])).some(item => item.group === 'Finance' && item.path.startsWith('/admin/production')),false);
+test('production hours navigation is available without financial access and settings remain Admin-only', () => {
+  for (const role of ['admin', 'alpha', 'manager', 'hr', 'team_lead', 'employee']) {
+    const section = navigationForRole(role, grants(role, [])).filter(item => item.group === 'Production');
+    for (const path of ['/admin/production', '/admin/production/team', '/admin/production/employee', '/admin/production/clients', '/admin/production/tasks', '/admin/production/billing', '/admin/production/reports']) {
+      assert.ok(section.some(item => item.path === path), `${role}: ${path}`);
+    }
+    assert.equal(section.some(item => item.path.endsWith('/settings')), ['admin', 'alpha'].includes(role));
+    assert.equal(section.some(item => item.needs?.includes('view_billing_amounts')), false);
   }
-  assert.equal(paths('hr', []).includes('/admin/production'), false);
-  assert.equal(menu('employee', ['view_billing_amounts']).includes('/admin/production'), true);
-  for (const path of ['/admin/production/team','/admin/production/employee']) assert.equal(menu('employee', ['view_billing_amounts']).includes(path),true);
-  assert.equal(menu('employee', []).includes('/admin/production'), false);
 });
 
 test("team lead team reports follow View team timesheets; personal pages and attendance stay", () => {
@@ -100,7 +98,7 @@ const menu = (role, keys) => {
 
 test("duties given to a team lead or employee add their pages to the menu", () => {
   const lead = menu("team_lead", ["view_team_timesheets", "manage_clients", "view_all_reports", "view_billing_amounts"]);
-  for (const path of ["/admin/clients", "/admin/dashboard", "/admin/timesheets/team", "/admin/timesheets/attendance", "/admin/billing"]) {
+  for (const path of ["/admin/clients", "/admin/dashboard", "/admin/timesheets/team", "/admin/timesheets/attendance", "/admin/production/billing"]) {
     assert.ok(lead.includes(path), path);
   }
   assert.equal(lead.filter((path) => path === "/team-lead/timesheets/team").length, 1, "a lead's own team pages are not repeated");
@@ -119,4 +117,13 @@ test("HR gets no duplicate pages, and admin-level roles never need duty pages", 
   assert.equal(hr.some((path) => path.startsWith("/team-lead/")), false, "HR has no team");
   for (const role of ["admin", "alpha", "manager"]) assert.deepEqual(dutyNavigationFor(role, () => true, []), []);
   assert.ok(paths("manager", []).includes("/admin/permissions"), "managers manage permissions");
+});
+
+test('Finance is removed for every role and delegated billing permission', () => {
+  for (const role of ['admin', 'alpha', 'manager', 'hr', 'team_lead', 'employee']) {
+    const own = navigationForRole(role, () => true);
+    const all = [...own, ...dutyNavigationFor(role, () => true, own.map(row => row.path))];
+    assert.equal(all.some(row => row.group === 'Finance' || row.path === '/admin/billing'), false);
+    assert.ok(all.some(row => row.path === '/admin/production/billing'));
+  }
 });

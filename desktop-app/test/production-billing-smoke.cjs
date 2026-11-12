@@ -1,0 +1,316 @@
+// Real website + Production controllers + isolated local MongoDB. Authentication
+// is a test fixture; all downstream scope/workflow checks run unchanged.
+const { app, BrowserWindow } = require('electron');
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
+const assert = require('node:assert/strict');
+const ExcelJS = require('../../dashboard/node_modules/exceljs');
+const express = require('../../backend/node_modules/express');
+const mongoose = require('../../backend/node_modules/mongoose');
+const { MongoMemoryReplSet } = require('../../backend/node_modules/mongodb-memory-server-core');
+mongoose.set('autoCreate', false); mongoose.set('autoIndex', false);
+const Employee = require('../../backend/src/models/Employee');
+const Team = require('../../backend/src/models/Team');
+const Task = require('../../backend/src/models/Task');
+const Project = require('../../backend/src/models/Project');
+const Client = require('../../backend/src/models/Client');
+const Log = require('../../backend/src/models/TaskTimeLog');
+const Policy = require('../../backend/src/models/WorkingHoursPolicy');
+const Attendance = require('../../backend/src/models/Attendance');
+const Revision = require('../../backend/src/models/ProductionSettingsRevision');
+const ProductionAudit = require('../../backend/src/models/ProductionAuditEvent');
+const Batch = require('../../backend/src/models/ProductionBillingBatch');
+const Adjustment = require('../../backend/src/models/ProductionBillingAdjustment');
+const { ensureProductionSettingsIndexes } = require('../../backend/src/services/production/settingsService');
+const { getEffectivePermissionsSync } = require('../../backend/src/services/permissionService');
+const { today } = require('../../backend/src/services/production/settingsValidation');
+const { addDateKeyDays } = require('../../backend/src/utils/billingUtils');
+const root = path.resolve(__dirname, '../../dashboard/dist'), output = path.resolve(__dirname, '../../output/production-stage4');
+const date = addDateKeyDays(today(), -1), adminId = new mongoose.Types.ObjectId();
+let win, server, replica, currentUser, team, employee, manager;
+const evaluate = code => win.webContents.executeJavaScript(code), pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+async function until(code) { for (let attempt = 0; attempt < 180; attempt++) { if (await evaluate(code)) return; await pause(75); } throw Error(`Timed out: ${code}`); }
+const click = label => evaluate(`[...document.querySelectorAll('button')].find(node=>node.textContent.trim()===${JSON.stringify(label)}).click()`);
+const select = (label, value) => evaluate(`(()=>{const node=document.querySelector('select[aria-label="${label}"]');node.value=${JSON.stringify(value)};node.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+const input = (label, value) => evaluate(`(()=>{const node=document.querySelector('[aria-label="${label}"]');const proto=node.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(proto,'value').set.call(node,${JSON.stringify(value)});node.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+const readyStatus = status => until(`document.querySelector('[aria-label="Billing review"] .prod-billing-status')?.textContent===${JSON.stringify(status)}`);
+async function act(label, status) { await input('Review note', `${label} reviewed work`); await click(label); await readyStatus(status); }
+async function capture(name) { await evaluate(`document.querySelector('[aria-label="Billing review"]').scrollIntoView({block:'start'});new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`); win.webContents.invalidate(); await pause(200); fs.writeFileSync(path.join(output, name), (await win.webContents.capturePage()).toPNG()); }
+app.whenReady().then(async () => {
+  try {
+    fs.mkdirSync(output, { recursive: true });
+    replica = await MongoMemoryReplSet.create({ binary: { version: '7.0.24' }, replSet: { count: 1, ip: '127.0.0.1', storageEngine: 'wiredTiger', spawn: { windowsHide: true } } });
+    const uri = replica.getUri(`billing_browser_${crypto.randomUUID().replaceAll('-', '')}`); assert.ok(uri.startsWith('mongodb://127.0.0.1:'));
+    await mongoose.connect(uri, { autoCreate: false, autoIndex: false });
+    for (const Model of [Employee, Team, Task, Project, Client, Log, Policy, Attendance]) { await Model.createCollection(); await Model.createIndexes(); }
+    await ensureProductionSettingsIndexes();
+    team = await Team.create({ teamName: 'WCPA', createdBy: adminId });
+    employee = { _id: new mongoose.Types.ObjectId(), employeeId: '10001', fullName: 'Ada Member', email: 'ada@example.invalid', role: 'employee', team: team._id, isActive: true };
+    manager = { _id: new mongoose.Types.ObjectId(), employeeId: '10002', fullName: 'Team Manager', email: 'manager@example.invalid', role: 'manager', team: team._id, isActive: true };
+    const admin = { _id: adminId, employeeId: '10000', fullName: 'Admin', email: 'admin@example.invalid', role: 'admin', isActive: true };
+    await Employee.collection.insertMany([admin, employee, manager]); currentUser = admin;
+    await Employee.collection.insertMany(Array.from({ length: 26 }, (_, index) => ({ _id: new mongoose.Types.ObjectId(), role: 'employee', team: team._id, isActive: true,
+      employeeId: `EXTRA-${index}`, fullName: `Extra Employee ${String(index).padStart(2, '0')}`, email: `extra-${index}@example.invalid` })));
+    const hoursTeam = await Team.create({ teamName: 'Renau CPA', createdBy: adminId });
+    const hoursEmployee = { _id: new mongoose.Types.ObjectId(), fullName: 'Hours Only Member', employeeId: 'HOURS-01', email: 'hours-only@example.invalid', role: 'employee', team: hoursTeam._id, isActive: true };
+    await Employee.collection.insertOne(hoursEmployee);
+    const project = await Project.create({ projectCode: 'P1', projectName: 'Audit', teams: [team._id], createdBy: adminId });
+    const secondProject = await Project.create({ projectCode: 'P2', projectName: 'FTC', teams: [team._id], createdBy: adminId });
+    await Employee.updateOne({ _id: employee._id }, { $set: { projectRates: [{ project: project._id, chargeRate: 25 }, { project: secondProject._id, chargeRate: 30 }] } });
+    const client = await Client.create({ clientName: 'Acme Client', clientCode: 'C1', createdBy: adminId });
+    await Project.updateOne({ _id: project._id }, { $set: { clients: [client._id] } });
+    const task = await Task.create({ taskCode: 'T1', taskName: 'Audit review', teams: [team._id], createdBy: adminId });
+    await Log.create({ employee: employee._id, project: project._id, client: client._id, task: task._id, startedAt: `${date}T09:00:00Z`, stoppedAt: `${date}T10:00:00Z`, status: 'stopped', isActiveTimer: false });
+    const setting = (kind, key, values, version = 1) => ({ kind, key, values, version, team: team._id, effectiveFrom: date, changedBy: adminId, reason: 'Synthetic billing setup' });
+    await Revision.create([setting('team-billing', String(team._id), { billingEnabled: true, currency: 'USD', approvalRequired: true }),
+      setting('classification', `${team._id}:task:${task._id}`, { category: 'productive', billable: true }),
+      setting('rate', `${team._id}:*:*`, { enabled: true, hourlyRateHundredths: 2500, currency: 'USD' }),
+      setting('access', `${manager._id}:${team._id}`, { employee: String(manager._id), enabled: true, canViewBilling: true, canApproveBilling: true })]);
+    const hoursTask = await Task.create({ taskCode: 'H1', taskName: 'Hours-only work', teams: [hoursTeam._id], createdBy: adminId });
+    const hoursProject = await Project.create({ projectCode: 'HP1', projectName: 'Hours-only project', teams: [hoursTeam._id], createdBy: adminId });
+    const hoursClient = await Client.create({ clientName: 'Hours team client', createdBy: adminId });
+    await Project.updateOne({ _id: hoursProject._id }, { $set: { clients: [hoursClient._id] } });
+    await Log.create({ employee: hoursEmployee._id, project: hoursProject._id, task: hoursTask._id, startedAt: `${date}T09:00:00Z`, stoppedAt: `${date}T10:00:00Z`, status: 'stopped', isActiveTimer: false });
+    await Revision.create({ ...setting('classification', `${hoursTeam._id}:task:${hoursTask._id}`, { category: 'productive', billable: false }), team: hoursTeam._id });
+    await Attendance.create({ employee: employee._id, date, status: 'Present' });
+    await Policy.create({ employee: employee._id, revisions: [{ effectiveFrom: date, requiredSeconds: 28080, halfDayPercent: 50, changedBy: adminId, changedAt: new Date() }] });
+    const api = express(); api.use(express.json());
+    api.get('/api/auth/me', (_req, res) => res.json({ user: currentUser }));
+    api.get('/api/permissions/me', (_req, res) => res.json({ permissions: getEffectivePermissionsSync(currentUser) }));
+    api.get('/api/auth/login-requests/pending', (_req, res) => res.json({ loginRequest: null }));
+    require('../../backend/src/middleware/authMiddleware').protect = (req, _res, next) => { req.user = currentUser; next(); };
+    api.use('/api/production', require('../../backend/src/modules/production/productionRoutes'));
+    api.use('/api', (_req, res) => res.json({ success: true }));
+    api.use(express.static(root)); api.use((_req, res) => res.sendFile(path.join(root, 'index.html')));
+    server = await new Promise(resolve => { const running = api.listen(0, '127.0.0.1', () => resolve(running)); });
+    const base = `http://127.0.0.1:${server.address().port}`;
+    win = new BrowserWindow({ show: false, width: 1440, height: 1050, webPreferences: { partition: `billing-workflow-${Date.now()}`, backgroundThrottling: false } });
+    async function loginAs(user, id = '') {
+      currentUser = user; await win.loadURL(`${base}/login`);
+      await evaluate(`localStorage.setItem('token','fixture');localStorage.setItem('user',${JSON.stringify(JSON.stringify(user))});`);
+      await win.loadURL(`${base}/admin/production/billing${id ? `?id=${id}` : ''}`);
+      await until(`!!document.querySelector('[aria-label="Billing periods"]') && !document.querySelector('[aria-label="Prepare billing period"] fieldset').disabled`);
+    }
+    await loginAs(admin);
+    await win.loadURL(`${base}/admin/billing`);
+    await until(`location.pathname==='/admin/production/billing' && !!document.querySelector('[aria-label="Billing report filters"]') && !document.querySelector('[aria-label="Prepare billing period"] fieldset').disabled`);
+    assert.equal(await evaluate(`!!document.querySelector('.crm-nav a[href="/admin/billing"]')`), false);
+    await select('Billing date period', 'yesterday');
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Billing from date"]').value`), date);
+    await select('Billing team', String(team._id));
+    assert.equal(await evaluate(`[...document.querySelector('[aria-label="Billing employee"]').options].some(row=>row.value==='all')`), true);
+    assert.equal(await evaluate(`[...document.querySelector('[aria-label="Billing employee"]').options].some(row=>row.textContent.includes('Hours Only Member'))`), false);
+    await evaluate(`document.querySelector('[aria-label="Prepare billing period"] .prod-extra-filters summary').click(); document.querySelector('[aria-label="Prepare billing period"] .prod-extra-filters input').click()`);
+    assert.equal(await evaluate(`[...document.querySelector('[aria-label="Billing employee"]').options].some(row=>row.textContent.includes('Hours Only Member'))`), true, 'Authorized cross-team billing remains available through an explicit choice');
+    await evaluate(`document.querySelector('[aria-label="Prepare billing period"] .prod-extra-filters input').click()`);
+    await select('Billing employee', String(employee._id));
+    await input('Billing from date', date); await input('Billing to date', date); await input('Preparation note', 'Prepare employee production billing'); await click('Generate report');
+    await until(`document.querySelector('[aria-label="Billing review"] .prod-billing-status')?.textContent==='Draft'`);
+    let batch = await Batch.findOne({ employee: employee._id }).lean(); assert.ok(batch);
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Billing review"]').textContent.includes('reviewer must verify')`), true);
+    await evaluate(`document.querySelector('[aria-label="Team assignment review"] input[type="checkbox"]').click()`);
+    await input('Review note', 'Verified work belongs to WCPA'); await click('Verify selected entries & refresh');
+    await until(`!!document.querySelector('[aria-label="Billing review"]') && !document.querySelector('[aria-label="Team assignment review"]')`);
+    await capture('billing-draft.png');
+    await loginAs(employee, String(batch._id));
+    await until(`!!document.querySelector('[aria-label="Billing review"]')`);
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Billing review"]').textContent.includes('$25.00')`), false);
+    await act('Submit for review', 'Submitted');
+    await loginAs(manager, String(batch._id)); await until(`!!document.querySelector('[aria-label="Billing review"]')`);
+    await act('Reject', 'Rejected'); await act('Refresh estimate', 'Draft'); await act('Submit for review', 'Submitted'); await act('Approve', 'Approved');
+    assert.equal(await evaluate(`[...document.querySelectorAll('button')].some(node=>node.textContent==='Finalize billing')`), false);
+    await capture('billing-approved.png');
+    await loginAs(admin, String(batch._id)); await until(`!!document.querySelector('[aria-label="Billing review"]')`);
+    await act('Finalize billing', 'Finalized');
+    const frozen = (await Batch.findById(batch._id).lean()).snapshot;
+    await win.loadURL(`${base}/admin/production/settings`);
+    await until(`!!document.querySelector('[aria-label="Production settings form"]') && !document.querySelector('.prod-settings-form fieldset').disabled`);
+    await select('Team', String(team._id));
+    await until(`document.querySelector('[aria-label="Production settings form"]')?.textContent.includes('Current revision 1') && !document.querySelectorAll('.prod-settings-form fieldset')[1].disabled`);
+    await input('Effective from', date);
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Effective from"]').checkValidity()`), true, 'Team billing permits a past date directly');
+    await input('Reason for change', 'Past');
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Reason for change"]').minLength`), 10, 'A past correction still needs a detailed reason');
+    await input('Reason for change', 'Confirm historical team billing setup'); await click('Save setting');
+    await until(`!!document.querySelector('.prod-success')`);
+    const historicalTeam = await Revision.findOne({ kind: 'team-billing', team: team._id, version: 2 }).lean();
+    assert.equal(historicalTeam.historicalCorrection, true); assert.equal(historicalTeam.effectiveFrom, date);
+    await click('Billing rates'); await select('Team', String(team._id));
+    await until(`document.querySelector('[aria-label="Employee project billing rates"]')?.textContent.includes('25.00')`);
+    assert.equal(await evaluate(`!!document.querySelector('[aria-label="Hourly rate"]')`), false);
+    await select('Employee', String(employee._id));
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Employee project billing rates"] tbody').rows.length`), 2);
+    assert.equal(await evaluate(`document.querySelectorAll('.prod-rate-employee strong').length`), 1);
+    assert.equal(await evaluate(`document.querySelector('.prod-rate-employee').rowSpan`), 2);
+    assert.equal(await evaluate(`[...document.querySelectorAll('[aria-label="Employee project billing rates"] button')].filter(node=>node.textContent==='Edit rates').length`), 1);
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Employee project billing rates"]').textContent.includes('FTC')`), true);
+    await evaluate(`document.querySelector('[aria-label="Employee project billing rates"]').scrollIntoView({block:'center'});new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`); win.webContents.invalidate(); await pause(300);
+    fs.writeFileSync(path.join(output, 'grouped-employee-project-rates.png'), (await win.webContents.capturePage()).toPNG());
+    await click('Edit rates');
+    await until(`!!document.querySelector('[aria-label="Edit employee project rates"]')`);
+    await input('Employee hourly rate 1', '0'); await click('Save employee rates');
+    await until(`document.querySelector('[aria-label="Edit employee project rates"] [role="alert"]')?.textContent.includes('0.01')`);
+    await input('Employee hourly rate 1', '40'); await click('Save employee rates');
+    await until(`document.querySelector('.prod-success')?.textContent.includes('same rates')`);
+    assert.equal(new URL(win.webContents.getURL()).pathname, '/admin/production/settings');
+    assert.equal((await Employee.findById(employee._id).lean()).projectRates[0].chargeRate, 40);
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Employee project billing rates"]').textContent.includes('40.00')`), true);
+    await select('Team', String(hoursTeam._id));
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Employee"]').value`), '');
+    await until(`document.querySelector('[aria-label="Employee project billing rates"]')?.textContent.includes('Hours Only Member')`);
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Employee project billing rates"]').textContent.includes('Ada Member')`), false);
+    await click('Add rates'); await until(`!!document.querySelector('[aria-label="Edit employee project rates"]')`);
+    await select('Rate project 1', String(hoursProject._id)); await input('Employee hourly rate 1', '15'); await click('Save employee rates');
+    await until(`document.querySelector('.prod-success')?.textContent.includes('same rates')`);
+    assert.equal((await Employee.findById(hoursEmployee._id).lean()).projectRates[0].chargeRate, 15);
+    await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`); win.webContents.invalidate(); await pause(300);
+    fs.writeFileSync(path.join(output, 'employee-project-rates.png'), (await win.webContents.capturePage()).toPNG());
+    await win.loadURL(`${base}/admin/production/billing?id=${batch._id}`); await until(`document.querySelector('[aria-label="Billing review"]')?.textContent.includes('Original finalized billing')`);
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Billing review"] .prod-estimates').textContent.includes('25.00')`), true);
+    await click('Preview historical adjustment'); await until(`!!document.querySelector('.prod-adjustment-preview')`);
+    assert.equal(await evaluate(`document.querySelector('.prod-adjustment-preview').textContent.includes('15.00')`), true);
+    await input('Review note', 'Record authorized historical rate correction'); await click('Record historical adjustment');
+    await until(`document.querySelector('[aria-label="Billing review"]')?.textContent.includes('Billing after recorded adjustments')`);
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Billing review"]').textContent.includes('40.00')`), true);
+    assert.deepEqual((await Batch.findById(batch._id).lean()).snapshot, frozen); assert.equal(await Adjustment.countDocuments({ batch: batch._id }), 1);
+    await capture('billing-finalized-adjustment.png');
+    win.setSize(430, 950); await win.reload(); await until(`document.querySelector('[aria-label="Billing review"]')?.textContent.includes('Original finalized billing')`);
+    assert.equal(await evaluate(`document.documentElement.scrollWidth <= innerWidth + 1`), true); await capture('billing-mobile.png');
+    await loginAs(employee, String(batch._id)); await until(`!!document.querySelector('[aria-label="Billing review"]')`);
+    const text = await evaluate(`document.querySelector('[aria-label="Billing review"]').textContent`);
+    assert.equal(text.includes('$25.00') || text.includes('$40.00') || text.includes('USD'), false);
+    // Stage 5 exports use the same real local API and frozen billing fixture.
+    const reportOutput = path.resolve(__dirname, '../../output/production-stage5'); fs.mkdirSync(reportOutput, { recursive: true });
+    const files = [];
+    async function openReports(user) {
+      await loginAs(user); await win.loadURL(`${base}/admin/production/reports`);
+      await until(`!!document.querySelector('[aria-label="Production report data"]') && !document.querySelector('[aria-label="Production report filters"] fieldset').disabled`);
+      await select('Period', 'yesterday');
+    }
+    async function generateReport() {
+      await click('Generate report'); await until(`!!document.querySelector('[aria-label="Production report data"]') && !document.querySelector('[aria-label="Production report filters"] fieldset').disabled`);
+    }
+    async function download(label, prefix = '') {
+      const saved = new Promise((resolve, reject) => win.webContents.session.once('will-download', (_event, item) => {
+        const target = path.join(reportOutput, `${prefix}${path.basename(item.getFilename())}`); item.setSavePath(target);
+        item.once('done', (_done, state) => state === 'completed' ? resolve(target) : reject(Error(state)));
+      }));
+      await click(label); const file = await saved; files.push(file);
+      await until(`![...document.querySelectorAll('button')].find(node=>node.textContent==='Export Excel')?.disabled`);
+      return file;
+    }
+    async function workbook(file) { const book = new ExcelJS.Workbook(); await book.xlsx.readFile(file); return book; }
+    const headerIndex = (sheet, label) => sheet.getRow(1).values.findIndex(value => value === label);
+    const summaryValue = (book, label) => { let value; book.getWorksheet('Summary').eachRow(row => { if (row.getCell(1).value === label) value = row.getCell(2).value; }); return value; };
+    win.setSize(1440, 1050); await openReports(admin); await select('Report type', 'employee'); await generateReport();
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Production report data"] tbody').rows.length`), 25);
+    await click('Next'); assert.equal(await evaluate(`document.querySelector('[aria-label="Production report data"] tbody').rows.length`), 5);
+    const live = await workbook(await download('Export Excel'));
+    assert.equal(live.getWorksheet('Report data').rowCount, 31, 'Export includes all 30 employees, not only the visible page');
+    assert.equal(summaryValue(live, 'Estimated USD'), 40);
+    const excelTime = summaryValue(live, 'Expected');
+    const expectedSeconds = excelTime instanceof Date ? (+excelTime - Date.UTC(1899, 11, 30)) / 1000 : excelTime * 86400;
+    assert.ok(Math.abs(expectedSeconds - 28080) < 0.000001);
+    const liveSheet = live.getWorksheet('Report data'); let ada;
+    liveSheet.eachRow((row, index) => { if (index > 1 && row.getCell(1).value === 'Ada Member') ada = row; });
+    assert.equal(ada.getCell(headerIndex(liveSheet, 'Estimated USD')).value, 40);
+    const livePdf = await download('Export PDF'); assert.ok(fs.readFileSync(livePdf).subarray(0, 4).equals(Buffer.from('%PDF')));
+    await select('Team', String(hoursTeam._id));
+    assert.deepEqual(await evaluate(`[...document.querySelector('[aria-label="Employee"]').options].map(row=>row.textContent)`), ['All team members', 'Hours Only Member (HOURS-01)']);
+    await generateReport();
+    const hours = await workbook(await download('Export Excel'));
+    assert.equal(hours.getWorksheet('Report data').getRow(1).values.some(value => String(value).includes('Estimated')), false);
+    assert.equal(JSON.stringify(hours.model).includes('Estimated USD'), false);
+    await select('Team', 'all'); await select('Report source', 'finalized'); await generateReport();
+    const original = await workbook(await download('Export Excel')); assert.equal(summaryValue(original, 'Finalized USD'), 25);
+    await download('Export PDF');
+    await select('Report source', 'adjustments'); await generateReport();
+    const adjustment = await workbook(await download('Export Excel')); assert.equal(summaryValue(adjustment, 'Adjustment USD'), 15);
+    await select('Report source', 'adjusted'); await generateReport();
+    const corrected = await workbook(await download('Export Excel')); assert.equal(summaryValue(corrected, 'Adjusted USD'), 40);
+    await evaluate('window.scrollTo(0,0);new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))'); win.webContents.invalidate(); await pause(200);
+    fs.writeFileSync(path.join(reportOutput, 'production-reports-desktop.png'), (await win.webContents.capturePage()).toPNG());
+    win.setSize(430, 950); await pause(250); await evaluate('window.scrollTo(0,0);new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
+    assert.equal(await evaluate(`document.documentElement.scrollWidth <= innerWidth + 1`), true);
+    fs.writeFileSync(path.join(reportOutput, 'production-reports-mobile.png'), (await win.webContents.capturePage()).toPNG());
+    await select('Report source', 'live');
+    for (const [type, controls] of [['client', ['Report source', 'Report type', 'Period', 'Client', 'Project']], ['task', ['Report source', 'Report type', 'Period', 'Task', 'Project']], ['team', ['Report source', 'Report type', 'Period', 'Team']]]) {
+      await select('Report type', type);
+      assert.deepEqual(await evaluate(`[...document.querySelectorAll('[aria-label="Production report filters"] select')].map(row=>row.getAttribute('aria-label'))`), controls);
+      await generateReport();
+      assert.equal(await evaluate(`document.documentElement.scrollWidth <= innerWidth + 1`), true);
+    }
+    // A local-only multi-select save exercises the actual batch HTTP endpoint.
+    // New fixture tasks have no work logs, preserving report/billing fixtures.
+    win.setSize(1440, 1050); await pause(250);
+    const bulkTasks = await Task.create([0, 1].map(index => ({ taskCode: `LOCAL-BULK-${index}`, taskName: `Local bulk example ${index + 1}`, teams: [team._id], createdBy: adminId })));
+    await loginAs(admin); await win.loadURL(`${base}/admin/production/settings`);
+    await until(`!!document.querySelector('[aria-label="Production settings form"]') && !document.querySelector('.prod-settings-form fieldset').disabled`);
+    await select('Team', String(team._id)); await click('Activity classifications');
+    await until(`!document.querySelector('[aria-label="Task"]').disabled`);
+    await evaluate(`document.querySelector('[aria-label="Select multiple tasks"]').click()`);
+    await click('Select all tasks'); assert.equal(await evaluate(`document.querySelector('.prod-task-picker-actions strong').textContent`), '3 selected');
+    await click('Clear selection');
+    for (const row of bulkTasks) await evaluate(`document.querySelector('input[data-task-id="${row._id}"]').click()`);
+    await select('Activity category', 'training'); await input('Effective from', date); await input('Reason for change', 'Local bulk training classification example');
+    await evaluate(`new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`); win.webContents.invalidate(); await pause(200);
+    fs.writeFileSync(path.join(reportOutput, 'bulk-classification-desktop.png'), (await win.webContents.capturePage()).toPNG());
+    await click('Apply to 2 selected tasks'); await until(`document.querySelector('.prod-success')?.textContent.includes('2 tasks')`);
+    const bulkKeys = bulkTasks.map(row => `${team._id}:task:${row._id}`);
+    const saved = await Revision.find({ key: { $in: bulkKeys } }).lean();
+    assert.equal(saved.length, 2); assert.ok(saved.every(row => row.values.category === 'training' && !row.values.billable && row.historicalCorrection));
+    assert.equal(await ProductionAudit.countDocuments({ revision: { $in: saved.map(row => row._id) } }), 2);
+    win.setSize(430, 950); await pause(250);
+    // Hidden Chromium can leave resize transitions at time zero. Measure
+    // the finished mobile layout rather than an intermediate desktop rail.
+    await evaluate(`document.querySelectorAll('.crm-stage,.crm-nav').forEach(node=>node.getAnimations().forEach(animation=>animation.finish()));new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
+    await until(`!document.querySelector('[aria-label="Select classification tasks"]').disabled`);
+    for (const row of bulkTasks) await evaluate(`document.querySelector('input[data-task-id="${row._id}"]').click()`);
+    assert.equal(await evaluate(`document.querySelector('.prod-task-picker-actions strong').textContent`), '2 selected');
+    assert.equal(await evaluate(`document.documentElement.scrollWidth <= innerWidth + 1`), true);
+    await evaluate(`window.scrollTo(0,0);new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`); win.webContents.invalidate(); await pause(200);
+    fs.writeFileSync(path.join(reportOutput, 'bulk-classification-mobile.png'), (await win.webContents.capturePage()).toPNG());
+    await openReports(employee); await select('Report source', 'finalized'); await generateReport();
+    const personal = await workbook(await download('Export Excel', 'personal-'));
+    assert.equal(personal.getWorksheet('Report data').getRow(1).values.some(value => String(value).includes('USD')), false);
+    currentUser = { ...employee, permissionOverrides: { revoked: ['export_reports'] } };
+    await click('Export PDF'); await until(`document.querySelector('[role="alert"]')?.textContent.includes('permission to export')`);
+    assert.equal(await evaluate(`!!document.querySelector('[aria-label="Production report data"]')`), false);
+    await loginAs(admin);
+    win.setSize(1440, 1050); await pause(200);
+    await select('Billing team', String(team._id)); await select('Billing employee', 'all');
+    await input('Billing from date', date); await input('Billing to date', date);
+    await click('Generate report');
+    await until(`document.querySelectorAll('[aria-label="Prepared employee reviews"] tbody tr').length===28`);
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Prepared employee reviews"]').textContent.includes('Hours Only Member')`), false);
+    assert.equal(await evaluate(`document.querySelector('.prod-billing-history').open`), false);
+    assert.equal(await evaluate(`!!document.querySelector('[aria-label="Project-wise billing summary"] .billing-project')`), true);
+    assert.equal(await evaluate(`!!document.querySelector('[aria-label="Billing daily details"] details')`), true);
+    await evaluate(`document.querySelector('[aria-label="Billing daily details"] summary').click()`);
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Billing daily details"] tbody').rows.length`), 1);
+    const reviewBook = await workbook(await download('Download review Excel'));
+    assert.equal(reviewBook.getWorksheet('Employee review').rowCount, 29);
+    assert.equal(reviewBook.getWorksheet('Project summary').rowCount, 2);
+    assert.equal(reviewBook.getWorksheet('Project summary').getCell('F2').value, 25);
+    assert.equal(summaryValue(reviewBook, 'Saved estimate USD'), 25, 'Saved original finalized amount is preserved in review');
+    assert.equal(reviewBook.getWorksheet('Employee review').getRow(1).values.includes('Saved estimate USD'), true);
+    const workSheet = reviewBook.getWorksheet('Report data');
+    assert.equal(workSheet.getRow(1).values.includes('Hourly rate'), true);
+    assert.equal(workSheet.getRow(1).values.includes('Review items'), true);
+    await evaluate(`window.scrollTo(0,0);new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`); win.webContents.invalidate(); await pause(250);
+    fs.writeFileSync(path.join(reportOutput, 'billing-team-review-desktop.png'), (await win.webContents.capturePage()).toPNG());
+    win.setSize(430, 950); await pause(200);
+    await evaluate(`document.querySelectorAll('.crm-stage,.crm-nav').forEach(node=>node.getAnimations().forEach(animation=>animation.finish()));new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
+    assert.equal(await evaluate(`document.documentElement.scrollWidth <= innerWidth + 1`), true);
+    fs.writeFileSync(path.join(reportOutput, 'billing-team-review-mobile.png'), (await win.webContents.capturePage()).toPNG());
+    fs.writeFileSync(path.join(reportOutput, 'export-manifest.json'), JSON.stringify({ files, source: 'Synthetic local test database', originalFinalizedUSD: 25, historicalAdjustmentUSD: 15, adjustedUSD: 40 }, null, 2));
+    console.log('PASS: Stage 5 real API/UI reports and Excel/PDF exports: all pages, exact hours, hours-only privacy, original/adjusted/delta separation, export permission revocation and mobile. Synthetic local data only.');
+    console.log('PASS: Real local billing API/UI: draft, allocation verification, personal submission, manager rejection/resubmission/approval, Admin finalization, previewed historical adjustment, immutable original values, financial redaction and mobile. Temporary database only.');
+    win.destroy(); await new Promise(resolve => server.close(resolve)); await mongoose.disconnect(); await replica.stop(); app.exit(0);
+  } catch (error) {
+    console.error(error);
+    if (win && !win.isDestroyed()) console.error(await evaluate(`JSON.stringify({path:location.pathname,error:document.querySelector('[role="alert"]')?.textContent,status:document.querySelector('[aria-label="Billing review"] .prod-billing-status')?.textContent,width:innerWidth,overflow:document.documentElement.scrollWidth,oversized:[...document.querySelectorAll('body *')].filter(node=>node.getBoundingClientRect().right>innerWidth+1 && !node.closest('.prod-table-wrap')).slice(-12).map(node=>[node.tagName,node.className,node.getBoundingClientRect().right]),buttons:[...document.querySelectorAll('button')].map(node=>[node.textContent,node.disabled])})`).catch(() => 'No DOM'));
+    win?.destroy(); server?.close(); await mongoose.disconnect(); await replica?.stop(); app.exit(1);
+  }
+});

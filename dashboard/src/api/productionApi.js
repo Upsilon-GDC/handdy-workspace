@@ -1,0 +1,17 @@
+import api from './axiosInstance';
+export const getProduction = async (params, signal) => (await api.get('/production/report', { params, signal })).data.report;
+export const getProductionCatalog = async (search, signal, { taskTeam, rateTeam, accessTeam, includeInactiveClients = false, includeArchivedTasks = false } = {}) => (await api.get('/production/settings/catalog', { params: { search, ...(taskTeam ? { taskTeam, includeArchivedTasks } : {}), ...(accessTeam ? { accessTeam } : {}), ...(rateTeam ? { rateTeam, includeInactiveClients } : {}) }, signal })).data;
+export const getProductionHistory = async (kind, key, signal) => (await api.get(`/production/settings/${kind}/history`, { params: { key, limit: 5 }, signal })).data;
+export const updateProductionEmployeeRates = async (employee, body) => (await api.patch(`/production/settings/employee-project-rates/${employee}`, body)).data.employee;
+export const saveProductionSetting = async (kind, body, historical = false) => (await api.post(`/production/settings/${kind}${historical ? '/historical-corrections' : ''}`, body)).data;
+export const saveProductionClassifications = async (body, historical = false) => (await api.post(`/production/settings/classification/batch${historical ? '/historical-corrections' : ''}`, body)).data;
+export const getProductionAudit = async (team, signal) => (await api.get('/production/settings/audit', { params: { team, limit: 25 }, signal })).data;
+export const getProductionBilling = async (params, signal) => (await api.get('/production/billing', { params, signal })).data;
+export const createProductionBilling = async body => (await api.post('/production/billing', body)).data.batch;
+export const prepareProductionBillingReview = async body => (await api.post('/production/billing/prepare-review', body)).data;
+export const getProductionBillingReview = async (ids, signal) => (await api.post('/production/billing/review-report', { ids }, { signal })).data;
+export const getProductionBillingPeriod = async (id, signal) => (await api.get(`/production/billing/${id}`, { signal })).data;
+export const actOnProductionBilling = async (id, body) => (await api.post(`/production/billing/${id}/actions`, body)).data.batch;
+export const previewProductionAdjustment = async id => (await api.get(`/production/billing/${id}/recalculation-preview`)).data.preview;
+export const getProductionReportTable = async (params, signal) => (await api.get('/production/reports', { params, signal })).data;
+export const authorizeProductionExport = async (token, format) => (await api.post('/production/reports/export-authorization', { token, format })).data;

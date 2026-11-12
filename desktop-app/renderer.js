@@ -94,6 +94,11 @@ const DEVICE_INFO = window.electronAPI?.deviceInfo || {
   deviceName: "CRM desktop app",
   clientType: "desktop",
 };
+const appVersion = document.getElementById("appVersion");
+if (appVersion && typeof DEVICE_INFO.appVersion === "string" && DEVICE_INFO.appVersion.trim()) {
+  appVersion.textContent = `CRM Desktop \u00b7 Version ${DEVICE_INFO.appVersion}`;
+  appVersion.hidden = false;
+}
 let timerInterval = null;
 let idleMonitorInterval = null;
 let timerHeartbeatInterval = null;
@@ -107,6 +112,18 @@ let idleAcknowledgedAt = null;
 let pendingIdleStop = null;
 let idlePolicy = null;
 let currentTimeLog = null;
+let serverClockOffsetMs = 0;
+function syncServerClock(serverNow, confirmedStart) {
+  let at = typeof serverNow === 'string' ? Date.parse(serverNow) : NaN;
+  // Older hosted versions omit serverNow. A newly confirmed start provides
+  // a conservative clock anchor, so a PC clock behind the server cannot
+  // hold the display at zero. Never use this fallback for restored/replayed
+  // timers: their startedAt may be hours old. Stored timestamps stay intact.
+  if (!Number.isFinite(at) && typeof confirmedStart === 'string') at = Date.parse(confirmedStart);
+  if (Number.isFinite(at)) serverClockOffsetMs = at - Date.now();
+}
+function timerClockNow() { return Date.now() + serverClockOffsetMs; }
+
 let automaticIdlePause = false;
 let idleDefaults = null;
 let logoutPending = false;
@@ -412,6 +429,7 @@ function noteServerResponse(response) {
 function clearSessionLoops() {
   syncTimerLock("inactive");
   reportSnapshots.clear();
+  serverClockOffsetMs = 0;
   profileRefreshed = timesheetRefreshed = null;
   backgroundRetry = { token: null, failures: 0, after: 0 };
   deviceApprovalAbortController?.abort();
@@ -596,7 +614,7 @@ async function checkSystemIdleState() {
         pendingIdleStop = { startedAt: Date.now() - idleSeconds * 1000 };
         stopLiveDuration();
         const frozen = { ...currentTimeLog, pauses: [...(currentTimeLog.pauses || []),
-          { reason: "idle", pausedAt: new Date(pendingIdleStop.startedAt).toISOString() }] };
+          { reason: "idle", pausedAt: new Date(pendingIdleStop.startedAt + serverClockOffsetMs).toISOString() }] };
         timerDuration.textContent = formatDuration(calculateCurrentWorkSeconds(frozen));
         if (pauseTimerButton) pauseTimerButton.disabled = true;
         if (resumeTimerButton) resumeTimerButton.disabled = true;
@@ -693,23 +711,37 @@ function getWorkSelectionStorageKey() {
 
 async function sendTimerHeartbeat() {
   if (!getToken() || !currentTimeLog?.desktopHeartbeatAt || appClosePending || logoutPending) return;
+  const token = getToken(), target = String(currentTimeLog._id);
   try {
+    let osIdleSeconds;
+    try {
+      const value = await window.electronAPI?.getSystemIdleTime?.();
+      if (Number.isSafeInteger(value) && value >= 0 && value <= 604800) osIdleSeconds = value;
+    } catch { /* The ordinary lease still applies when OS sampling fails. */ }
+    if (getToken() !== token || String(currentTimeLog?._id) !== target || appClosePending || logoutPending) return;
     const response = await fetch(`${API_BASE_URL}/time-logs/heartbeat`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${getToken()}` },
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ timeLogId: target, ...(osIdleSeconds === undefined ? {} : { osIdleSeconds }), appVersion: window.electronAPI?.deviceInfo?.appVersion }),
       signal: AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
     });
     noteServerResponse(response);
-    if (response.status === 404) {
+    if (getToken() !== token || String(currentTimeLog?._id) !== target) return;
+    if (response.ok) {
+      const data = await response.json();
+      if (getToken() !== token || String(currentTimeLog?._id) !== target) return;
+      if (data.idleStopped && String(data.timeLog?._id) === target) {
+        completeStoppedTimer(data.timeLog, data.idleSeconds);
+        syncTimerLock();
+      }
+    } else if (response.status === 404) {
       currentTimeLog = null;
       stopLiveDuration();
-      timerMessage.textContent = "The timer stopped because the server stopped receiving confirmation from this app. Time is recorded up to the last confirmed moment. Start a new timer to continue work.";
+      timerMessage.textContent = 'The timer stopped because the server stopped receiving confirmation from this app. Time is recorded up to the last confirmed moment. Start a new timer to continue work.';
       await loadActiveTimer();
       await loadTodayTimesheet();
     }
   } catch {
-    // The server closes the timer at its last confirmed heartbeat if contact
-    // is lost; a transient error is retried on the next interval.
     serverReachable = false;
   }
 }
@@ -1763,7 +1795,7 @@ function formatDuration(totalSeconds) {
     .join(":");
 }
 
-function calculateCurrentWorkSeconds(timeLog, now = Date.now()) {
+function calculateCurrentWorkSeconds(timeLog, now = timerClockNow()) {
   const startedAt = validTimelineTime(timeLog?.startedAt);
   if (startedAt === null) return 0;
 
@@ -1806,7 +1838,7 @@ function calculateBreakSeconds(timeLog) {
   // task - not just the time spent paused inside a work task.
   if (isBreakTask(timeLog)) return calculateCurrentWorkSeconds(timeLog);
   if (!isIntentionalBreak(timeLog)) return 0;
-  const now = Date.now();
+  const now = timerClockNow();
   const currentBreak = [...(timeLog?.pauses || [])]
     .reverse()
     .find((pause) => ["break", "manual"].includes(pause.reason) && pause.pausedAt && !pause.resumedAt);
@@ -1926,7 +1958,10 @@ function startLiveDuration(timeLog) {
 
   timerInterval = setInterval(
     updateDuration,
-    1000
+    // A one-second callback can fire just before a whole-second boundary,
+    // leaving zero visible until the next callback. Only repaint locally;
+    // the server timestamps still determine elapsed time.
+    200
   );
 }
 async function loadActiveTimer() {
@@ -1950,6 +1985,7 @@ async function loadActiveTimer() {
     noteServerResponse(response);
 
     const data = await response.json();
+    if (response.ok) syncServerClock(data.serverNow);
 
     if (!response.ok) {
       timerMessage.textContent =
@@ -2047,6 +2083,47 @@ async function loadActiveTimer() {
     syncTimerLock();
   }
 }
+function completeStoppedTimer(timeLog, idleSeconds = 0) {
+    stopLiveDuration();
+
+    currentTimeLog = null;
+    timerStateConfirmed = true;
+    automaticIdlePause = false;
+    activeTaskIdleLogout = false;
+    pendingIdleStop = null;
+    if (idleSeconds <= 0) {
+      setSelectedTaskId("", "timer stopped");
+      taskSelect.value = "";
+    }
+    timerStatus.textContent = idleSeconds > 0 ? "Idle" : "Stopped";
+    updateBreakUI(null);
+    updateNoteControlsUI(null);
+
+    // This is the live-session clock, not the completed-session summary.
+    // The saved duration is shown in the timesheet instead.
+    timerDuration.textContent = "00:00:00";
+
+    timerMessage.textContent = idleSeconds > 0
+      ? "Your timer stopped due to inactivity. Click Continue, then Start to work again."
+      : "Timer stopped successfully.";
+
+    startTimerButton.disabled = false;
+    if (pauseTimerButton) pauseTimerButton.disabled = true;
+    if (resumeTimerButton) resumeTimerButton.disabled = true;
+    stopTimerButton.disabled = true;
+
+    projectSelect.disabled = false;
+    if (clientSelect) clientSelect.disabled = !clientSelect.options || clientSelect.options.length <= 1;
+
+    // Only re-enable the task dropdown when it holds real task options.
+    taskSelect.disabled =
+      !selectedProjectId || tasksSignature === null;
+    // Announce only the confirmed Working -> Idle transition. Acknowledging
+    // this notice never changes the timer or its saved idle interval.
+    if (idleSeconds > 0) showIdleStartedPopup(timeLog, idleSeconds);
+    void loadTodayTimesheet();
+}
+
 async function stopTimer({ idleSeconds = 0 } = {}) {
   if (pendingIdleStop) idleSeconds = Math.max(idleSeconds, Math.floor((Date.now() - pendingIdleStop.startedAt) / 1000));
   const token = getToken();
@@ -2110,44 +2187,7 @@ async function stopTimer({ idleSeconds = 0 } = {}) {
       return;
     }
 
-    stopLiveDuration();
-
-    currentTimeLog = null;
-    timerStateConfirmed = true;
-    automaticIdlePause = false;
-    activeTaskIdleLogout = false;
-    pendingIdleStop = null;
-    if (idleSeconds <= 0) {
-      setSelectedTaskId("", "timer stopped");
-      taskSelect.value = "";
-    }
-    timerStatus.textContent = idleSeconds > 0 ? "Idle" : "Stopped";
-    updateBreakUI(null);
-    updateNoteControlsUI(null);
-
-    // This is the live-session clock, not the completed-session summary.
-    // The saved duration is shown in the timesheet instead.
-    timerDuration.textContent = "00:00:00";
-
-    timerMessage.textContent = idleSeconds > 0
-      ? "Your timer stopped due to inactivity. Click Continue, then Start to work again."
-      : data.message || "Timer stopped successfully.";
-
-    startTimerButton.disabled = false;
-    if (pauseTimerButton) pauseTimerButton.disabled = true;
-    if (resumeTimerButton) resumeTimerButton.disabled = true;
-    stopTimerButton.disabled = true;
-
-    projectSelect.disabled = false;
-    if (clientSelect) clientSelect.disabled = !clientSelect.options || clientSelect.options.length <= 1;
-
-    // Only re-enable the task dropdown when it holds real task options.
-    taskSelect.disabled =
-      !selectedProjectId || tasksSignature === null;
-    // Announce only the confirmed Working -> Idle transition. Acknowledging
-    // this notice never changes the timer or its saved idle interval.
-    if (idleSeconds > 0) showIdleStartedPopup(data.timeLog, idleSeconds);
-    void loadTodayTimesheet();
+    completeStoppedTimer(data.timeLog, idleSeconds);
   } catch (error) {
     serverReachable = false;
     timerMessage.textContent =
@@ -2367,6 +2407,7 @@ async function startTimer() {
     }
 
     syncTimerLock();
+    const requestStartedAt = globalThis.performance?.now?.() ?? Date.now();
     const response = await fetch(
       `${API_BASE_URL}/time-logs/start`,
       {
@@ -2391,6 +2432,9 @@ async function startTimer() {
     noteServerResponse(response);
 
     const data = await response.json();
+    console.debug('[timer-start]', JSON.stringify({ requestMilliseconds: Math.round((globalThis.performance?.now?.() ?? Date.now()) - requestStartedAt),
+      serverProcessingMilliseconds: data.startProcessingMilliseconds ?? null }));
+    if (response.ok) syncServerClock(data.serverNow, data.replayed ? undefined : data.timeLog?.startedAt);
     if (response.status < 500) pendingStartOperation = null;
 
     if (!response.ok) {

@@ -919,3 +919,22 @@ test("the login page never locks the screen", async () => {
   assert.ok(h.state.lock.length > 0);
   assert.ok(h.state.lock.every((value) => value === "inactive"));
 });
+
+test('heartbeat idle safeguard stops the UI and shows the normal warning without the idle polling loop', async () => {
+  const h = harness({ idle: 1560, page: 'dashboard' });
+  h.run('currentTimeLog.desktopHeartbeatAt = new Date().toISOString(); idleMonitorInterval = null');
+  const fetch = h.context.fetch;
+  let sent;
+  h.context.fetch = async (url, options) => {
+    if (!url.endsWith('/heartbeat')) return fetch(url, options);
+    sent = JSON.parse(options.body);
+    return { ok: true, status: 200, json: async () => ({ idleStopped: true, idleSeconds: 1560,
+      timeLog: { ...h.state.timer, status: 'stopped', stoppedAt: new Date().toISOString(), pauses: [{ reason: 'idle', pausedAt: new Date(Date.now()-1560000).toISOString(), resumedAt: new Date().toISOString() }] } }) };
+  };
+  await h.run('sendTimerHeartbeat()');
+  assert.equal(sent.osIdleSeconds, 1560); assert.equal(sent.timeLogId, 'existing');
+  assert.equal(h.run('currentTimeLog'), null);
+  assert.equal(h.nodes.get('timerStatus').textContent, 'Idle');
+  assert.equal(h.nodes.get('idleStartedDialog').open, true);
+  assert.equal(h.state.lock.at(-1), 'locked');
+});

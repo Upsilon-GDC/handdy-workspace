@@ -249,8 +249,8 @@ function harness({ role = "employee", clock } = {}) {
           throw new TypeError("network down");
         }
         if (state.startError) return { ok: false, status: state.startError.status, json: async () => state.startError.body };
-        return json({ timeLog: {
-          _id: "log-1", status: "running", startedAt: new Date().toISOString(),
+        return json({ serverNow: state.startServerNow, replayed: state.startReplayed, timeLog: {
+          _id: "log-1", status: "running", startedAt: state.startStartedAt || new Date().toISOString(),
           project: { _id: body.project }, client: body.client ? { _id: body.client } : null,
           task: { _id: body.task, taskType: "work" }, pauses: [],
         } });
@@ -286,7 +286,7 @@ test("Training waits for a confirmed start before counting, with no speculative 
   assert.equal(h.state.startRequests.length, 1);
   assert.equal(h.run("timerStatus.textContent"), "Working");
   assert.equal(h.intervals.size, 1);
-  assert.equal([...h.intervals.values()][0].delay, 1000);
+  assert.equal([...h.intervals.values()][0].delay, 200);
   const start = h.run("new Date(currentTimeLog.startedAt).getTime()");
   assert.equal(h.context.calculateCurrentWorkSeconds(h.run("currentTimeLog"), start + 2000), 2);
   assert.equal(h.context.calculateCurrentWorkSeconds(h.run("currentTimeLog"), start + 3000), 3);
@@ -313,6 +313,65 @@ test("desktop client selector uses all active clients and starts promptly", asyn
   assert.equal(h.state.startBodies[0].client, "client-b");
   assert.equal(h.client.disabled, true);
   assert.equal(h.run("timerStatus.textContent"), "Working");
+});
+
+test("a confirmed start from an older server advances even when the PC clock is behind", async () => {
+  const serverStart = Date.parse('2026-11-11T10:00:00.000Z');
+  const clock = { now: serverStart - 2000 };
+  const h = harness({ clock });
+  // Older hosted responses do not contain serverNow.
+  h.state.startStartedAt = new Date(serverStart).toISOString();
+  await h.context.loadClients(); await h.context.loadProjects();
+  await h.project.choose('p1'); await h.client.choose('client-a'); await h.task.choose('t1');
+  await h.context.startTimer();
+  assert.equal(h.run('timerStatus.textContent'), 'Working');
+  assert.equal(h.run('timerDuration.textContent'), '00:00:00');
+  clock.now += 1100;
+  for (const interval of h.intervals.values()) interval.callback();
+  assert.equal(h.run('timerDuration.textContent'), '00:00:01');
+  assert.equal(h.run('currentTimeLog.startedAt'), h.state.startStartedAt,
+    'display clock correction must not change the saved start');
+});
+
+test('the server clock takes priority over the fresh-start fallback', async () => {
+  const start = Date.parse('2026-11-11T10:00:00.000Z');
+  const clock = { now: start - 2000 };
+  const h = harness({ clock });
+  h.state.startStartedAt = new Date(start).toISOString();
+  h.state.startServerNow = new Date(start + 1500).toISOString();
+  await h.context.loadClients(); await h.context.loadProjects();
+  await h.project.choose('p1'); await h.client.choose('client-a'); await h.task.choose('t1');
+  await h.context.startTimer();
+  assert.equal(h.run('timerDuration.textContent'), '00:00:01');
+  clock.now += 600;
+  for (const interval of h.intervals.values()) interval.callback();
+  assert.equal(h.run('timerDuration.textContent'), '00:00:02');
+});
+
+test('replaying an older start without serverNow preserves its elapsed duration', async () => {
+  const start = Date.parse('2026-11-11T10:00:00.000Z');
+  const h = harness({ clock: { now: start + 3_600_000 } });
+  h.state.startStartedAt = new Date(start).toISOString();
+  h.state.startReplayed = true;
+  await h.context.loadClients(); await h.context.loadProjects();
+  await h.project.choose('p1'); await h.client.choose('client-a'); await h.task.choose('t1');
+  await h.context.startTimer();
+  assert.equal(h.run('timerDuration.textContent'), '01:00:00');
+});
+
+test('a display callback just before the first second does not defer the clock another second', async () => {
+  const clock = { now: Date.parse('2026-11-11T10:00:00.000Z') };
+  const h = harness({ clock });
+  h.state.startStartedAt = new Date(clock.now).toISOString();
+  await h.context.loadClients(); await h.context.loadProjects();
+  await h.project.choose('p1'); await h.client.choose('client-a'); await h.task.choose('t1');
+  await h.context.startTimer();
+  const interval = [...h.intervals.values()][0];
+  clock.now += 999; interval.callback();
+  assert.equal(h.run('timerDuration.textContent'), '00:00:00');
+  clock.now += interval.delay; interval.callback();
+  assert.equal(h.run('timerDuration.textContent'), '00:00:01');
+  assert.ok(interval.delay <= 200);
 });
 
 for (const role of ["employee", "team_lead"]) {
@@ -824,4 +883,21 @@ test("the stop button names its timer, and a changed timer is reconciled instead
   assert.equal(h.state.activeRequests, before + 1);
   assert.equal(h.run("timerMessage.textContent"), "A different timer is running now. Your timer has been refreshed.");
   assert.notEqual(h.state.stopBodies[1].operationId, h.state.stopBodies[0].operationId);
+});
+
+test('a confirmed timer starts counting without waiting for a slow or fast Windows clock', async () => {
+  for (const difference of [3000, -3600000]) {
+    const clock = { now: Date.UTC(2026, 10, 11, 5) }, h = harness({ clock });
+    h.state.startServerNow = new Date(clock.now + difference).toISOString();
+    h.state.startStartedAt = h.state.startServerNow;
+    await h.context.loadClients(); await h.context.loadProjects();
+    await h.project.choose('p1'); await h.client.choose('client-a'); await h.task.choose('t1');
+    await h.context.startTimer();
+    assert.equal(h.run('timerStatus.textContent'), 'Working');
+    assert.equal(h.run('timerDuration.textContent'), '00:00:00');
+    clock.now += 1000;
+    for (const interval of h.intervals.values()) interval.callback();
+    assert.equal(h.run('timerDuration.textContent'), '00:00:01');
+    assert.equal(h.run('currentTimeLog.startedAt'), h.state.startStartedAt, 'server timestamps stay unchanged');
+  }
 });

@@ -1,3 +1,4 @@
+
 # Node modules
 **/node_modules/
 
@@ -38,4 +39,16 @@ artifacts/*.exe
 
 # Database backups contain employee data (backend/scripts/backupDatabase.js)
 backend/backups/
+# Generated Windows application builds
+output/
 
+# Electron build files
+dist/
+dist-electron/
+
+# Windows executables
+*.exe
+
+# Dependencies
+node_modules/
+output/

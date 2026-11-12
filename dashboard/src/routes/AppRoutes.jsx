@@ -1,3 +1,7 @@
+import ProductionPage from '../pages/production/ProductionPage';
+import ProductionSettingsPage from '../pages/production/ProductionSettingsPage';
+import ProductionBillingPage from '../pages/production/ProductionBillingPage';
+import ProductionReportsPage from '../pages/production/ProductionReportsPage';
 import AdminTaskLinksPage from '../pages/admin/AdminTaskLinksPage';
 import ClientAccessSettings from '../pages/admin/ClientAccessSettings';
 import {
@@ -84,8 +88,6 @@ import RoleReportPage
 import AdminReportPage
   from "../pages/admin/AdminReportPage";
 
-import BillingPage
-  from "../pages/shared/BillingPage";
 
 // ==========================================
 // PROFILE
@@ -110,7 +112,6 @@ import ProtectedRoute
 // Permissions a page's data needs (see ProtectedRoute `needs`).
 const ALL_REPORTS = ["view_all_reports"];
 const TEAM_REPORTS = ["view_team_timesheets"];
-const BILLING = ["view_billing_amounts"];
 // The task form always assigns new tasks to the whole team.
 const CREATE_TASKS = ["create_tasks"];
 // Duties that open a page to any role (role or personal permissions).
@@ -239,13 +240,19 @@ function AppRoutes() {
         }
       />
 
+      <Route path="/admin/production" element={<ProtectedRoute><ProductionPage key="overview" view="overview" /></ProtectedRoute>} />
+      <Route path="/admin/production/employee" element={<ProtectedRoute><ProductionPage key="employee" view="employee" /></ProtectedRoute>} />
+      <Route path="/admin/production/team" element={<ProtectedRoute><ProductionPage key="team" view="team" /></ProtectedRoute>} />
+      <Route path="/admin/production/clients" element={<ProtectedRoute><ProductionPage key="client" view="client" /></ProtectedRoute>} />
+      <Route path="/admin/production/tasks" element={<ProtectedRoute><ProductionPage key="task" view="task" /></ProtectedRoute>} />
+      <Route path="/admin/production/employee/details" element={<ProtectedRoute><ProductionPage key="details" view="details" /></ProtectedRoute>} />
+      <Route path="/admin/production/settings" element={<ProtectedRoute><ProductionSettingsPage /></ProtectedRoute>} />
+      <Route path="/admin/production/billing" element={<ProtectedRoute><ProductionBillingPage /></ProtectedRoute>} />
+      <Route path="/admin/production/reports" element={<ProtectedRoute><ProductionReportsPage /></ProtectedRoute>} />
       <Route
         path="/admin/billing"
-        element={<AdminStaffOnly needs={BILLING} grants={BILLING}><BillingPage key="billing" /></AdminStaffOnly>}
+        element={<ProtectedRoute><Navigate to="/admin/production/billing" replace /></ProtectedRoute>}
       />
-      <Route path="/admin/production" element={<AdminStaffOnly needs={BILLING} grants={BILLING}><BillingPage key="production" productionOnly productionScope="overview" /></AdminStaffOnly>} />
-      <Route path="/admin/production/team" element={<AdminStaffOnly needs={BILLING} grants={BILLING}><BillingPage key="team-production" productionOnly productionScope="team" /></AdminStaffOnly>} />
-      <Route path="/admin/production/employee" element={<AdminStaffOnly needs={BILLING} grants={BILLING}><BillingPage key="employee-production" productionOnly productionScope="employee" /></AdminStaffOnly>} />
 
       <Route
         path="/admin/help"

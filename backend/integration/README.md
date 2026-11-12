@@ -1,4 +1,32 @@
+# Desktop idle safeguard verification
+
+`node --test --test-isolation=none integration/idleHeartbeat.cjs` uses only an
+isolated loopback database. It checks OS-idle heartbeat samples against the
+current global/employee policy, excludes reported idle seconds from work,
+retains break/exempt/active-work behavior, and rejects stale timer IDs. Samples
+store only the latest idle seconds, observation time and app version.
+No idle is inferred from long sessions or absent input telemetry. Existing
+records are not backfilled. Deployment plus desktop 2.0.7 is required for the
+independent heartbeat safeguard; older clients retain their existing protocol.
+
+Timer-start validation now overlaps the lease sweep with independent reference
+reads. Start and active responses include serverNow; desktop live clocks align
+to it, avoiding a stopped-looking counter when the Windows clock is behind.
+The UI still waits for a confirmed server start. Diagnostic timing logs separate
+request latency from controller processing; local tests do not establish live
+Render/Atlas start latency.
+
 # Activity mapping and entry correction MongoDB integration tests
+
+Timer start performance regression (run from `backend`):
+
+```powershell
+node --test --test-isolation=none integration/timerStartLatency.cjs
+```
+
+This uses its own disposable loopback database and checks that a fresh mapped start reads project/client/task references once each, returns only permitted metadata, records attendance before replying, and safely replays duplicate requests. It prints local timings and database command counts; these do not measure deployed latency. Independent validation reads run together, but lease cleanup, authorization, per-employee write serialization and attendance updates still complete before success. The optimization is in the backend; it does not require a desktop version change.
+
+Optional `TIMER_START_BASELINE_PATH` accepts a trusted local pre-change controller source file for before/after command comparison. It executes that source in the test process; leave it unset for normal regression runs. Run different integration files in separate Node processes so their isolated databases do not share a Mongoose connection.
 
 Run from the repository root:
 

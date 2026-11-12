@@ -27,7 +27,7 @@ const server = http.createServer((req, res) => {
     if (req.url === "/api/auth/login") data = { token: "local-test-token", user };
     else if (req.url === "/api/auth/me") data = { user };
     else if (req.url === "/api/settings/idle-policy") data = { idlePolicy: { idleThresholdMinutes: 5, autoLogoutMinutes: 50 } };
-    else if (req.url === "/api/time-logs/active") data = { timeLog: timer };
+    else if (req.url === "/api/time-logs/active") data = { timeLog: timer, serverNow: new Date().toISOString() };
     else if (req.url.startsWith("/api/time-logs/history")) data = { timeLogs: [...completedLogs, ...(timer ? [timer] : [])] };
     else if (req.url === "/api/time-logs/start") {
       const request = JSON.parse(body);
@@ -44,15 +44,15 @@ const server = http.createServer((req, res) => {
         client: { _id: request.client, clientName: request.client === "client-b" ? "XYZ LLC" : "ABC Company" },
         task: { _id: request.task, taskName: request.task === "break-task" ? "Lunch" : "Training", taskType: request.task === "break-task" ? "break" : "work", idleLogout: true },
       };
-      data = { timeLog: timer };
+      data = { timeLog: timer, ...(process.env.CRM_TEST_LEGACY_CLOCK === '1' ? {} : { serverNow: new Date().toISOString() }) };
     } else if (req.url === "/api/time-logs/pause") {
       actions.push("pause");
       timer = { ...timer, status: "paused", pauses: [...timer.pauses, { reason: JSON.parse(body).reason, pausedAt: new Date().toISOString() }] };
-      data = { timeLog: timer };
+      data = { timeLog: timer, serverNow: new Date().toISOString() };
     } else if (req.url === "/api/time-logs/resume") {
       actions.push("resume"); timer.status = "running";
       timer.pauses = timer.pauses.map(pause => pause.resumedAt ? pause : { ...pause, resumedAt: new Date().toISOString() });
-      data = { timeLog: timer };
+      data = { timeLog: timer, serverNow: new Date().toISOString() };
     } else if (req.url === "/api/time-logs/stop") {
       actions.push("stop");
       const stopped = { ...timer, status: "stopped", stoppedAt: new Date().toISOString(), totalWorkedSeconds: Math.floor((Date.now() - new Date(timer.startedAt).getTime()) / 1000) };
@@ -121,6 +121,7 @@ app.whenReady().then(async () => {
     await evaluate(`document.getElementById("clientSelect").value = "client-b";
       document.getElementById("clientSelect").dispatchEvent(new Event("change"));`);
     await until(() => evaluate("!document.getElementById('taskSelect').disabled && [...document.getElementById('taskSelect').options].some(option => option.value === 'task')"));
+    await evaluate('window.originalDateNow = Date.now; Date.now = () => window.originalDateNow() - 3000; true');
     await evaluate(`document.getElementById("taskSelect").value = "task";
       document.getElementById("taskSelect").dispatchEvent(new Event("change"));
       document.getElementById("startTimerButton").click();`);
@@ -132,6 +133,9 @@ app.whenReady().then(async () => {
     assert.equal(await evaluate("document.getElementById('stopBreakButton').hidden"), true);
     assert.equal(timer.client._id, "client-b", "Timer payload must use the selected database ID");
     assert.equal(await evaluate("document.getElementById('clientSelect').selectedOptions[0].textContent"), "XYZ LLC");
+    await delay(1200);
+    assert.notEqual(await evaluate("document.getElementById('timerDuration').textContent"), "00:00:00", "a PC clock three seconds behind must not delay the confirmed counter");
+    await evaluate('Date.now = window.originalDateNow; syncServerClock(new Date().toISOString())');
     await delay(3100);
     assert.notEqual(await evaluate("document.getElementById('timerDuration').textContent"), "00:00:00");
     assert.equal(startCount, 1, "Training must keep the same confirmed timer instead of restarting");
@@ -248,7 +252,7 @@ app.whenReady().then(async () => {
     await until(() => win.webContents.getURL().endsWith("index.html"));
     assert.deepEqual(actions, ["stop", "logout", "logout"]);
     assert.deepEqual(consoleErrors, [], 'no renderer console errors');
-    console.log("PASS: five-minute popup, live countdown, mandatory Continue, preserved selection, fifty-minute logout, breaks, and no timer runtime errors.");
+    console.log(`PASS: confirmed counter with ${process.env.CRM_TEST_LEGACY_CLOCK === '1' ? 'legacy' : 'current'} server clock response; five-minute popup, live countdown, mandatory Continue, preserved selection, fifty-minute logout, breaks, and no timer runtime errors.`);
   } catch (error) {
     console.error(error.stack || error.message);
     process.exitCode = 1;

@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Building2, CalendarDays, ChevronLeft, ClipboardList, Clock3, Factory, LayoutDashboard, Link2, LogOut, Menu, Search, Settings2, Users, WalletCards, X } from "lucide-react";
+import { Building2, CalendarDays, ChevronLeft, ClipboardList, Clock3, Factory, LayoutDashboard, Link2, LogOut, Menu, Search, Settings2, Users, X } from "lucide-react";
 import useAuth from "../../context/useAuth";
 import { navigationForRole, dutyNavigationFor } from "./workspaceNavigation";
 import { decideLoginRequest, getPendingLoginRequest } from "../../api/authApi";
 import { monitorLoginRequests } from "../../utils/backgroundRetry";
 
-const icons = { Workspace: LayoutDashboard, "Task linking": Link2, Production: Factory, "Entry management": ClipboardList, "Time & attendance": Clock3, Finance: WalletCards, System: Settings2 };
+const icons = { Workspace: LayoutDashboard, "Task linking": Link2, Production: Factory, "Entry management": ClipboardList, "Time & attendance": Clock3, System: Settings2 };
 // Accent colour for each navigation group's icon chip (styled in workspace.css).
-const groupTones = { Workspace: "blue", "Task linking": "violet", Production: "teal", "Entry management": "pink", "Time & attendance": "teal", Finance: "amber", System: "slate" };
+const groupTones = { Workspace: "blue", "Task linking": "violet", Production: "teal", "Entry management": "pink", "Time & attendance": "teal", System: "slate" };
 
 export default function AppShell({ children }) {
   const { user, isAuthenticated, isAuthLoading, logout, clearAuth, hasPermission } = useAuth();
@@ -61,7 +61,7 @@ export default function AppShell({ children }) {
   const current = navigation.find((item) => item.path === location.pathname || item.activePaths?.includes(location.pathname));
   const name = user?.fullName || user?.name || "Your account";
   const initials = name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("");
-  const groups = ["Workspace", "Task linking", "Production", "Entry management", "Time & attendance", "Finance", "System"].filter((group) => navigation.some((item) => item.group === group));
+  const groups = ["Workspace", "Task linking", "Production", "Entry management", "Time & attendance", "System"].filter((group) => navigation.some((item) => item.group === group));
   const results = search.trim() ? navigation.filter((item) => `${item.group} ${item.title}`.toLowerCase().includes(search.toLowerCase())) : [];
   const closeNavigation = () => { setMobileOpen(false); setSearch(""); };
   const signOut = async () => {
