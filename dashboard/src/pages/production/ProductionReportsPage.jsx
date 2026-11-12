@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import ProductionWorkFilters from '../../components/production/ProductionWorkFilters';
-import ProductionReportCards from '../../components/production/ProductionReportCards';
+import ProductionReportLedger from '../../components/production/ProductionReportLedger';
 import { getProductionReportTable, authorizeProductionExport } from '../../api/productionApi';
 import getApiErrorMessage from '../../utils/getApiErrorMessage';
 import { productionDates, productionWarnings } from '../../utils/production';
@@ -25,7 +25,6 @@ export default function ProductionReportsPage() {
   const [query, setQuery] = useState(() => ({ ...draft })), [report, setReport] = useState(null), [page, setPage] = useState(1);
   const [choices, setChoices] = useState({ teams: [], employees: [], clients: [], projects: [], tasks: [] });
   const [loading, setLoading] = useState(true), [exporting, setExporting] = useState(false), [error, setError] = useState('');
-  const [display, setDisplay] = useState('cards');
   useEffect(() => {
     const controller = new AbortController(); setLoading(true); setError(''); setReport(null); setPage(1);
     getProductionReportTable(query, controller.signal).then(value => {
@@ -73,9 +72,8 @@ export default function ProductionReportsPage() {
     {error && <p className="prod-error" role="alert">{error}</p>}
     {data && !loading && <>
       <div className="prod-summary-grid" aria-label="Report summary">{headline.map(row => <article className="prod-panel prod-card" key={row.label}><span>{row.label}</span><strong>{productionReportCell(row.value, row)}</strong></article>)}</div>
-      <section className="prod-panel"><div className="prod-section-heading"><div><h2>{data.title}</h2><p>{data.period.startDate} – {data.period.endDate}</p></div><div className="prod-report-actions"><div className="prod-report-display" role="group" aria-label="Report layout"><button type="button" aria-pressed={display === 'cards'} onClick={() => setDisplay('cards')}>Cards</button><button type="button" aria-pressed={display === 'table'} onClick={() => setDisplay('table')}>Table</button></div>{report.canExport && <div className="prod-export-actions"><button className="prod-secondary" disabled={exporting || pending} onClick={() => exportFile('excel')}>Export Excel</button><button className="prod-primary" disabled={exporting || pending} onClick={() => exportFile('pdf')}>Export PDF</button></div>}</div></div>
-        {display === 'cards' && <ProductionReportCards data={data} rows={data.rows.slice((page - 1) * 25, page * 25)} offset={(page - 1) * 25} />}
-        <div className="prod-table-wrap" hidden={display !== 'table'}><table className="prod-table" aria-label="Production report data"><thead><tr>{data.columns.map(col => <th key={col.key}>{col.label}</th>)}</tr></thead><tbody>{data.rows.slice((page - 1) * 25, page * 25).map((row, index) => <tr key={index}>{row.map((value, columnIndex) => <td key={columnIndex}>{productionReportCell(value, data.columns[columnIndex])}</td>)}</tr>)}</tbody></table></div>
+      <section className="prod-panel"><div className="prod-section-heading"><div><h2>{data.title}</h2><p>{data.period.startDate} – {data.period.endDate}</p></div>{report.canExport && <div className="prod-export-actions"><button className="prod-secondary" disabled={exporting || pending} onClick={() => exportFile('excel')}>Export Excel</button><button className="prod-primary" disabled={exporting || pending} onClick={() => exportFile('pdf')}>Export PDF</button></div>}</div>
+        <ProductionReportLedger data={data} rows={data.rows.slice((page - 1) * 25, page * 25)} offset={(page - 1) * 25} />
         {!data.rows.length && <p className="prod-empty">No records match these filters.</p>}
         {pages > 1 && <div className="prod-pagination"><span>{data.rows.length} records · Page {page} of {pages}</span><div><button className="prod-secondary" disabled={page === 1 || exporting} onClick={() => setPage(value => value - 1)}>Previous</button><button className="prod-secondary" disabled={page === pages || exporting} onClick={() => setPage(value => value + 1)}>Next</button></div></div>}
       </section>
