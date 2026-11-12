@@ -111,6 +111,11 @@ app.whenReady().then(async () => {
     await until(`document.querySelector('[aria-label="Billing review"] .prod-billing-status')?.textContent==='Draft'`);
     let batch = await Batch.findOne({ employee: employee._id }).lean(); assert.ok(batch);
     assert.equal(await evaluate(`document.querySelector('[aria-label="Billing review"]').textContent.includes('reviewer must verify')`), true);
+    assert.equal(await evaluate(`!!document.querySelector('[aria-label="Review note"]')`), false, 'Normal report has no separate technical review actions');
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Billing review steps"]').querySelectorAll('button').length`), 2);
+    // Existing history controls retain rejection/finalization for older saved reports.
+    await win.loadURL(`${base}/admin/production/billing?id=${batch._id}`);
+    await until(`!!document.querySelector('[aria-label="Team assignment review"]')`);
     await click('Select all task entries (1)');
     assert.equal(await evaluate(`document.querySelector('[aria-label="Billable work"]').closest('details').open`), false, 'Detailed work starts collapsed');
     assert.ok(await evaluate(`document.querySelector('.prod-assignment-scroll').getBoundingClientRect().height <= 261`));
@@ -329,7 +334,7 @@ app.whenReady().then(async () => {
     const activeEmployee = await Employee.findOne({ employeeId: 'EXTRA-1' }).lean();
     await Log.create({ employee: activeEmployee._id, project: project._id, client: client._id, task: task._id, startedAt: `${date}T17:00:00Z`, status: 'running', isActiveTimer: true });
     assert.equal(await evaluate(`!!document.querySelector('[aria-label="Employee bulk action"]')`), false, 'No technical action dropdown');
-    await click('Select all employees'); await click('Prepare 27 for approval');
+    await click('Select all employees'); await click('Prepare for approval (27)');
     await until(`document.querySelector('.prod-bulk-result')?.textContent.includes('1 of 27') && !!document.querySelector('[aria-label="Billing review steps"]')`);
     assert.equal((await Batch.findOne({ employee: extra._id }).lean()).status, 'Submitted');
     assert.equal(await evaluate(`document.querySelector('.prod-bulk-result').classList.contains('prod-warning')`), true, 'Partial failure is a warning, not success');
@@ -340,7 +345,7 @@ app.whenReady().then(async () => {
     await evaluate(`document.querySelector('.prod-bulk-result summary').click()`);
     win.setSize(1440, 1050); await pause(150);
     fs.writeFileSync(path.join(reportOutput, 'billing-preparation-attention.png'), (await win.webContents.capturePage()).toPNG());
-    await click('2. Approve billing (1)'); await click('Select all employees'); await click('Approve 1 employees');
+    await click('Select all employees'); await click('Approve billing (1)');
     await until(`document.querySelector('.prod-bulk-result')?.textContent.includes('1 of 1') && !!document.querySelector('[aria-label="Billing review steps"]')`);
     assert.equal((await Batch.findOne({ employee: extra._id }).lean()).status, 'Approved');
     assert.equal((await Batch.findById(batch._id).lean()).status, 'Finalized', 'Bulk actions leave finalized periods unchanged');
