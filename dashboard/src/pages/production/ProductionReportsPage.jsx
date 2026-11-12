@@ -10,7 +10,7 @@ import { productionReportView } from '../../utils/productionViews';
 import '../../styles/production.css';
 
 const types = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', employee: 'Employee', team: 'Team', client: 'Client & project', task: 'Task', details: 'Employee work details' };
-const bases = { live: 'Live production estimates', approved: 'Saved approved billing', finalized: 'Original finalized billing', adjustments: 'Recorded historical adjustments', adjusted: 'Finalized billing after adjustments' };
+const bases = { live: 'Current estimate', approved: 'Approved billing', finalized: 'Final billing' };
 const reportHeadlines = {
   overview: ['Expected', 'Production', 'Remaining target', 'Production achievement'],
   employee: ['Employees', 'Production', 'Remaining target', 'Production achievement'],
@@ -63,10 +63,11 @@ export default function ProductionReportsPage() {
     : row.type === 'money' || ['Saved periods', 'Adjustments', 'Eligible work'].includes(row.label)) || [];
   return <DashboardLayout title="Production reports"><section className="production-module production-reports">
     <form className="prod-panel prod-filter-form" aria-label="Production report filters" onSubmit={generate}><fieldset disabled={loading || exporting}><div className="prod-filter-grid">
-      <label>Report source<select aria-label="Report source" value={draft.basis} onChange={event => update('basis', event.target.value)}>{Object.entries(bases).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+      <label>Report<select aria-label="Report source" value={['adjusted', 'adjustments'].includes(draft.basis) ? 'finalized' : draft.basis} onChange={event => update('basis', event.target.value)}>{Object.entries(bases).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       {draft.basis === 'live' && <label>Report type<select aria-label="Report type" value={draft.type} onChange={event => update('type', event.target.value)}>{Object.entries(types).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}
     </div>
     <ProductionWorkFilters showHint={false} draft={draft} choices={choices} view={draft.basis === 'live' ? productionReportView(draft.type) : 'saved'} onChange={patch => setDraft(previous => ({ ...previous, ...patch }))} />
+    {['finalized', 'adjusted', 'adjustments'].includes(draft.basis) && <details className="prod-report-corrections"><summary>Corrections</summary><label className="prod-checkbox"><input aria-label="Include billing corrections" type="checkbox" checked={draft.basis === 'adjusted'} disabled={draft.basis === 'adjustments'} onChange={event => update('basis', event.target.checked ? 'adjusted' : 'finalized')} />Include corrections in the final total</label><label className="prod-checkbox"><input aria-label="Show billing corrections only" type="checkbox" checked={draft.basis === 'adjustments'} onChange={event => update('basis', event.target.checked ? 'adjustments' : 'finalized')} />Show correction amounts only</label></details>}
     {draft.basis === 'live' && <div className="prod-optional-work"><label className="prod-checkbox"><input aria-label="Include optional Admin work" type="checkbox" checked={draft.includeOptionalWork} onChange={event => update('includeOptionalWork', event.target.checked)} />Include optional Admin work in production and billing</label></div>}
     <div className="prod-filter-actions"><button className="prod-primary">{loading ? 'Preparing…' : 'Generate report'}</button></div></fieldset></form>
     {loading && <p className="prod-status" role="status">Preparing report…</p>}

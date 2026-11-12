@@ -206,6 +206,7 @@ app.whenReady().then(async () => {
     const headerIndex = (sheet, label) => sheet.getRow(1).values.findIndex(value => value === label);
     const summaryValue = (book, label) => { let value; book.getWorksheet('Summary').eachRow(row => { if (row.getCell(1).value === label) value = row.getCell(2).value; }); return value; };
     win.setSize(1440, 1050); await openReports(admin); await select('Report type', 'employee'); await generateReport();
+    assert.deepEqual(await evaluate(`[...document.querySelector('[aria-label="Report source"]').options].map(row=>row.textContent)`), ['Current estimate', 'Approved billing', 'Final billing']);
     assert.equal(await evaluate(`document.querySelector('[aria-label="Production report data"]').querySelectorAll('.prod-ledger-record').length`), 25, 'One report sheet shows all visible records');
     assert.equal(await evaluate(`document.querySelector('[aria-label="Employee contributions"]').querySelectorAll('.prod-ledger-record').length`), 10);
     assert.equal(await evaluate(`!!document.querySelector('[aria-label="Report layout"]')`), false, 'No layout switch');
@@ -234,9 +235,11 @@ app.whenReady().then(async () => {
     await select('Team', 'all'); await select('Report source', 'finalized'); await generateReport();
     const original = await workbook(await download('Export Excel')); assert.equal(summaryValue(original, 'Finalized USD'), 25);
     await download('Export PDF');
-    await select('Report source', 'adjustments'); await generateReport();
+    await evaluate(`document.querySelector('.prod-report-corrections').open=true;document.querySelector('[aria-label="Show billing corrections only"]').click()`); await generateReport();
     const adjustment = await workbook(await download('Export Excel')); assert.equal(summaryValue(adjustment, 'Adjustment USD'), 15);
-    await select('Report source', 'adjusted'); await generateReport();
+    await evaluate(`document.querySelector('[aria-label="Show billing corrections only"]').click()`);
+    await until(`!document.querySelector('[aria-label="Include billing corrections"]').disabled`);
+    await evaluate(`document.querySelector('[aria-label="Include billing corrections"]').click()`); await generateReport();
     const corrected = await workbook(await download('Export Excel')); assert.equal(summaryValue(corrected, 'Adjusted USD'), 40);
     await evaluate('window.scrollTo(0,0);new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))'); win.webContents.invalidate(); await pause(200);
     fs.writeFileSync(path.join(reportOutput, 'production-reports-desktop.png'), (await win.webContents.capturePage()).toPNG());

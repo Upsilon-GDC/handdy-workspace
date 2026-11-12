@@ -198,6 +198,8 @@
 .production-reports .prod-filter-form > fieldset > :not(.prod-filter-grid) { grid-column:1/-1; }
 .production-reports .prod-filter-hint { margin:3px 0; }
 .production-reports .prod-filter-actions { margin-top:0; justify-content:flex-end; }
+.prod-report-corrections { color:#64738c; font-size:12px; }
+.prod-report-corrections summary { cursor:pointer; padding:6px 0; }
 .production-reports .prod-optional-work .prod-filter-hint { font-size:10px; }
 /* One flat report sheet: labeled values wrap without a horizontal scrollbar. */
 .prod-report-ledger { padding:0 16px 12px; }
