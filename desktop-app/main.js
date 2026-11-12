@@ -18,11 +18,16 @@ const { PRODUCTION_APP_ORIGIN, resolveApiBaseUrl } = require("./api-config");
 const { startAppUpdater } = require("./app-updater");
 const { createTimerLock } = require("./timer-lock");
 const { configureLaunchAtLogin } = require('./login-startup');
+const { createTimerDiagnostics } = require('./timer-diagnostics');
 
 // Pin the existing package-derived profile before changing the display name.
 // This preserves saved employee sessions in both development and packaged builds.
 app.setPath("userData", app.getPath("userData"));
 app.setName("CRM");
+const recordTimerDiagnostic = createTimerDiagnostics({
+  filePath: path.join(app.getPath('userData'), 'logs', 'timer-performance.log'),
+  version: app.getVersion(),
+});
 
 // Development clients share the local API; packaged clients share production.
 // HANDDY_API_URL remains the explicit override for staging or custom builds.
@@ -139,7 +144,10 @@ ipcMain.on("timer-lock:set", (event, state) => {
   lastTimerLockState = { state: String(state), at: Date.now() };
   // An update restart is closing CRM; do not lock the screen again meanwhile.
   if (restartingForUpdate) return;
+  const before = Date.now();
   timerLock.report(String(state));
+  const lockMilliseconds = Date.now() - before;
+  if (lockMilliseconds >= 100) void recordTimerDiagnostic('lock', { lockMilliseconds });
 });
 
 function createWindow() {
@@ -161,6 +169,13 @@ function createWindow() {
   });
 
   mainWindowRef = mainWindow;
+  mainWindow.on('unresponsive', () => { void recordTimerDiagnostic('unresponsive'); });
+  mainWindow.on('responsive', () => { void recordTimerDiagnostic('responsive'); });
+  mainWindow.webContents.on('console-message', details => {
+    const match = /^\[timer-(start|confirm|render)\] (\{.{0,1024}\})$/.exec(details.message || '');
+    if (!match) return;
+    try { void recordTimerDiagnostic(match[1], JSON.parse(match[2])); } catch { /* Ignore unrelated console output. */ }
+  });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     try {

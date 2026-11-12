@@ -875,31 +875,31 @@ async function startHarness() {
   return { h, respond };
 }
 
-test("Start keeps the screen locked until the server confirms a running timer", async () => {
+test("Start unlocks immediately and remains unlocked when the server confirms", async () => {
   const { h, respond } = await startHarness();
   assert.equal(h.state.lock.at(-1), "locked");
   const starting = h.run("runTimerAction(startTimer)");
-  assert.equal(h.state.sentLock, "locked", "a pending request must not unlock the screen");
+  assert.equal(h.state.sentLock, "running", "pending Start unlocks immediately as in 2.0.1");
   await h.check();
-  assert.equal(h.state.lock.at(-1), "locked", "idle polls keep it locked while the start is pending");
+  assert.equal(h.state.lock.at(-1), "running", "idle polls retain the pending Start unlock");
   respond(true, { timeLog: { _id: "new", status: "running", startedAt: new Date().toISOString(), pauses: [] } });
   await starting;
   assert.equal(h.state.lock.at(-1), "running");
   assert.equal(h.nodes.get("timerLockNotice").hidden, true);
 });
 
-test("a refused or unsent start never unlocks the screen", async () => {
+test("an unsent start stays locked and a refused start restores the lock", async () => {
   const { h, respond } = await startHarness();
   h.nodes.get("taskSelect").value = "";
   await h.run("runTimerAction(startTimer)");
   assert.ok(!h.state.lock.includes("running"), "no task chosen: the request is not sent and the lock stays");
   h.nodes.get("taskSelect").value = "task-1";
   const starting = h.run("runTimerAction(startTimer)");
-  assert.equal(h.state.sentLock, "locked");
+  assert.equal(h.state.sentLock, "running");
   respond(false, { message: "This task is closed." });
   await starting;
   assert.equal(h.state.lock.at(-1), "locked");
-  assert.ok(!h.state.lock.includes("running"), "a refused start never releases the lock");
+  assert.equal(h.run('pendingStartPreview'), null);
   assert.equal(h.nodes.get("timerMessage").textContent, "This task is closed.");
 });
 

@@ -122,19 +122,29 @@ app.whenReady().then(async () => {
       document.getElementById("clientSelect").dispatchEvent(new Event("change"));`);
     await until(() => evaluate("!document.getElementById('taskSelect').disabled && [...document.getElementById('taskSelect').options].some(option => option.value === 'task')"));
     await evaluate('window.originalDateNow = Date.now; Date.now = () => window.originalDateNow() - 3000; true');
+    await evaluate(`window.handoffSamples = []; window.handoffProbe = setInterval(() => {
+      const parts = timerDuration.textContent.split(':').map(Number);
+      handoffSamples.push(parts[0] * 3600 + parts[1] * 60 + parts[2]);
+    }, 40); true`);
     await evaluate(`document.getElementById("taskSelect").value = "task";
       document.getElementById("taskSelect").dispatchEvent(new Event("change"));
       document.getElementById("startTimerButton").click();`);
     await until(() => evaluate("document.getElementById('timerStatus').textContent === 'Starting...'"));
     await delay(2200);
     assert.equal(await evaluate("document.getElementById('timerStatus').textContent"), "Starting...");
-    assert.equal(await evaluate("document.getElementById('timerDuration').textContent"), "00:00:00", "slow validation must not display seconds that then reset");
+    assert.notEqual(await evaluate("document.getElementById('timerDuration').textContent"), "00:00:00", "local display must advance during a slow Start as in 2.0.1");
+    assert.equal(await evaluate('getTimerLockState()'), 'running');
+    assert.equal(await evaluate('currentTimeLog'), null, 'Pending preview is not a fabricated saved timer');
     await until(() => evaluate("document.getElementById('timerStatus').textContent === 'Working'"));
     assert.equal(await evaluate("document.getElementById('stopBreakButton').hidden"), true);
     assert.equal(timer.client._id, "client-b", "Timer payload must use the selected database ID");
     assert.equal(await evaluate("document.getElementById('clientSelect').selectedOptions[0].textContent"), "XYZ LLC");
     await delay(1200);
     assert.notEqual(await evaluate("document.getElementById('timerDuration').textContent"), "00:00:00", "a PC clock three seconds behind must not delay the confirmed counter");
+    await evaluate('clearInterval(handoffProbe)');
+    const handoffSamples = await evaluate('handoffSamples');
+    assert.ok(handoffSamples.every((value, index) => index === 0 || value >= handoffSamples[index - 1]),
+      'The work counter must never jump backwards during confirmation: ' + JSON.stringify(handoffSamples));
     await evaluate('Date.now = window.originalDateNow; syncServerClock(new Date().toISOString())');
     await delay(3100);
     assert.notEqual(await evaluate("document.getElementById('timerDuration').textContent"), "00:00:00");
