@@ -197,7 +197,7 @@
 .production-reports .prod-filter-form > fieldset > .prod-filter-grid { display:contents; }
 .production-reports .prod-filter-form > fieldset > :not(.prod-filter-grid) { grid-column:1/-1; }
 .production-reports .prod-filter-hint { margin:3px 0; }
-.production-reports .prod-filter-actions { margin-top:0; }
+.production-reports .prod-filter-actions { margin-top:0; justify-content:flex-end; }
 .production-reports .prod-optional-work .prod-filter-hint { font-size:10px; }
 .prod-report-actions { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
 .prod-report-display { display:flex; padding:3px; background:#f0f3fa; border:1px solid #e0e6f0; border-radius:8px; }

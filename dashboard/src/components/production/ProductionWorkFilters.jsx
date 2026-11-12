@@ -6,7 +6,7 @@ const selectors = {
   team: ['Team', 'teams', 'teamName'], employee: ['Employee', 'employees', 'fullName'],
   client: ['Client', 'clients', 'clientName'], project: ['Project', 'projects', 'projectName'], task: ['Task', 'tasks', 'taskName'],
 };
-export default function ProductionWorkFilters({ draft, choices, onChange, personal = false, view = 'employee' }) {
+export default function ProductionWorkFilters({ draft, choices, onChange, personal = false, view = 'employee', showHint = true }) {
   const fields = productionViews[view].fields;
   const employees = productionTeamEmployees(choices.employees, draft.team);
   const focused = Object.keys(selectors).filter(key => !fields.includes(key) && draft[key] && draft[key] !== 'all');
@@ -27,7 +27,7 @@ export default function ProductionWorkFilters({ draft, choices, onChange, person
         <label>To date<input aria-label="To date" type="date" required min={draft.startDate} value={draft.endDate} onChange={event => onChange({ endDate: event.target.value })} /></label>
       </>}
     </div>
-    <p className="prod-filter-hint">{draft.startDate} to {draft.endDate}.{fields.includes('employee') && ' All members are included unless you choose one employee.'}{fields.includes('employee') && draft.team !== 'all' && !employees.length ? ' No employees in this team are available within your access.' : ''}</p>
+    {showHint && <p className="prod-filter-hint">{draft.startDate} to {draft.endDate}.{fields.includes('employee') && ' All members are included unless you choose one employee.'}{fields.includes('employee') && draft.team !== 'all' && !employees.length ? ' No employees in this team are available within your access.' : ''}</p>}
     {!!focused.length && <div className="prod-focus-filters" aria-label="Selected work context"><span>Opened with:</span>{focused.map(key => {
       const [label, plural, name] = selectors[key];
       const value = choices[plural]?.find(row => row._id === draft[key])?.[name] || `Selected ${label.toLowerCase()}`;
