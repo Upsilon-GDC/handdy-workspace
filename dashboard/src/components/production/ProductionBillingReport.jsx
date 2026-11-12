@@ -6,7 +6,7 @@ function Amounts({ values }) {
   if (!values.length) return <span className="prod-muted">Amounts restricted or not applicable</span>;
   return <>{values.map(row => <span key={row.currency}>{money(row.amount, row.currency)}{!row.complete && <small className="billing-missing-rate">Incomplete subtotal</small>}</span>)}</>;
 }
-export default function ProductionBillingReport({ review, children }) {
+export default function ProductionBillingReport({ review, children, reviewPanel }) {
   const data = review.data, { projects, days } = billingReviewGroups(data.workDetails);
   const eligible = data.summary.find(row => row.label === 'Eligible work')?.value || 0;
   const amounts = data.summary.filter(row => row.type === 'money');
@@ -23,6 +23,7 @@ export default function ProductionBillingReport({ review, children }) {
       {financial && <article className="prod-panel billing-amount-card"><ReceiptText size={20} /><span>Saved billable amount</span><strong>{amounts.length ? amounts.map(row => <span key={row.currency}>{money(row.value, row.currency)}</span>) : 'Not applicable'}</strong><small>Saved estimates; original values for finalized periods</small></article>}
     </section>
     {children}
+    {reviewPanel}
     <section className="billing-report prod-panel" aria-label="Project-wise billing summary"><header><div><span>Primary report</span><h3>Project-wise task summary</h3></div><strong>{duration(eligible)}</strong></header>
       {!projects.length && <p className="billing-no-data">No eligible billable work in these saved periods. Check the employee review items below.</p>}
       {projects.map(project => <article className="billing-project" key={project.key}><div className="billing-project-heading"><div><FolderKanban size={18} /><div><h4>{project.name}</h4><p>{project.clientName || 'No client recorded'}</p></div></div><div className="billing-project-totals"><strong>{duration(project.seconds)}</strong>{financial && <Amounts values={project.amounts} />}</div></div>
