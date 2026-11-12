@@ -206,13 +206,16 @@ app.whenReady().then(async () => {
     const headerIndex = (sheet, label) => sheet.getRow(1).values.findIndex(value => value === label);
     const summaryValue = (book, label) => { let value; book.getWorksheet('Summary').eachRow(row => { if (row.getCell(1).value === label) value = row.getCell(2).value; }); return value; };
     win.setSize(1440, 1050); await openReports(admin); await select('Report type', 'employee'); await generateReport();
-    assert.equal(await evaluate(`document.querySelectorAll('.prod-ledger-record').length`), 25, 'One report sheet shows all visible records');
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Production report data"]').querySelectorAll('.prod-ledger-record').length`), 25, 'One report sheet shows all visible records');
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Employee contributions"]').querySelectorAll('.prod-ledger-record').length`), 10);
     assert.equal(await evaluate(`!!document.querySelector('[aria-label="Report layout"]')`), false, 'No layout switch');
     assert.equal(await evaluate(`!!document.querySelector('.production-reports > .prod-footnote')`), false);
     assert.ok(await evaluate(`document.querySelector('.prod-ledger-record dl').children.length >= 6`), 'Detailed fields stay visible');
-    await click('Next'); assert.equal(await evaluate(`document.querySelectorAll('.prod-ledger-record').length`), 5);
+    await click('Next'); assert.equal(await evaluate(`document.querySelector('[aria-label="Production report data"]').querySelectorAll('.prod-ledger-record').length`), 5);
     const live = await workbook(await download('Export Excel'));
     assert.equal(live.getWorksheet('Report data').rowCount, 31, 'Export includes all 30 employees, not only the visible page');
+    assert.equal(live.getWorksheet('Employee contributions').rowCount, 31);
+    assert.ok(live.getWorksheet('Employee task details').rowCount > 1);
     assert.equal(summaryValue(live, 'Estimated USD'), 40);
     const excelTime = summaryValue(live, 'Expected');
     const expectedSeconds = excelTime instanceof Date ? (+excelTime - Date.UTC(1899, 11, 30)) / 1000 : excelTime * 86400;
@@ -227,6 +230,7 @@ app.whenReady().then(async () => {
     const hours = await workbook(await download('Export Excel'));
     assert.equal(hours.getWorksheet('Report data').getRow(1).values.some(value => String(value).includes('Estimated')), false);
     assert.equal(JSON.stringify(hours.model).includes('Estimated USD'), false);
+    assert.ok(!hours.getWorksheet('Employee contributions').getRow(1).values.includes('Estimated USD'));
     await select('Team', 'all'); await select('Report source', 'finalized'); await generateReport();
     const original = await workbook(await download('Export Excel')); assert.equal(summaryValue(original, 'Finalized USD'), 25);
     await download('Export PDF');

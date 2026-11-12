@@ -103,8 +103,14 @@ async function productionReport(user, query) {
   if (basis === 'live') {
     const type = query.type || 'employee';
     if (typeof type !== 'string' || !Object.hasOwn(names, type)) throw fail('Choose a valid Production report.');
-    const report = await productionReportData(user, { ...query, view: type === 'daily' ? 'overview' : type, includeChoices: 'true' }, { allRows: true, includeOptionalWork });
+    const report = await productionReportData(user, { ...query, view: type === 'daily' ? 'overview' : type, includeChoices: 'true' }, { allRows: true, includeOptionalWork, includeEmployeeBreakdown: true });
+    const employeeSummary = liveReportTable({ ...report, rows: report.employeeBreakdown.members }, 'employee');
+    const detailedWorkTable = liveReportTable({ ...report, rows: report.employeeBreakdown.work }, 'details');
+    detailedWorkTable.columns.push(column('billableSeconds', 'Billable (h:mm:ss)', 'duration'));
+    detailedWorkTable.rows.forEach((row, index) => row.push(report.employeeBreakdown.work[index].billing?.billableSeconds || 0));
     data = { title: names[type], ...liveReportTable(report, type), warnings: report.warnings,
+      employeeSummary: { columns: employeeSummary.columns, rows: employeeSummary.rows },
+      detailedWorkTable: { columns: detailedWorkTable.columns, rows: detailedWorkTable.rows },
       choices: report.choices, selection: report.selectionLabels,
       asOf: report.asOf, notes: [ 'Live estimates are provisional and are separate from approved or finalized billing.',
         includeOptionalWork ? 'Optional Admin work is included in production and billing estimates using employee project rates. Training and Break / Idle remain excluded.' : 'Optional Admin work is excluded from production and billing estimates.',

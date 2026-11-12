@@ -582,3 +582,11 @@ are not enabled by this option. The signed report and its downloads record the
 option and its resulting totals. This option does not change dashboard totals,
 saved classifications, billing drafts, approved periods or finalized billing;
 saved report sources reject the override.
+
+Live Reports include employee contributions and grouped employee/task details
+from the same calculation and authorized scope as the primary report. All
+sections use the same filters and optional Admin inclusion. Excel includes
+Employee contributions and Employee task details sheets; PDF includes matching
+sections. Screen pagination does not limit exported rows. Task details are
+bounded to 5000 grouped rows, the combined PDF to 1000 rows and the signed
+payload to 8 MB. Narrow the dates or use Excel when a PDF exceeds its limit.

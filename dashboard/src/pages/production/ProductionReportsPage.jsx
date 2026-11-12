@@ -23,10 +23,11 @@ export default function ProductionReportsPage() {
   const [from, to] = productionDates('today');
   const [draft, setDraft] = useState({ basis: 'live', type: 'daily', period: 'today', startDate: from, endDate: to, team: 'all', employee: 'all', client: 'all', project: 'all', task: 'all', includeOptionalWork: false });
   const [query, setQuery] = useState(() => ({ ...draft })), [report, setReport] = useState(null), [page, setPage] = useState(1);
+  const [employeePage, setEmployeePage] = useState(1), [workPage, setWorkPage] = useState(1);
   const [choices, setChoices] = useState({ teams: [], employees: [], clients: [], projects: [], tasks: [] });
   const [loading, setLoading] = useState(true), [exporting, setExporting] = useState(false), [error, setError] = useState('');
   useEffect(() => {
-    const controller = new AbortController(); setLoading(true); setError(''); setReport(null); setPage(1);
+    const controller = new AbortController(); setLoading(true); setError(''); setReport(null); setPage(1); setEmployeePage(1); setWorkPage(1);
     getProductionReportTable(query, controller.signal).then(value => {
       if (controller.signal.aborted) return;
       // Preserve the exact signed data separately; translated UI warnings must
@@ -77,6 +78,8 @@ export default function ProductionReportsPage() {
         {!data.rows.length && <p className="prod-empty">No records match these filters.</p>}
         {pages > 1 && <div className="prod-pagination"><span>{data.rows.length} records · Page {page} of {pages}</span><div><button className="prod-secondary" disabled={page === 1 || exporting} onClick={() => setPage(value => value - 1)}>Previous</button><button className="prod-secondary" disabled={page === pages || exporting} onClick={() => setPage(value => value + 1)}>Next</button></div></div>}
       </section>
+      {data.employeeSummary && <section className="prod-panel" aria-label="Employee contributions"><div className="prod-section-heading"><h2>Employee contributions</h2><span className="prod-badge">{data.employeeSummary.rows.length} employees</span></div><ProductionReportLedger data={data.employeeSummary} rows={data.employeeSummary.rows.slice((employeePage - 1) * 10, employeePage * 10)} offset={(employeePage - 1) * 10} />{data.employeeSummary.rows.length > 10 && <div className="prod-pagination"><span>Page {employeePage} of {Math.ceil(data.employeeSummary.rows.length / 10)}</span><div><button className="prod-secondary" disabled={employeePage === 1} onClick={() => setEmployeePage(value => value - 1)}>Previous employees</button><button className="prod-secondary" disabled={employeePage * 10 >= data.employeeSummary.rows.length} onClick={() => setEmployeePage(value => value + 1)}>Next employees</button></div></div>}</section>}
+      {data.detailedWorkTable && <details className="prod-panel prod-report-totals"><summary>Employee task details ({data.detailedWorkTable.rows.length})</summary><ProductionReportLedger data={data.detailedWorkTable} rows={data.detailedWorkTable.rows.slice((workPage - 1) * 10, workPage * 10)} offset={(workPage - 1) * 10} />{data.detailedWorkTable.rows.length > 10 && <div className="prod-pagination"><span>Page {workPage} of {Math.ceil(data.detailedWorkTable.rows.length / 10)}</span><div><button className="prod-secondary" disabled={workPage === 1} onClick={() => setWorkPage(value => value - 1)}>Previous work</button><button className="prod-secondary" disabled={workPage * 10 >= data.detailedWorkTable.rows.length} onClick={() => setWorkPage(value => value + 1)}>Next work</button></div></div>}</details>}
       <details className="prod-panel prod-report-totals"><summary>All report totals</summary><dl>{data.summary.map(row => <div key={row.label}><dt>{row.label}</dt><dd>{productionReportCell(row.value, row)}</dd></div>)}</dl></details>
       {!!report.uiWarnings.length && <div className="prod-warning"><strong>Review items</strong><ul>{report.uiWarnings.map(row => <li key={row.code}>{row.message} ({row.count})</li>)}</ul></div>}
     </>}

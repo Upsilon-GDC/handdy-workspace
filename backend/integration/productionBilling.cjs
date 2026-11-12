@@ -197,6 +197,13 @@ test('daily, weekly, monthly and employee reports reconcile to the same dashboar
     assert.equal(report.data.summary.find(row => row.label === 'Expected').value, 28080);
     assert.equal(report.data.summary.find(row => row.label === 'Estimated USD').value, 25);
     assert.equal(report.data.rows.length, 1); assert.ok(report.exportToken);
+    assert.equal(report.data.employeeSummary.rows.length, 1);
+    const productionIndex = report.data.employeeSummary.columns.findIndex(col => col.key === 'productionSeconds');
+    const amountIndex = report.data.employeeSummary.columns.findIndex(col => col.key === 'amount_USD');
+    assert.equal(report.data.employeeSummary.rows[0][productionIndex], normal.summary.productionSeconds);
+    assert.equal(report.data.employeeSummary.rows[0][amountIndex], 25);
+    assert.equal(report.data.detailedWorkTable.rows.length, 1);
+    assert.ok(report.data.detailedWorkTable.rows[0].includes('Synthetic Employee'));
   }
 });
 test('saved reports separate original finalized amounts, corrected totals and adjustment deltas', async () => {
@@ -242,6 +249,8 @@ test('hours-only reports omit monetary columns instead of reporting zero revenue
   const report = await productionReport(admin, { startDate: date, endDate: date, employee: String(f.employee._id), basis: 'live', type: 'employee' });
   assert.equal(report.data.columns.some(row => row.type === 'money'), false); assert.equal(report.data.summary.some(row => row.type === 'money'), false);
   assert.equal(report.data.summary.find(row => row.label === 'Production').value, 3600);
+  assert.ok(report.data.employeeSummary.columns.every(col => col.type !== 'money'));
+  assert.ok(report.data.detailedWorkTable.columns.every(col => !['rate', 'currency'].includes(col.key)));
 });
 test('saved billing periods are fully contained and never silently prorated', async () => {
   const f = await fixture(); let batch = await create(f, { endDate: addDateKeyDays(date, 1) }); batch = await action(batch, 'submit'); batch = await action(batch, 'approve'); await action(batch, 'finalize');

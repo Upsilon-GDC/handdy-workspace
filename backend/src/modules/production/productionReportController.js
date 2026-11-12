@@ -36,7 +36,7 @@ function pageNumber(value, fallback, max) {
 function errorResponse(res, error) {
   return res.status(error.statusCode || 500).json({ success: false, message: error.statusCode ? error.message : 'Unable to load Production. Please try again.' });
 }
-async function productionReportData(user, query, { allRows = false, includeOptionalWork = false } = {}) {
+async function productionReportData(user, query, { allRows = false, includeOptionalWork = false, includeEmployeeBreakdown = false } = {}) {
     const { startDate, endDate } = query;
     if (typeof startDate !== 'string' || typeof endDate !== 'string') throw fail('Choose a valid date range.');
     try { getBillingDateRange(startDate, endDate, process.env.APP_TIMEZONE || 'Asia/Kolkata'); } catch (error) { throw fail(error.message); }
@@ -83,7 +83,17 @@ async function productionReportData(user, query, { allRows = false, includeOptio
       [`${key}Name`, map.get(row[key]) || (row[key] ? `Unavailable ${key}` : key === 'team' ? view === 'employee' ? 'No home team' : 'Needs team allocation' : `No ${key} recorded`)])),
       ...(row.task ? { taskCode: taskCodes.get(row.task) || row.task } : {}),
       ...(row.project ? { projectCode: projectCodes.get(row.project) || row.project } : {}) }));
+    let employeeBreakdown;
+    if (includeEmployeeBreakdown) {
+      const work = groupedWorkDetails(result.details);
+      if (work.length > 5000) throw fail('Narrow the dates to include at most 5000 employee work rows in the report.', 413);
+      employeeBreakdown = { members: result.members.map(row => ({ ...row, teamName: maps.team.get(row.team) || 'No home team' })),
+        work: work.map(row => ({ ...row, employeeName: maps.employee.get(row.employee) || 'Unavailable employee', teamName: maps.team.get(row.team) || 'Needs team allocation',
+          clientName: maps.client.get(row.client) || 'No client recorded', projectName: maps.project.get(row.project) || 'Unavailable project',
+          taskName: maps.task.get(row.task) || 'Unavailable task', taskCode: taskCodes.get(row.task) || row.task })) };
+    }
     return { summary: { ...result.totals, employeeCount: result.members.length }, rows, total, page, limit, view,
+      ...(employeeBreakdown ? { employeeBreakdown } : {}),
       ...(view === 'overview' ? { teamHighlights: result.teams.map(row => ({ ...row, teamName: maps.team.get(row.team) || 'Needs team allocation' })) } : {}),
       period: result.period, asOf: result.asOf, provisional: true,
       warnings: result.warnings.map(({ code, count }) => ({ code, count })),
