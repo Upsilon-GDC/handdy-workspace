@@ -240,7 +240,7 @@ function AppRoutes() {
         }
       />
 
-      <Route path="/admin/production" element={<ProtectedRoute><ProductionPage key="overview" view="overview" /></ProtectedRoute>} />
+      <Route path="/admin/production" element={<ProtectedRoute><Navigate to="/admin/production/team" replace /></ProtectedRoute>} />
       <Route path="/admin/production/employee" element={<ProtectedRoute><ProductionPage key="employee" view="employee" /></ProtectedRoute>} />
       <Route path="/admin/production/team" element={<ProtectedRoute><ProductionPage key="team" view="team" /></ProtectedRoute>} />
       <Route path="/admin/production/clients" element={<ProtectedRoute><ProductionPage key="client" view="client" /></ProtectedRoute>} />

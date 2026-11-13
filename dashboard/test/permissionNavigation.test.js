@@ -56,7 +56,8 @@ test("HR menu follows report and billing permissions", () => {
 test('production hours navigation is available without financial access and settings remain Admin-only', () => {
   for (const role of ['admin', 'alpha', 'manager', 'hr', 'team_lead', 'employee']) {
     const section = navigationForRole(role, grants(role, [])).filter(item => item.group === 'Production');
-    for (const path of ['/admin/production', '/admin/production/team', '/admin/production/employee', '/admin/production/clients', '/admin/production/tasks', '/admin/production/billing', '/admin/production/reports']) {
+    assert.equal(section.some(item => item.path === '/admin/production'), false, 'Production Overview is removed');
+    for (const path of ['/admin/production/team', '/admin/production/employee', '/admin/production/clients', '/admin/production/tasks', '/admin/production/billing', '/admin/production/reports']) {
       assert.ok(section.some(item => item.path === path), `${role}: ${path}`);
     }
     assert.equal(section.some(item => item.path.endsWith('/settings')), ['admin', 'alpha'].includes(role));
