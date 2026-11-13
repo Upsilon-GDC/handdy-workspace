@@ -89,6 +89,9 @@ const protect = async (req, res, next) => {
 
     req.user = employee;
     req.authSession = authSession;
+    // A fresh read can be reused immediately by the approval long-poll.
+    // Cached sessions must still receive its independent database check.
+    req.authSessionReadFromDatabase = !cached;
     // Lets an open dashboard pick up permission changes (AuthProvider).
     res.setHeader(PERMISSION_VERSION_HEADER, getPermissionVersion(employee));
 

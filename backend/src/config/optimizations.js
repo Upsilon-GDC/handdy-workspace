@@ -2,6 +2,9 @@
 // by default; setting its environment variable to "false" in Render turns it
 // off again without a code change. Read on every use, so tests can flip them.
 const FLAGS = {
+  // Reuse only a session read performed by this request's authentication.
+  // Later long-poll iterations still query the database for revocation.
+  authSessionReuse: "OPT_AUTH_SESSION_REUSE",
   // 1.1 Long-polls wait for a change notification instead of re-reading
   // MongoDB every 5 s (one server instance, see render.yaml).
   longPollEvents: "OPT_LONGPOLL_EVENTS",
