@@ -57,7 +57,7 @@ test('moving team uses the new team policy; another employee does not inherit an
 test('additional work teams allow shared work without changing primary membership, clients or task management', async t => {
   replacePolicies([{ ...policy('employee', 'person', [], false), workTeams: ['wcpa', 'inactive'] }]);
   t.mock.method(Team, 'exists', async () => ({ _id: 'software' }));
-  t.mock.method(Team, 'find', () => query([{ _id: 'wcpa' }]));
+  t.mock.method(Team, 'find', () => query([{ _id: 'software' }, { _id: 'wcpa' }]));
   const scope = await buildEmployeeScope(employee);
   assert.equal(employee.team, 'software');
   assert.equal(allowedClientIds(employee), null);
