@@ -1,12 +1,15 @@
 const net = require("net");
 const tls = require("tls");
 const mongoose = require("mongoose");
+const { requestEmployee, recordEmployee, employeeReport, resetEmployeeVersions } = require('./employeeTraffic');
 
 // Phase 0 traffic measurement (docs/CRM_OPTIMIZATION_PHASE_PLAN.md). Off unless
 // METRICS_ENABLED=true. It only counts: route templates, status classes, byte
 // totals, MongoDB command names and collections, and connection totals per
 // outside destination. It never records request bodies, query values, tokens,
-// passwords or employee data.
+// passwords or employee work data. Per-employee diagnostics include only the
+// authenticated employee name/ID and client version, visible in admin metrics
+// and operational logs, as requested for version comparisons.
 //
 // What each number means:
 // - routes[].responseBytes: response body bytes as sent (after gzip), without
@@ -49,7 +52,7 @@ function fastLongPolls(bucket) {
 const enabled = process.env.METRICS_ENABLED === "true";
 const startedAt = new Date();
 
-const newBucket = () => ({ startedAt: new Date(), routes: new Map(), db: new Map(), events: new Map() });
+const newBucket = () => ({ startedAt: new Date(), routes: new Map(), db: new Map(), events: new Map(), employees: new Map() });
 let totals = newBucket();
 let window = newBucket();
 
@@ -58,9 +61,10 @@ const add = (map, key, create, update) => {
   update(map.get(key));
 };
 
-function recordRequest({ route, status, requestBytes = 0, responseBytes = 0, durationMs = 0 }) {
+function recordRequest({ route, status, requestBytes = 0, responseBytes = 0, durationMs = 0, employee = null }) {
   const statusClass = status === 304 ? "304" : `${Math.floor(status / 100)}xx`;
   for (const bucket of [totals, window]) {
+    recordEmployee(bucket, employee, { route, status, requestBytes, responseBytes });
     add(bucket.routes, route, () => ({ count: 0, status: {}, requestBytes: 0, responseBytes: 0, durationMs: 0, maxDurationMs: 0 }), (entry) => {
       entry.count += 1;
       entry.status[statusClass] = (entry.status[statusClass] || 0) + 1;
@@ -128,6 +132,7 @@ function requestMetrics(req, res, next) {
       requestBytes: Number(req.headers["content-length"]) || 0,
       responseBytes: bytes,
       durationMs: Number(process.hrtime.bigint() - started) / 1e6,
+      employee: requestEmployee(req),
     });
   });
   next();
@@ -300,6 +305,8 @@ function snapshot({ limit = 50 } = {}) {
     uptimeMinutes: Math.round((Date.now() - startedAt.getTime()) / 60000),
     destinations: Object.fromEntries(destinationTotals()),
     usageSinceStartup: summarizeTraffic(totals, Object.fromEntries(destinationTotals())),
+    employeesSinceStartup: employeeReport(totals),
+    employeesCurrentWindow: employeeReport(window),
     total: describeBucket(totals, limit),
     currentWindow: describeBucket(window, limit),
   };
@@ -325,6 +332,12 @@ function logWindow() {
     sinceStartup: { from: startedAt, ...summarizeTraffic(totals, Object.fromEntries(current)) },
     interpretation: 'Network estimates, not disk usage or Render billing. HTTP socket totals include response bodies: do not add them together. Database operation sizes are uncompressed BSON; socket totals are a separate measurement. Received bytes are not sent bytes. Counters reset on process restart.',
   })}`);
+  const employees = employeeReport(window);
+  for (const row of employees.rows) console.log(`[employee-traffic] ${JSON.stringify({
+    from: window.startedAt, to: new Date(), scope: 'interval', ...row,
+    measurement: 'Compressed HTTP response bodies only; excludes headers, static assets without login, and shared database/socket traffic. Version is client-reported; unknown means unavailable. Request activity is not working time.',
+  })}`);
+  if (employees.limitReached) console.warn('[alert] Employee traffic attribution limit reached; some requests are included only in global totals.');
   for (const alert of windowAlerts(window, destinations)) console.warn(`[alert] ${alert}`);
   window = newBucket();
 }
@@ -356,6 +369,7 @@ function resetForTests() {
   closedTotals.clear();
   pendingCommands.clear();
   lastLoggedDestinations = new Map();
+  resetEmployeeVersions();
 }
 
 module.exports = {
