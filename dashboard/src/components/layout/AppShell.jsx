@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Building2, CalendarDays, ChevronLeft, ClipboardList, Clock3, Factory, LayoutDashboard, Link2, LogOut, Menu, Search, Settings2, Users, X } from "lucide-react";
+import { Building2, ChevronLeft, ClipboardList, Clock3, Factory, LayoutDashboard, Link2, LogOut, Menu, Search, Settings2, Users, X } from "lucide-react";
 import useAuth from "../../context/useAuth";
 import { navigationForRole, dutyNavigationFor } from "./workspaceNavigation";
 import { decideLoginRequest, getPendingLoginRequest } from "../../api/authApi";
@@ -126,7 +126,6 @@ export default function AppShell({ children }) {
           <button className="crm-signout" aria-label="Log out" title="Log out" disabled={signingOut} onClick={signOut}><LogOut size={17} /></button>
         </header>
         <main id="workspace-content" className="crm-content">
-          <div className="crm-context-line"><span><CalendarDays size={14} />{new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}</span><span>CRM / Workspace</span></div>
           {children}
         </main>
         <footer className="crm-footer"><span>CRM · Employee workspace</span><span>Time. People. Progress.</span></footer>

@@ -197,6 +197,13 @@ test('daily, weekly, monthly and employee reports reconcile to the same dashboar
     assert.equal(report.data.summary.find(row => row.label === 'Expected').value, 28080);
     assert.equal(report.data.summary.find(row => row.label === 'Estimated USD').value, 25);
     assert.equal(report.data.rows.length, 1); assert.ok(report.exportToken);
+    assert.equal(report.data.employeeSummary.rows.length, 1);
+    const productionIndex = report.data.employeeSummary.columns.findIndex(col => col.key === 'productionSeconds');
+    const amountIndex = report.data.employeeSummary.columns.findIndex(col => col.key === 'amount_USD');
+    assert.equal(report.data.employeeSummary.rows[0][productionIndex], normal.summary.productionSeconds);
+    assert.equal(report.data.employeeSummary.rows[0][amountIndex], 25);
+    assert.equal(report.data.detailedWorkTable.rows.length, 1);
+    assert.ok(report.data.detailedWorkTable.rows[0].includes('Synthetic Employee'));
   }
 });
 test('saved reports separate original finalized amounts, corrected totals and adjustment deltas', async () => {
@@ -212,11 +219,38 @@ test('saved reports separate original finalized amounts, corrected totals and ad
   const employee = await productionReport(f.employee, { ...query, basis: 'finalized' });
   assert.equal(employee.data.columns.some(row => row.type === 'money'), false); assert.equal(employee.data.summary.some(row => row.type === 'money'), false);
 });
+test('optional Admin inclusion changes only opted-in live estimates and their signed downloads', async () => {
+  const f = await fixture();
+  await Revision.create({ ...f.setting('classification', `${f.team._id}:task:${f.task._id}`, { category: 'excluded', billable: false, reportOptionalBillable: true }), version: 2 });
+  const query = { startDate: date, endDate: date, employee: String(f.employee._id), team: String(f.team._id), basis: 'live', type: 'employee' };
+  const normal = await productionReport(admin, query), included = await productionReport(admin, { ...query, includeOptionalWork: 'true' });
+  assert.equal(normal.data.summary.find(row => row.label === 'Production').value, 0);
+  assert.equal(included.data.summary.find(row => row.label === 'Production').value, 3600);
+  assert.equal(included.data.summary.find(row => row.label === 'Estimated USD').value, 25);
+  assert.equal(included.data.filters.includeOptionalWork, true);
+  assert.notEqual(included.dataHash, normal.dataHash);
+  assert.equal((await authorizeReportExport(admin, included.exportToken, 'excel')).dataHash, included.dataHash);
+  const unchanged = await productionReportData(admin, { ...query, includeOptionalWork: 'true' });
+  assert.equal(unchanged.summary.productionSeconds, 0, 'Normal dashboards do not accept the report-only override');
+  assert.equal((await Revision.findOne({ kind: 'classification', key: `${f.team._id}:task:${f.task._id}`, version: 2 }).lean()).values.category, 'excluded');
+  await assert.rejects(productionReport(admin, { ...query, includeOptionalWork: 'yes' }), { statusCode: 400 });
+  await assert.rejects(productionReport(admin, { ...query, basis: 'finalized', includeOptionalWork: 'true' }), { statusCode: 400 });
+});
+
+test('billing preparation rejects hours-only teams before creating periods', async () => {
+  const f = await fixture();
+  await Revision.create({ ...f.setting('team-billing', String(f.team._id), { billingEnabled: false, currency: null, approvalRequired: true }), version: 2 });
+  const { prepareReview } = require('../src/services/production/billingReview');
+  await assert.rejects(prepareReview(admin, { team: String(f.team._id), employee: 'all', startDate: date, endDate: date, reason: 'Verify disabled team', requestId: crypto.randomUUID() }), /Billing is disabled/);
+  assert.equal(await Batch.countDocuments({ team: f.team._id }), 0);
+});
 test('hours-only reports omit monetary columns instead of reporting zero revenue', async () => {
   const f = await fixture(); await Revision.create({ ...f.setting('team-billing', String(f.team._id), { billingEnabled: false, currency: null, approvalRequired: true }), version: 2 });
   const report = await productionReport(admin, { startDate: date, endDate: date, employee: String(f.employee._id), basis: 'live', type: 'employee' });
   assert.equal(report.data.columns.some(row => row.type === 'money'), false); assert.equal(report.data.summary.some(row => row.type === 'money'), false);
   assert.equal(report.data.summary.find(row => row.label === 'Production').value, 3600);
+  assert.ok(report.data.employeeSummary.columns.every(col => col.type !== 'money'));
+  assert.ok(report.data.detailedWorkTable.columns.every(col => !['rate', 'currency'].includes(col.key)));
 });
 test('saved billing periods are fully contained and never silently prorated', async () => {
   const f = await fixture(); let batch = await create(f, { endDate: addDateKeyDays(date, 1) }); batch = await action(batch, 'submit'); batch = await action(batch, 'approve'); await action(batch, 'finalize');

@@ -29,8 +29,8 @@ test("billing keeps recorded clients and missing project-client references throu
   const query = (records) => ({ select(fields) { this.fields = fields; return this; }, sort() { return this; }, lean: async () => records });
   t.mock.method(Employee, "findOne", () => query(employee));
   const logsQuery = query([
-    { _id: "recorded", task: "task", project: "shared", client: "client-a", startedAt: "2026-10-01T10:00:00Z", stoppedAt: "2026-10-01T11:00:00Z", totalWorkedSeconds: 3600 },
-    { _id: "legacy", task: "task", project: "shared", startedAt: "2026-10-01T11:00:00Z", stoppedAt: "2026-10-01T12:00:00Z", totalWorkedSeconds: 3600 },
+    { _id: "recorded", employee: employeeId, task: "task", project: "shared", client: "client-a", startedAt: "2026-10-01T10:00:00Z", stoppedAt: "2026-10-01T11:00:00Z", totalWorkedSeconds: 3600 },
+    { _id: "legacy", employee: employeeId, task: "task", project: "shared", startedAt: "2026-10-01T11:00:00Z", stoppedAt: "2026-10-01T12:00:00Z", totalWorkedSeconds: 3600 },
   ]);
   t.mock.method(TaskTimeLog, "find", () => logsQuery);
   t.mock.method(Task, "find", () => query([{ _id: "task", taskName: "Shared work", taskType: "work" }]));

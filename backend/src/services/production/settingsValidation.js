@@ -41,6 +41,11 @@ function validateSetting(kind, body, { earliestDate = today() } = {}) {
     const billable = boolean(body.billable, 'Billable');
     if (category !== 'productive' && billable) throw fail('Only productive activities can be billable.');
     values = { targetType, target, category, billable };
+    if (body.reportOptionalBillable !== undefined) {
+      const optional = boolean(body.reportOptionalBillable, 'Optional report billing');
+      if (optional && category !== 'excluded') throw fail('Only excluded activities can offer optional report billing.');
+      values.reportOptionalBillable = optional;
+    }
     key = `${team}:${targetType}:${target}`;
   } else if (kind === 'access') {
     const employee = objectId(body.employee, 'employee');

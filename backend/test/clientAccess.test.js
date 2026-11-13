@@ -91,8 +91,9 @@ test('an empty allowed list never reopens all active clients on an unlinked proj
 test('a forged timer Start for a project-linked but team-disallowed client writes no time log', async t => {
   replacePolicies([policy('team', 'software', ['upsilon'])]);
   t.mock.method(TaskTimeLog, 'find', () => query([]));
+  t.mock.method(TaskTimeLog, 'findOne', async () => null);
   t.mock.method(Project, 'findById', async () => ({ _id: 'project', status: 'Active', clients: ['upsilon', 'renau'], teams: ['software'] }));
-  t.mock.method(Client, 'exists', async () => ({ _id: 'renau' }));
+  t.mock.method(Client, 'findOne', () => query({ _id: 'renau' }));
   t.mock.method(Team, 'exists', async () => ({ _id: 'software' }));
   t.mock.method(Task, 'findOne', async () => ({ _id: 'task' }));
   const create = t.mock.method(TaskTimeLog, 'create', async () => { throw Error('Must not create a timer'); });

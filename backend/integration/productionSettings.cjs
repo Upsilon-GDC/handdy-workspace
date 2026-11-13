@@ -20,6 +20,7 @@ const { saveSetting, saveClassificationBatch, ensureProductionSettingsIndexes } 
 const { initializeProduction } = require('../src/services/production/initialization');
 const { today } = require('../src/services/production/settingsValidation');
 const controller = require('../src/modules/production/productionSettingsController');
+const { productionAccess } = require('../src/services/production/access');
 const actor = { _id: new mongoose.Types.ObjectId(), role: 'admin' };
 let replica, team;
 before(async () => {
@@ -86,6 +87,7 @@ test('rates and classifications retain independent histories and reject missing 
   assert.equal(classification.values.category, 'training');
   const breakTask = await Task.create({ taskCode: crypto.randomUUID(), taskName: 'Pause', taskType: 'break', createdBy: actor._id });
   await assert.rejects(saveSetting('classification', body({ targetType: 'task', target: String(breakTask._id), category: 'productive', billable: true }), actor), /Break tasks must remain excluded/);
+  await assert.rejects(saveSetting('classification', body({ targetType: 'task', target: String(breakTask._id), category: 'excluded', billable: false, reportOptionalBillable: true }), actor), /Break tasks cannot offer optional/);
   await saveSetting('rate', body({ enabled: true, hourlyRate: 25.15 }), actor);
   const changed = await saveSetting('rate', body({ enabled: true, hourlyRate: 30, expectedVersion: 1, effectiveFrom: '2099-01-01' }), actor);
   assert.equal(changed.values.hourlyRateHundredths, 3000);
@@ -124,6 +126,33 @@ test('team access and financial visibility have independently audited revisions'
   const audit = await Audit.findOne({ revision: revised._id }).lean();
   assert.equal(String(audit.previousRevision), String(first._id));
   await assert.rejects(saveSetting('access', body({ employee: String(managerId), enabled: true, canViewBilling: true }), { _id: managerId, role: 'manager' }), { statusCode: 403 });
+});
+
+test('past team access dates are audited and cannot override a later effective revocation', async () => {
+  const accessTeam = await Team.create({ teamName: 'Backdated access team', createdBy: actor._id });
+  const manager = { _id: new mongoose.Types.ObjectId(), role: 'manager', team: accessTeam._id };
+  await Employee.collection.insertOne({ ...manager, employeeId: 'SYN-BACKDATED-ACCESS', email: 'backdated-access@example.invalid', isActive: true });
+  const input = body({ team: String(accessTeam._id), employee: String(manager._id), effectiveFrom: '2000-01-01',
+    enabled: true, canViewBilling: true, reason: 'Record the original team access start date' });
+  await assert.rejects(saveSetting('access', input, actor), { statusCode: 400 });
+  await assert.rejects(saveSetting('access', { ...input, reason: 'short' }, actor, { historical: true }), { statusCode: 400 });
+  const first = await saveSetting('access', input, actor, { historical: true });
+  assert.equal(first.effectiveFrom, '2000-01-01'); assert.equal(first.historicalCorrection, true);
+  assert.equal(await Audit.countDocuments({ revision: first._id, historicalCorrection: true }), 1);
+  assert.deepEqual((await productionAccess(manager)).billingTeamIds, [String(accessTeam._id)]);
+  const revoked = await saveSetting('access', { ...input, effectiveFrom: today(), expectedVersion: 1,
+    enabled: false, canViewBilling: false, reason: 'Revoke the explicit financial access today' }, actor);
+  await saveSetting('access', { ...input, effectiveFrom: '2000-01-02', expectedVersion: 2 }, actor, { historical: true });
+  assert.deepEqual((await productionAccess(manager)).billingTeamIds, [], 'A newer effective date still takes precedence');
+  assert.equal((await Revision.findById(revoked._id).lean()).values.enabled, false);
+  assert.equal((await Revision.findById(first._id).lean()).effectiveFrom, '2000-01-01');
+  const count = await Revision.countDocuments();
+  await assert.rejects(saveSetting('access', input, manager, { historical: true }), { statusCode: 403 });
+  await assert.rejects(saveSetting('access', input, actor, { historical: true }), { statusCode: 409 });
+  await assert.rejects(saveSetting('access', { ...input, effectiveFrom: '2099-01-01' }, actor, { historical: true }), { statusCode: 400 });
+  await Team.updateOne({ _id: accessTeam._id }, { $set: { isActive: false } });
+  await assert.rejects(saveSetting('access', { ...input, expectedVersion: 3 }, actor, { historical: true }), { statusCode: 404 });
+  assert.equal(await Revision.countDocuments(), count, 'Invalid changes must not append revisions');
 });
 
 test('classification catalog limits tasks to the selected team, including shared and legacy project tasks', async () => {

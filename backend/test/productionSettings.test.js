@@ -35,6 +35,14 @@ test('all four rate scopes use stable IDs and preserve integer precision', () =>
   assert.equal(keys.size, 4);
   for (const hourlyRate of [0, -1, '25', 1.001, Infinity, 1000001]) assert.throws(() => validateSetting('rate', { ...base, enabled: true, hourlyRate }));
 });
+test('optional report billing is an explicit excluded-activity option, not a billable default', () => {
+  const body = { ...base, targetType: 'task', target: other, category: 'excluded', billable: false, reportOptionalBillable: true };
+  const setting = validateSetting('classification', body);
+  assert.equal(setting.values.billable, false);
+  assert.equal(setting.values.reportOptionalBillable, true);
+  for (const category of ['productive', 'training', 'break-idle']) assert.throws(() => validateSetting('classification', { ...body, category }), /Only excluded/);
+  assert.throws(() => validateSetting('classification', { ...body, reportOptionalBillable: 'true' }), /must be true or false/);
+});
 test('effective settings ignore future dates and use latest same-day correction', () => {
   const rows = [{ version: 3, effectiveFrom: '2027-01-01' }, { version: 1, effectiveFrom: '2026-01-01' }, { version: 2, effectiveFrom: '2026-01-01' }];
   assert.equal(effectiveRevision(rows, '2026-06-01').version, 2);

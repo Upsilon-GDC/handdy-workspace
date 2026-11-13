@@ -1,4 +1,5 @@
 import ProductionWorkFilters from '../../components/production/ProductionWorkFilters';
+import ProductionProgressCards from '../../components/production/ProductionProgressCards';
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import DashboardLayout from '../../components/layout/DashboardLayout';
@@ -43,7 +44,7 @@ function ProductionPage({ view = 'overview' }) {
     setLoading(true); setError('');
     getProduction({ ...query, view, limit: 25, includeChoices: query.page === 1 }, controller.signal).then(data => {
       if (controller.signal.aborted) return;
-      setReport(data);
+      setReport({ ...data, warnings: data.warnings.filter(row => row.code !== 'team-inferred-from-current-relationships') });
       if (data.choices) setChoices(previous => ({ ...data.choices,
         ...Object.fromEntries([['clients', 'client'], ['projects', 'project'], ['tasks', 'task']].map(([plural, singular]) => {
           const rows = data.choices[plural], selected = previous[plural].find(row => row._id === query[singular]);
@@ -60,7 +61,7 @@ function ProductionPage({ view = 'overview' }) {
   };
   const drillTo = (path, overrides) => `${path}?${new URLSearchParams({ ...query, ...overrides, page: 1 })}`;
   const summary = report?.summary, billing = summary?.billing?.applicable === true;
-  const [title, description] = pages[view];
+  const [title] = pages[view];
   const layout = productionViews[view];
   const cards = summary ? {
     employees: ['Employees', String(summary.employeeCount)], teams: ['Teams compared', String(report.total)],
@@ -78,10 +79,8 @@ function ProductionPage({ view = 'overview' }) {
     : view === 'client' ? <Link to={drillTo('/admin/production/employee', { client: row.client || 'all', project: row.project })}>{row.clientName}<small>{row.projectName}</small></Link>
     : <Link to={drillTo('/admin/production/employee', { task: row.task })}>{row.taskName}</Link>;
   const visible = report && !loading && !error;
-  return <DashboardLayout title={title}><section className="production-module" data-production-view={view}>
-    <div className="prod-intro"><div><p className="prod-kicker">PRODUCTION</p><p>{description}</p></div>{report?.scope.canConfigure && <Link className="prod-secondary" to="/admin/production/settings">Production settings</Link>}</div>
+  return <DashboardLayout hideHeader title={title}><section className="production-module" data-production-view={view}>
     <form className="prod-panel prod-filter-form" onSubmit={apply} aria-label="Production filters">
-      <h2 className="prod-filter-title">{layout.title}</h2><p className="prod-filter-hint">{layout.hint}</p>
       <fieldset disabled={loading}>
         <ProductionWorkFilters view={view} draft={draft} choices={choices} personal={report?.scope.mode === 'personal'} onChange={patch => setDraft(previous => ({ ...previous, ...patch }))} />
       <div className="prod-filter-actions"><span>{report?.scope.mode === 'assigned' ? 'Your assigned teams and employees' : report?.scope.mode === 'personal' ? 'Your personal production' : 'Production within your authorized access'}</span><button className="prod-primary" type="submit">{loading ? 'Loading…' : 'Apply filters'}</button></div></fieldset>
@@ -92,6 +91,7 @@ function ProductionPage({ view = 'overview' }) {
       <div className="prod-summary-grid" aria-label="Production summary">{layout.cards.map(key => cards[key]).map(([label, value]) => <article className="prod-panel prod-card" key={label}><span>{label}</span><strong>{value}</strong></article>)}
       {showMoneyCard && <article className="prod-panel prod-card prod-money-card"><span>Estimated billing</span><Estimates billing={summary.billing} /><small>Provisional · not approved</small></article>}</div>
       {report.warnings.length > 0 && <details className="prod-warning" open={report.warnings.some(row => row.code !== 'team-inferred-from-current-relationships')}><summary>{report.warnings.length} item{report.warnings.length === 1 ? '' : 's'} to review</summary><ul>{report.warnings.map(row => <li key={row.code}>{productionWarnings[row.code] || 'Some records need review.'} <strong>({row.count})</strong></li>)}</ul>{report.scope.canConfigure && <Link to="/admin/production/settings">Open production settings</Link>}</details>}
+      {['overview', 'team'].includes(view) && <ProductionProgressCards rows={view === 'overview' ? report.teamHighlights : report.rows} teamLink={team => drillTo('/admin/production/employee', { team, employee: 'all' })} />}
       <section className="prod-panel"><div className="prod-section-heading"><div><h2>{view === 'details' ? 'Daily work details' : title}</h2><p>{report.period.startDate} – {report.period.endDate} · {report.period.timezone}</p></div><span className="prod-badge">Provisional</span></div>
         <div className="prod-table-wrap"><table className="prod-table" aria-label={view === 'details' ? 'Employee work details' : title}><thead><tr>
           {view === 'details' ? <><th>Date</th><th>Client / project</th><th>Task</th><th>Team</th><th>Activity</th><th>Tracked</th><th>Production</th>{billing && <><th>Billing status</th><th>Rate</th></>}</>

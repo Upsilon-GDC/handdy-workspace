@@ -1,0 +1,50 @@
+import { useRef, useState } from 'react';
+import { getProductionBillingPeriod, actOnProductionBilling } from '../../api/productionApi';
+import getApiErrorMessage from '../../utils/getApiErrorMessage';
+import { preparationIssues } from '../../utils/billingPreparation';
+
+export default function BillingBulkActions({ review, onBusy, onDone }) {
+  const [selected, setSelected] = useState([]);
+  const [note, setNote] = useState(''), [busy, setBusy] = useState(false);
+  const requests = useRef(new Map());
+  const eligible = mode => review.items.filter(row => row.allowedActions?.includes(mode === 'prepare' ? 'refresh' : 'approve'));
+  const items = review.items.filter(row => row.allowedActions?.some(action => ['refresh', 'approve'].includes(action)));
+  const chosen = items.filter(row => selected.includes(row._id));
+  const count = mode => eligible(mode).filter(row => selected.includes(row._id)).length;
+  const all = items.length > 0 && chosen.length === items.length;
+  const run = async stage => {
+    const targets = eligible(stage).filter(row => selected.includes(row._id));
+    if (!targets.length || (note.trim() && note.trim().length < 3)) return;
+    setBusy(true); onBusy(true); let saved = 0; const failures = [];
+    const reason = note.trim() || (stage === 'prepare' ? 'Prepare selected billing from the team review' : 'Approve selected billing from the team review');
+    const send = async (batch, action, extra = {}) => {
+      if (!batch.allowedActions.includes(action)) throw new Error('This action is unavailable. Ask an authorized billing reviewer.');
+      const body = { action, expectedVersion: batch.version, reason, ...extra }, key = `${batch._id}:${JSON.stringify(body)}`;
+      if (!requests.current.has(key)) requests.current.set(key, crypto.randomUUID());
+      return actOnProductionBilling(batch._id, { ...body, requestId: requests.current.get(key) });
+    };
+    for (const row of targets) {
+      try {
+        let { batch } = await getProductionBillingPeriod(row._id);
+        if (stage === 'approve') await send(batch, 'approve');
+        else {
+          batch = await send(batch, 'refresh');
+          const issues = preparationIssues(batch);
+          if (issues.length) throw new Error(issues.join(' '));
+          const allocations = batch.snapshot.entries.filter(entry => !entry.verified).map(entry => ({ timeLog: entry.timeLog, expectedVersion: entry.allocationVersion }));
+          if (allocations.length) batch = await send(batch, 'verify-allocations', { verificationHash: batch.verificationHash, allocations });
+          await send(batch, 'submit');
+        }
+        saved++;
+      } catch (error) { failures.push({ id: row._id, employee: row.snapshot.employeeName, message: error.isAxiosError || error.response ? getApiErrorMessage(error, 'Unable to save') : error.message || 'Unable to save' }); }
+    }
+    setSelected([]); setBusy(false); onBusy(false);
+    onDone({ summary: `${saved} of ${targets.length} employee periods ${stage === 'prepare' ? 'submitted for approval' : 'approved'}.`, failures });
+  };
+  return <div className="prod-bulk-actions" aria-label="Bulk employee review">
+    <div className="prod-bulk-toolbar"><button type="button" className="prod-secondary" disabled={busy || !items.length} onClick={() => setSelected(all ? [] : items.map(row => row._id))}>{all ? 'Clear employee selection' : 'Select all employees'}</button><span>{chosen.length} of {items.length} employees selected</span><div className="prod-simple-steps" role="group" aria-label="Billing review steps"><button type="button" className="prod-primary" disabled={busy || !count('prepare') || (!!note.trim() && note.trim().length < 3)} onClick={() => run('prepare')}>{busy ? 'Processing...' : `Prepare for approval (${count('prepare')})`}</button><button type="button" className="prod-primary" disabled={busy || !count('approve') || (!!note.trim() && note.trim().length < 3)} onClick={() => run('approve')}>{busy ? 'Processing...' : `Approve billing (${count('approve')})`}</button></div></div>
+    <div className="prod-bulk-employees">{items.map(row => <label className="prod-checkbox" key={row._id}><input type="checkbox" aria-label={`Select billing employee ${row.snapshot.employeeName}`} disabled={busy} checked={selected.includes(row._id)} onChange={event => setSelected(previous => event.target.checked ? [...previous, row._id] : previous.filter(id => id !== row._id))} />{row.snapshot.employeeName}</label>)}</div>
+    {!items.length && <p className="prod-filter-hint">All employee reports have been processed.</p>}
+    <details className="prod-preparation-note"><summary>Add a note (optional)</summary><label>Note<input aria-label="Bulk review note" disabled={busy} value={note} maxLength={500} onChange={event => setNote(event.target.value)} /></label></details>
+  </div>;
+}

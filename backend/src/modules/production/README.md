@@ -563,3 +563,30 @@ Billing draft preparation offers a separate optional cross-team control for
 that case, always bounded by the existing employee access and reviewer rules.
 Production settings configure classifications, rates and access; they do not
 need to be entered again to view each report.
+
+Team billing also controls Production setup notices. Only teams with billing
+enabled on the work date contribute notices, and team/client/project/task
+filters restrict the notices as well as the work shown. An unresolved entry's
+home team routes its notice only; it does not assign production or billing.
+Explicit Break/Lunch tasks do not produce production-allocation notices.
+Hours-only reads fetch activation flags with currency and approval fields
+excluded. New Billing Management reports offer only billing-enabled teams;
+saved billing history remains available under the existing access rules.
+
+An excluded classification can explicitly set `reportOptionalBillable: true`.
+Admin work configured this way stays excluded by default. Live Reports offer
+`includeOptionalWork=true` to count those intervals as productive and eligible
+for billing using employee/project rates, subject to normal team billing and
+financial permissions. Training, pauses, Break/Lunch and other excluded tasks
+are not enabled by this option. The signed report and its downloads record the
+option and its resulting totals. This option does not change dashboard totals,
+saved classifications, billing drafts, approved periods or finalized billing;
+saved report sources reject the override.
+
+Live Reports include employee contributions and grouped employee/task details
+from the same calculation and authorized scope as the primary report. All
+sections use the same filters and optional Admin inclusion. Excel includes
+Employee contributions and Employee task details sheets; PDF includes matching
+sections. Screen pagination does not limit exported rows. Task details are
+bounded to 5000 grouped rows, the combined PDF to 1000 rows and the signed
+payload to 8 MB. Narrow the dates or use Excel when a PDF exceeds its limit.

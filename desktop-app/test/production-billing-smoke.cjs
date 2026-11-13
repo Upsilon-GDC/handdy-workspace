@@ -89,15 +89,36 @@ app.whenReady().then(async () => {
     async function loginAs(user, id = '') {
       currentUser = user; await win.loadURL(`${base}/login`);
       await evaluate(`localStorage.setItem('token','fixture');localStorage.setItem('user',${JSON.stringify(JSON.stringify(user))});`);
-      await win.loadURL(`${base}/admin/production/billing${id ? `?id=${id}` : ''}`);
+      await win.loadURL(`${base}/admin/production/billing${id ? `?id=${id}` : '?history=1'}`);
       await until(`!!document.querySelector('[aria-label="Billing periods"]') && !document.querySelector('[aria-label="Prepare billing period"] fieldset').disabled`);
     }
     await loginAs(admin);
     await win.loadURL(`${base}/admin/billing`);
-    await until(`location.pathname==='/admin/production/billing' && !!document.querySelector('[aria-label="Billing report filters"]') && !document.querySelector('[aria-label="Prepare billing period"] fieldset').disabled`);
+    await until(`location.pathname==='/admin/production/billing' && document.querySelector('[aria-label="Report team"]')?.options.length===3`);
+    assert.equal(await evaluate(`!!document.querySelector('[aria-label="Bulk employee review"]')`), false);
+    assert.equal(await evaluate(`!!document.querySelector('[aria-label="Prepare billing period"]')`), false);
+    await select('Report team', String(team._id)); await select('Report period', 'yesterday'); await click('View report');
+    await until(`!!document.querySelector('[aria-label="Team work report"]')`);
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Team work report"]').textContent.includes('Ada Member')`), true);
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Team work report"]').textContent.includes('Hours Only Member')`), false);
+    assert.equal(await Batch.countDocuments(), 0, 'Simple report does not create billing drafts');
+    const simpleDownload = new Promise(resolve => win.webContents.session.once('will-download', (_event, item) => {
+      const file = path.join(output, 'simple-team-work.xlsx'); item.setSavePath(file);
+      item.once('done', (_event, state) => { assert.equal(state, 'completed'); resolve(file); });
+    }));
+    await click('Download Excel');
+    const simpleBook = new ExcelJS.Workbook(); await simpleBook.xlsx.readFile(await simpleDownload);
+    assert.ok(simpleBook.getWorksheet('Employee task details'));
+    assert.ok(simpleBook.getWorksheet('Employee contributions'));
+    assert.equal(await Batch.countDocuments(), 0, 'Download needs no approvals');
+    win.webContents.invalidate(); await pause(150);
+    fs.writeFileSync(path.join(output, 'simple-team-work-report.png'), (await win.webContents.capturePage()).toPNG());
+    await loginAs(admin);
     assert.equal(await evaluate(`!!document.querySelector('.crm-nav a[href="/admin/billing"]')`), false);
     await select('Billing date period', 'yesterday');
     assert.equal(await evaluate(`document.querySelector('[aria-label="Billing from date"]').value`), date);
+    await until(`document.querySelector('[aria-label="Billing team"]').options.length === 2`);
+    assert.equal(await evaluate(`[...document.querySelector('[aria-label="Billing team"]').options].some(row=>row.textContent.includes('Renau'))`), false, 'Only billing-enabled teams can prepare new reports');
     await select('Billing team', String(team._id));
     assert.equal(await evaluate(`[...document.querySelector('[aria-label="Billing employee"]').options].some(row=>row.value==='all')`), true);
     assert.equal(await evaluate(`[...document.querySelector('[aria-label="Billing employee"]').options].some(row=>row.textContent.includes('Hours Only Member'))`), false);
@@ -109,7 +130,16 @@ app.whenReady().then(async () => {
     await until(`document.querySelector('[aria-label="Billing review"] .prod-billing-status')?.textContent==='Draft'`);
     let batch = await Batch.findOne({ employee: employee._id }).lean(); assert.ok(batch);
     assert.equal(await evaluate(`document.querySelector('[aria-label="Billing review"]').textContent.includes('reviewer must verify')`), true);
-    await evaluate(`document.querySelector('[aria-label="Team assignment review"] input[type="checkbox"]').click()`);
+    assert.equal(await evaluate(`!!document.querySelector('[aria-label="Review note"]')`), false, 'Normal report has no separate technical review actions');
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Billing review steps"]').querySelectorAll('button').length`), 2);
+    // Existing history controls retain rejection/finalization for older saved reports.
+    await win.loadURL(`${base}/admin/production/billing?id=${batch._id}`);
+    await until(`!!document.querySelector('[aria-label="Team assignment review"]')`);
+    await click('Select all task entries (1)');
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Billable work"]').closest('details').open`), false, 'Detailed work starts collapsed');
+    assert.ok(await evaluate(`document.querySelector('.prod-assignment-scroll').getBoundingClientRect().height <= 261`));
+    assert.ok(await evaluate(`document.querySelector('[aria-label="Review note"]').compareDocumentPosition(document.querySelector('[aria-label="Team assignment review"]')) & Node.DOCUMENT_POSITION_FOLLOWING`), 'Review controls precede the task list');
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Team assignment review"] input[type="checkbox"]').checked`), true);
     await input('Review note', 'Verified work belongs to WCPA'); await click('Verify selected entries & refresh');
     await until(`!!document.querySelector('[aria-label="Billing review"]') && !document.querySelector('[aria-label="Team assignment review"]')`);
     await capture('billing-draft.png');
@@ -204,10 +234,17 @@ app.whenReady().then(async () => {
     const headerIndex = (sheet, label) => sheet.getRow(1).values.findIndex(value => value === label);
     const summaryValue = (book, label) => { let value; book.getWorksheet('Summary').eachRow(row => { if (row.getCell(1).value === label) value = row.getCell(2).value; }); return value; };
     win.setSize(1440, 1050); await openReports(admin); await select('Report type', 'employee'); await generateReport();
-    assert.equal(await evaluate(`document.querySelector('[aria-label="Production report data"] tbody').rows.length`), 25);
-    await click('Next'); assert.equal(await evaluate(`document.querySelector('[aria-label="Production report data"] tbody').rows.length`), 5);
+    assert.equal(await evaluate(`!!document.querySelector('[aria-label="Report source"]')`), false, 'Reports use current estimates without a source selector');
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Production report data"]').querySelectorAll('.prod-ledger-record').length`), 25, 'One report sheet shows all visible records');
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Employee contributions"]').querySelectorAll('.prod-ledger-record').length`), 10);
+    assert.equal(await evaluate(`!!document.querySelector('[aria-label="Report layout"]')`), false, 'No layout switch');
+    assert.equal(await evaluate(`!!document.querySelector('.production-reports > .prod-footnote')`), false);
+    assert.ok(await evaluate(`document.querySelector('.prod-ledger-record dl').children.length >= 6`), 'Detailed fields stay visible');
+    await click('Next'); assert.equal(await evaluate(`document.querySelector('[aria-label="Production report data"]').querySelectorAll('.prod-ledger-record').length`), 5);
     const live = await workbook(await download('Export Excel'));
     assert.equal(live.getWorksheet('Report data').rowCount, 31, 'Export includes all 30 employees, not only the visible page');
+    assert.equal(live.getWorksheet('Employee contributions').rowCount, 31);
+    assert.ok(live.getWorksheet('Employee task details').rowCount > 1);
     assert.equal(summaryValue(live, 'Estimated USD'), 40);
     const excelTime = summaryValue(live, 'Expected');
     const expectedSeconds = excelTime instanceof Date ? (+excelTime - Date.UTC(1899, 11, 30)) / 1000 : excelTime * 86400;
@@ -222,20 +259,20 @@ app.whenReady().then(async () => {
     const hours = await workbook(await download('Export Excel'));
     assert.equal(hours.getWorksheet('Report data').getRow(1).values.some(value => String(value).includes('Estimated')), false);
     assert.equal(JSON.stringify(hours.model).includes('Estimated USD'), false);
-    await select('Team', 'all'); await select('Report source', 'finalized'); await generateReport();
-    const original = await workbook(await download('Export Excel')); assert.equal(summaryValue(original, 'Finalized USD'), 25);
-    await download('Export PDF');
-    await select('Report source', 'adjustments'); await generateReport();
-    const adjustment = await workbook(await download('Export Excel')); assert.equal(summaryValue(adjustment, 'Adjustment USD'), 15);
-    await select('Report source', 'adjusted'); await generateReport();
-    const corrected = await workbook(await download('Export Excel')); assert.equal(summaryValue(corrected, 'Adjusted USD'), 40);
+    assert.ok(!hours.getWorksheet('Employee contributions').getRow(1).values.includes('Estimated USD'));
+    // Historical service records remain readable; the normal UI offers only live reports.
+    const { productionReport } = require('../../backend/src/services/production/reportsService');
+    for (const [basis, label, expected] of [['finalized', 'Finalized USD', 25], ['adjustments', 'Adjustment USD', 15], ['adjusted', 'Adjusted USD', 40]]) {
+      const saved = await productionReport(admin, { basis, startDate: date, endDate: date });
+      assert.equal(saved.data.summary.find(row => row.label === label).value, expected);
+    }
+    await select('Team', 'all'); await generateReport();
     await evaluate('window.scrollTo(0,0);new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))'); win.webContents.invalidate(); await pause(200);
     fs.writeFileSync(path.join(reportOutput, 'production-reports-desktop.png'), (await win.webContents.capturePage()).toPNG());
     win.setSize(430, 950); await pause(250); await evaluate('window.scrollTo(0,0);new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
     assert.equal(await evaluate(`document.documentElement.scrollWidth <= innerWidth + 1`), true);
     fs.writeFileSync(path.join(reportOutput, 'production-reports-mobile.png'), (await win.webContents.capturePage()).toPNG());
-    await select('Report source', 'live');
-    for (const [type, controls] of [['client', ['Report source', 'Report type', 'Period', 'Client', 'Project']], ['task', ['Report source', 'Report type', 'Period', 'Task', 'Project']], ['team', ['Report source', 'Report type', 'Period', 'Team']]]) {
+    for (const [type, controls] of [['client', ['Report type', 'Period', 'Client', 'Project']], ['task', ['Report type', 'Period', 'Task', 'Project']], ['team', ['Report type', 'Period', 'Team']]]) {
       await select('Report type', type);
       assert.deepEqual(await evaluate(`[...document.querySelectorAll('[aria-label="Production report filters"] select')].map(row=>row.getAttribute('aria-label'))`), controls);
       await generateReport();
@@ -271,7 +308,7 @@ app.whenReady().then(async () => {
     assert.equal(await evaluate(`document.documentElement.scrollWidth <= innerWidth + 1`), true);
     await evaluate(`window.scrollTo(0,0);new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`); win.webContents.invalidate(); await pause(200);
     fs.writeFileSync(path.join(reportOutput, 'bulk-classification-mobile.png'), (await win.webContents.capturePage()).toPNG());
-    await openReports(employee); await select('Report source', 'finalized'); await generateReport();
+    await openReports(employee); await generateReport();
     const personal = await workbook(await download('Export Excel', 'personal-'));
     assert.equal(personal.getWorksheet('Report data').getRow(1).values.some(value => String(value).includes('USD')), false);
     currentUser = { ...employee, permissionOverrides: { revoked: ['export_reports'] } };
@@ -286,6 +323,8 @@ app.whenReady().then(async () => {
     assert.equal(await evaluate(`document.querySelector('[aria-label="Prepared employee reviews"]').textContent.includes('Hours Only Member')`), false);
     assert.equal(await evaluate(`document.querySelector('.prod-billing-history').open`), false);
     assert.equal(await evaluate(`!!document.querySelector('[aria-label="Project-wise billing summary"] .billing-project')`), true);
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Project-wise billing summary"] .billing-project').open`), false, 'Project task tables are collapsed by default');
+    await evaluate(`document.querySelector('[aria-label="Project-wise billing summary"] .billing-project > summary').click()`);
     assert.equal(await evaluate(`!!document.querySelector('[aria-label="Billing daily details"] details')`), true);
     await evaluate(`document.querySelector('[aria-label="Billing daily details"] summary').click()`);
     assert.equal(await evaluate(`document.querySelector('[aria-label="Billing daily details"] tbody').rows.length`), 1);
@@ -304,6 +343,48 @@ app.whenReady().then(async () => {
     await evaluate(`document.querySelectorAll('.crm-stage,.crm-nav').forEach(node=>node.getAnimations().forEach(animation=>animation.finish()));new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`);
     assert.equal(await evaluate(`document.documentElement.scrollWidth <= innerWidth + 1`), true);
     fs.writeFileSync(path.join(reportOutput, 'billing-team-review-mobile.png'), (await win.webContents.capturePage()).toPNG());
+    // Bulk review uses fresh per-employee permissions/versions and reports partial failures.
+    const extra = await Employee.findOne({ employeeId: 'EXTRA-0' }).lean();
+    await Employee.updateOne({ _id: extra._id }, { $set: { projectRates: [{ project: project._id, chargeRate: 25 }] } });
+    await Log.create({ employee: extra._id, project: project._id, client: client._id, task: task._id, startedAt: `${date}T18:00:00Z`, stoppedAt: `${date}T19:00:00Z`, status: 'stopped', isActiveTimer: false });
+    const activeEmployee = await Employee.findOne({ employeeId: 'EXTRA-1' }).lean();
+    await Log.create({ employee: activeEmployee._id, project: project._id, client: client._id, task: task._id, startedAt: `${date}T17:00:00Z`, status: 'running', isActiveTimer: true });
+    assert.equal(await evaluate(`!!document.querySelector('[aria-label="Employee bulk action"]')`), false, 'No technical action dropdown');
+    await click('Select all employees'); await click('Prepare for approval (27)');
+    await until(`document.querySelector('.prod-bulk-result')?.textContent.includes('1 of 27') && !!document.querySelector('[aria-label="Billing review steps"]')`);
+    assert.equal((await Batch.findOne({ employee: extra._id }).lean()).status, 'Submitted');
+    assert.equal(await evaluate(`document.querySelector('.prod-bulk-result').classList.contains('prod-warning')`), true, 'Partial failure is a warning, not success');
+    assert.equal(await evaluate(`document.querySelector('.prod-bulk-result').textContent.includes('Stop the active timer')`), true);
+    const activeBatch = await Batch.findOne({ employee: activeEmployee._id }).lean();
+    assert.equal(activeBatch.status, 'Draft');
+    assert.equal(activeBatch.snapshot.entries.some(entry => entry.verified), false, 'Blocked preparation does not verify assignments');
+    await evaluate(`document.querySelector('.prod-bulk-result summary').click()`);
+    win.setSize(1440, 1050); await pause(150);
+    fs.writeFileSync(path.join(reportOutput, 'billing-preparation-attention.png'), (await win.webContents.capturePage()).toPNG());
+    await click('Select all employees'); await click('Approve billing (1)');
+    await until(`document.querySelector('.prod-bulk-result')?.textContent.includes('1 of 1') && !!document.querySelector('[aria-label="Billing review steps"]')`);
+    assert.equal((await Batch.findOne({ employee: extra._id }).lean()).status, 'Approved');
+    assert.equal((await Batch.findById(batch._id).lean()).status, 'Finalized', 'Bulk actions leave finalized periods unchanged');
+    // Optional Admin inclusion changes only this live report and its downloads.
+    const optionalTask = await Task.create({ taskCode: 'OPTIONAL-ADMIN', taskName: 'Admin Work-Billable', teams: [team._id], createdBy: adminId });
+    await Revision.create(setting('classification', `${team._id}:task:${optionalTask._id}`, { category: 'excluded', billable: false, reportOptionalBillable: true }));
+    await Log.create({ employee: employee._id, project: project._id, client: client._id, task: optionalTask._id, startedAt: `${date}T11:00:00Z`, stoppedAt: `${date}T12:00:00Z`, status: 'stopped', isActiveTimer: false });
+    win.setSize(1440, 1050); await openReports(admin);
+    await select('Report type', 'employee'); await select('Team', String(team._id)); await select('Employee', String(employee._id));
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Include optional Admin work"]').checked`), false);
+    await generateReport();
+    assert.equal(summaryValue(await workbook(await download('Export Excel', 'admin-excluded-')), 'Estimated USD'), 40);
+    await evaluate(`document.querySelector('[aria-label="Include optional Admin work"]').click()`);
+    assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(node=>node.textContent==='Export Excel').disabled`), true, 'Changed inclusion must regenerate before export');
+    await generateReport();
+    assert.equal(await evaluate(`[...document.querySelectorAll('.prod-card')].find(node=>node.querySelector('span')?.textContent==='Production').querySelector('strong').textContent`), '2:00:00');
+    assert.equal(summaryValue(await workbook(await download('Export Excel', 'admin-included-')), 'Estimated USD'), 80);
+    await evaluate(`window.scrollTo(0,0);new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))`); win.webContents.invalidate(); await pause(200);
+    fs.writeFileSync(path.join(reportOutput, 'optional-admin-report.png'), (await win.webContents.capturePage()).toPNG());
+    await evaluate(`document.querySelector('[aria-label="Include optional Admin work"]').click()`); await generateReport();
+    assert.equal(summaryValue(await workbook(await download('Export Excel', 'admin-excluded-again-')), 'Estimated USD'), 40);
+    assert.equal((await Batch.findById(batch._id).lean()).snapshot.summary.billing.estimates[0].estimatedAmount, 25);
+    assert.equal(await evaluate(`!!document.querySelector('[aria-label="Report source"]')`), false);
     fs.writeFileSync(path.join(reportOutput, 'export-manifest.json'), JSON.stringify({ files, source: 'Synthetic local test database', originalFinalizedUSD: 25, historicalAdjustmentUSD: 15, adjustedUSD: 40 }, null, 2));
     console.log('PASS: Stage 5 real API/UI reports and Excel/PDF exports: all pages, exact hours, hours-only privacy, original/adjusted/delta separation, export permission revocation and mobile. Synthetic local data only.');
     console.log('PASS: Real local billing API/UI: draft, allocation verification, personal submission, manager rejection/resubmission/approval, Admin finalization, previewed historical adjustment, immutable original values, financial redaction and mobile. Temporary database only.');

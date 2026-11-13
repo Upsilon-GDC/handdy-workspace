@@ -47,6 +47,7 @@ function fixtureReport(query) {
     employeeName: employees.find(person => person._id === row.employee)?.fullName, teamName: teams.find(team => team._id === row.team)?.teamName || 'Needs team allocation',
     taskName: tasks.find(task => task._id === row.task)?.taskName, projectName: 'Audit', clientName: 'Acme Client' }));
   return { summary: { ...report.totals, employeeCount: report.members.length }, rows, total, page, limit, view,
+    ...(view === 'overview' ? { teamHighlights: report.teams.map(row => ({ ...row, teamName: teams.find(team => team._id === row.team)?.teamName || 'Needs team allocation' })) } : {}),
     period: report.period, asOf: report.asOf, provisional: true, warnings: report.warnings,
     scope: { mode: role === 'employee' ? 'personal' : 'company', canConfigure: role === 'admin', financialAccess: role === 'admin' },
     choices: { employees: roster, teams, clients, projects, tasks } };
@@ -83,7 +84,12 @@ const server = http.createServer(async (req, res) => {
     if (failBulk) { res.statusCode = 409; res.end(JSON.stringify({ message: 'Some classifications changed. Reload before saving.' })); return; }
     writes.push({ kind: 'classification-batch', ...value }); body = { success: true, count: value.tasks.length }; res.statusCode = 201;
   } else if (req.method === 'POST' && url.pathname.startsWith('/api/production/settings/')) {
-    let data = ''; for await (const chunk of req) data += chunk; const value = JSON.parse(data); writes.push({ kind: url.pathname.split('/').at(-1), ...value });
+    let data = ''; for await (const chunk of req) data += chunk; const value = JSON.parse(data);
+    const kind = url.pathname.split('/')[4];
+    writes.push({ kind, historical: url.pathname.endsWith('/historical-corrections'), ...value });
+    if (kind === 'access') histories.set(`access:${value.employee}:${value.team}`, [{ version: value.expectedVersion + 1,
+      effectiveFrom: value.effectiveFrom, values: { employee: value.employee, enabled: value.enabled,
+        canViewBilling: value.canViewBilling, canApproveBilling: value.canApproveBilling } }]);
     body = { success: true }; res.statusCode = 201;
   }
   res.end(JSON.stringify(body));
@@ -106,6 +112,9 @@ app.whenReady().then(async () => {
       await win.loadURL(`${base}${route}`);
     }
     await loginAs('admin'); await ready('overview');
+    assert.equal(await evaluate(`document.querySelectorAll('.prod-team-card').length`), 2);
+    assert.equal(await evaluate(`document.querySelector('.prod-team-card progress').getAttribute('max')`), '100');
+    assert.equal(await evaluate(`document.querySelector('.prod-team-card').getBoundingClientRect().top < 600`), true, 'Team results appear without scrolling on desktop');
     assert.equal(await evaluate(`document.querySelectorAll('.crm-nav details[aria-label="Production"] a').length`), 8);
     assert.equal(await evaluate(`document.querySelector('.prod-money-card').textContent.includes('25.00')`), true);
     assert.equal(await evaluate(`[...document.querySelectorAll('.prod-card')].find(node=>node.firstChild.textContent==='Production hours').textContent.includes('2h 00m')`), true);
@@ -220,8 +229,13 @@ app.whenReady().then(async () => {
     await until(`!document.querySelector('[aria-label="Employee"]').disabled`);
     assert.deepEqual(await evaluate(`[...document.querySelector('[aria-label="Employee"]').options].map(row=>row.value)`), ['', employees[1]._id]);
     await select('Employee', employees[1]._id); await until(`!document.querySelectorAll('.prod-settings-form fieldset')[1].disabled`);
-    await input('Reason for change', 'Grant scoped access'); await click('Save setting'); await until(`!!document.querySelector('.prod-success')`);
+    await input('Effective from', '2000-01-01');
+    assert.equal(await evaluate(`document.querySelector('[aria-label="Effective from"]').validity.rangeUnderflow`), false, 'Past access dates are selectable');
+    await input('Reason for change', 'Grant scoped access from the original start date'); await click('Save setting'); await until(`!!document.querySelector('.prod-success')`);
     assert.equal(writes.at(-1).kind, 'access'); assert.equal(writes.at(-1).canViewBilling, false); assert.equal(writes.at(-1).team, renau); assert.equal(writes.at(-1).employee, employees[1]._id);
+    assert.equal(writes.at(-1).historical, true); assert.equal(writes.at(-1).effectiveFrom, '2000-01-01');
+    await until(`document.querySelector('[aria-label="Effective from"]').value === '2000-01-01' && !document.querySelectorAll('.prod-settings-form fieldset')[1].disabled`);
+    await capture('production-past-team-access.png');
     await loginAs('employee'); await ready('overview');
     assert.equal(await evaluate(`!!document.querySelector('.prod-money-card') || !!document.querySelector('.crm-nav a[href="/admin/production/settings"]')`), false);
     await win.loadURL(`${base}/admin/production/employee`); await ready('employee');

@@ -108,14 +108,45 @@ test("the 10-minute log line covers the window and then starts a new one", async
   const lines = [];
   t.mock.method(console, "log", (line) => lines.push(line));
   metrics.logWindow();
-  assert.equal(lines.length, 1);
+  assert.equal(lines.length, 2);
   assert.match(lines[0], /^\[metrics\] /);
   const logged = JSON.parse(lines[0].slice("[metrics] ".length));
   assert.equal(logged.routes[0].key, "POST /api/time-logs/heartbeat");
   assert.equal(logged.events["longpoll.pending.check.desktop"], 3);
+  assert.match(lines[1], /^\[traffic-summary\] /);
+  const readable = JSON.parse(lines[1].slice('[traffic-summary] '.length));
+  assert.equal(readable.window.requests, 1);
+  assert.equal(readable.sinceStartup.requests, 1);
+  assert.equal(readable.window.topRoutesByData[0].averageResponseKB, 0.12);
   const after = metrics.snapshot();
   assert.equal(after.currentWindow.routes.length, 0, "a new window starts empty");
   assert.equal(after.total.routes[0].count, 1, "totals since start are kept");
+});
+
+test('readable traffic ranks large payloads separately from frequent requests and keeps totals across windows', (t) => {
+  const client = new EventEmitter(); metrics.attachMongo(client);
+  for (let i = 0; i < 20; i++) {
+    metrics.recordRequest({ route: 'POST /api/time-logs/heartbeat', status: 200, responseBytes: 100 });
+    client.emit('commandStarted', { requestId: i, commandName: 'find', command: { find: 'small_collection' } });
+    client.emit('commandSucceeded', { requestId: i, commandName: 'find', reply: { ok: 1 } });
+  }
+  metrics.recordRequest({ route: 'GET /api/reports', status: 200, responseBytes: 1_000_000 });
+  client.emit('commandStarted', { requestId: 100, commandName: 'aggregate', command: { aggregate: 'task_time_logs' } });
+  client.emit('commandSucceeded', { requestId: 100, commandName: 'aggregate', reply: { data: 'x'.repeat(2_000_000) } });
+  const lines = []; t.mock.method(console, 'log', line => lines.push(line));
+  metrics.logWindow();
+  const summary = JSON.parse(lines[1].slice('[traffic-summary] '.length));
+  assert.equal(summary.window.responseBodyMB, 1.002);
+  assert.equal(summary.window.topRoutesByData[0].route, 'GET /api/reports');
+  assert.equal(summary.window.topRoutesByRequests[0].route, 'POST /api/time-logs/heartbeat');
+  assert.equal(summary.window.topDatabaseByReceivedData[0].operation, 'aggregate task_time_logs');
+  assert.equal(summary.window.topDatabaseByReceivedData[0].replyMB, 2);
+  assert.equal(summary.window.externalSocketSentMB, 0, 'BSON reply sizes are not counted as outgoing socket traffic');
+  metrics.logWindow();
+  const next = JSON.parse(lines[3].slice('[traffic-summary] '.length));
+  assert.equal(next.window.requests, 0);
+  assert.equal(next.sinceStartup.requests, 21);
+  assert.equal(metrics.snapshot().usageSinceStartup.responseBodyMB, 1.002);
 });
 
 test("the metrics endpoint is admin-only", () => {

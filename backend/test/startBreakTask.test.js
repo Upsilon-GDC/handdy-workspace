@@ -59,13 +59,13 @@ test("desktop can start an assigned break task with no project under the selecte
 test("timer start rejects an inactive or unknown client", async () => {
   const original = Project.findById;
   const originalFind = TaskTimeLog.find;
-  const originalClientExists = Client.exists;
+  const originalClientFindOne = Client.findOne;
   const employeeId = new mongoose.Types.ObjectId();
   TaskTimeLog.find = () => ({ lean: async () => [] });
   Project.findById = async () => ({
     status: "Active", deletedAt: null, client: "client-a", clients: ["client-a"],
   });
-  Client.exists = async () => null;
+  Client.findOne = () => ({ select: async () => null });
   try {
     const res = {
       status(code) { this.code = code; return this; },
@@ -80,6 +80,6 @@ test("timer start rejects an inactive or unknown client", async () => {
   } finally {
     Project.findById = original;
     TaskTimeLog.find = originalFind;
-    Client.exists = originalClientExists;
+    Client.findOne = originalClientFindOne;
   }
 });

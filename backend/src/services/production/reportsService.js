@@ -96,14 +96,24 @@ async function productionReport(user, query) {
   try { getBillingDateRange(query.startDate, query.endDate, timezone); } catch (error) { throw fail(error.message); }
   const basis = query.basis || 'live';
   if (!Object.hasOwn(bases, basis) || typeof basis !== 'string') throw fail('Choose a valid report basis.');
+  if (query.includeOptionalWork !== undefined && !['true', 'false'].includes(query.includeOptionalWork)) throw fail('Choose whether to include optional Admin work.');
+  const includeOptionalWork = query.includeOptionalWork === 'true';
+  if (includeOptionalWork && basis !== 'live') throw fail('Optional Admin work applies to live reports. Saved billing uses its recorded classifications.');
   let data;
   if (basis === 'live') {
     const type = query.type || 'employee';
     if (typeof type !== 'string' || !Object.hasOwn(names, type)) throw fail('Choose a valid Production report.');
-    const report = await productionReportData(user, { ...query, view: type === 'daily' ? 'overview' : type, includeChoices: 'true' }, { allRows: true });
+    const report = await productionReportData(user, { ...query, view: type === 'daily' ? 'overview' : type, includeChoices: 'true' }, { allRows: true, includeOptionalWork, includeEmployeeBreakdown: true });
+    const employeeSummary = liveReportTable({ ...report, rows: report.employeeBreakdown.members }, 'employee');
+    const detailedWorkTable = liveReportTable({ ...report, rows: report.employeeBreakdown.work }, 'details');
+    detailedWorkTable.columns.push(column('billableSeconds', 'Billable (h:mm:ss)', 'duration'));
+    detailedWorkTable.rows.forEach((row, index) => row.push(report.employeeBreakdown.work[index].billing?.billableSeconds || 0));
     data = { title: names[type], ...liveReportTable(report, type), warnings: report.warnings,
+      employeeSummary: { columns: employeeSummary.columns, rows: employeeSummary.rows },
+      detailedWorkTable: { columns: detailedWorkTable.columns, rows: detailedWorkTable.rows },
       choices: report.choices, selection: report.selectionLabels,
       asOf: report.asOf, notes: [ 'Live estimates are provisional and are separate from approved or finalized billing.',
+        includeOptionalWork ? 'Optional Admin work is included in production and billing estimates using employee project rates. Training and Break / Idle remain excluded.' : 'Optional Admin work is excluded from production and billing estimates.',
         'Targets follow attendance and employee working-hour settings. Client, project and task filters narrow work, not the daily target.',
         'Remaining targets do not use one employee’s overtime to cover another employee’s shortfall.',
         'Achievement uses production against configured attendance targets. Work without an applicable quota stays in production totals but does not inflate achievement.',
@@ -112,7 +122,7 @@ async function productionReport(user, query) {
   } else data = await savedReport(user, query, basis);
   const choices = data.choices; delete data.choices;
   data = { ...data, basis, basisLabel: bases[basis], period: { startDate: query.startDate, endDate: query.endDate, timezone },
-    asOf: data.asOf || new Date().toISOString(), filters: Object.fromEntries(['team', 'employee', 'client', 'project', 'task'].map(key => [key, query[key] || 'all'])) };
+    asOf: data.asOf || new Date().toISOString(), filters: { ...Object.fromEntries(['team', 'employee', 'client', 'project', 'task'].map(key => [key, query[key] || 'all'])), includeOptionalWork } };
   if (Buffer.byteLength(JSON.stringify(data)) > 8_000_000) throw fail('Narrow the report before exporting this much data.', 413);
   return { data, choices, ...await reportExportToken(user, data) };
 }

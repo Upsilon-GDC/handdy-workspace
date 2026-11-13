@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import ProductionWorkFilters from '../../components/production/ProductionWorkFilters';
+import ProductionReportLedger from '../../components/production/ProductionReportLedger';
 import { getProductionReportTable, authorizeProductionExport } from '../../api/productionApi';
 import getApiErrorMessage from '../../utils/getApiErrorMessage';
 import { productionDates, productionWarnings } from '../../utils/production';
@@ -9,7 +10,6 @@ import { productionReportView } from '../../utils/productionViews';
 import '../../styles/production.css';
 
 const types = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', employee: 'Employee', team: 'Team', client: 'Client & project', task: 'Task', details: 'Employee work details' };
-const bases = { live: 'Live production estimates', approved: 'Saved approved billing', finalized: 'Original finalized billing', adjustments: 'Recorded historical adjustments', adjusted: 'Finalized billing after adjustments' };
 const reportHeadlines = {
   overview: ['Expected', 'Production', 'Remaining target', 'Production achievement'],
   employee: ['Employees', 'Production', 'Remaining target', 'Production achievement'],
@@ -20,17 +20,18 @@ const reportHeadlines = {
 };
 export default function ProductionReportsPage() {
   const [from, to] = productionDates('today');
-  const [draft, setDraft] = useState({ basis: 'live', type: 'daily', period: 'today', startDate: from, endDate: to, team: 'all', employee: 'all', client: 'all', project: 'all', task: 'all' });
+  const [draft, setDraft] = useState({ basis: 'live', type: 'daily', period: 'today', startDate: from, endDate: to, team: 'all', employee: 'all', client: 'all', project: 'all', task: 'all', includeOptionalWork: false });
   const [query, setQuery] = useState(() => ({ ...draft })), [report, setReport] = useState(null), [page, setPage] = useState(1);
+  const [employeePage, setEmployeePage] = useState(1), [workPage, setWorkPage] = useState(1);
   const [choices, setChoices] = useState({ teams: [], employees: [], clients: [], projects: [], tasks: [] });
   const [loading, setLoading] = useState(true), [exporting, setExporting] = useState(false), [error, setError] = useState('');
   useEffect(() => {
-    const controller = new AbortController(); setLoading(true); setError(''); setReport(null); setPage(1);
+    const controller = new AbortController(); setLoading(true); setError(''); setReport(null); setPage(1); setEmployeePage(1); setWorkPage(1);
     getProductionReportTable(query, controller.signal).then(value => {
       if (controller.signal.aborted) return;
       // Preserve the exact signed data separately; translated UI warnings must
       // not change the exported snapshot or its integrity hash.
-      setReport({ ...value, uiWarnings: value.data.warnings.map(row => ({ ...row, message: productionWarnings[row.code] || row.code })) });
+      setReport({ ...value, uiWarnings: value.data.warnings.filter(row => row.code !== 'team-inferred-from-current-relationships').map(row => ({ ...row, message: productionWarnings[row.code] || row.code })) });
       if (value.choices) setChoices(previous => ({ ...value.choices,
         ...Object.fromEntries([['clients', 'client'], ['projects', 'project'], ['tasks', 'task']].map(([plural, singular]) => {
           const rows = value.choices[plural], selected = previous[plural].find(row => row._id === query[singular]);
@@ -41,7 +42,7 @@ export default function ProductionReportsPage() {
     return () => controller.abort();
   }, [query]);
   const update = (key, value) => setDraft(previous => ({ ...previous, [key]: value,
-    ...(key === 'team' ? { employee: 'all' } : {}), ...(key === 'basis' && value !== 'live' ? { client: 'all', project: 'all', task: 'all' } : {}) }));
+    ...(key === 'team' ? { employee: 'all' } : {}) }));
   const generate = event => { event.preventDefault(); setQuery({ ...draft }); };
   const pending = JSON.stringify(draft) !== JSON.stringify(query);
   const exportFile = async format => {
@@ -56,29 +57,28 @@ export default function ProductionReportsPage() {
     } finally { setExporting(false); }
   };
   const data = report?.data, pages = Math.max(1, Math.ceil((data?.rows.length || 0) / 25));
-  const headline = data?.summary.filter(row => data.basis === 'live'
-    ? reportHeadlines[productionReportView(query.type)].includes(row.label) || (row.type === 'money' && ['employee', 'client'].includes(query.type))
-    : row.type === 'money' || ['Saved periods', 'Adjustments', 'Eligible work'].includes(row.label)) || [];
-  return <DashboardLayout title="Production reports"><section className="production-module production-reports">
-    <div className="prod-intro"><div><p className="prod-kicker">PRODUCTION REPORTS</p><p>Choose the report and dates, review the totals, then download the same values.</p></div></div>
+  const headline = data?.summary.filter(row => reportHeadlines[productionReportView(query.type)].includes(row.label)
+    || (row.type === 'money' && ['employee', 'client'].includes(query.type))) || [];
+  return <DashboardLayout hideHeader title="Production reports"><section className="production-module production-reports">
     <form className="prod-panel prod-filter-form" aria-label="Production report filters" onSubmit={generate}><fieldset disabled={loading || exporting}><div className="prod-filter-grid">
-      <label>Report source<select aria-label="Report source" value={draft.basis} onChange={event => update('basis', event.target.value)}>{Object.entries(bases).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-      {draft.basis === 'live' && <label>Report type<select aria-label="Report type" value={draft.type} onChange={event => update('type', event.target.value)}>{Object.entries(types).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}
+      <label>Report type<select aria-label="Report type" value={draft.type} onChange={event => update('type', event.target.value)}>{Object.entries(types).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
     </div>
-    <ProductionWorkFilters draft={draft} choices={choices} view={draft.basis === 'live' ? productionReportView(draft.type) : 'saved'} onChange={patch => setDraft(previous => ({ ...previous, ...patch }))} />
-    <div className="prod-filter-actions"><span>{pending ? 'Generate the report to apply your changed filters.' : 'Dates and filters apply to both the screen and downloads.'}</span><button className="prod-primary">{loading ? 'Preparing…' : 'Generate report'}</button></div></fieldset></form>
+    <ProductionWorkFilters showHint={false} draft={draft} choices={choices} view={productionReportView(draft.type)} onChange={patch => setDraft(previous => ({ ...previous, ...patch }))} />
+    <div className="prod-optional-work"><label className="prod-checkbox"><input aria-label="Include optional Admin work" type="checkbox" checked={draft.includeOptionalWork} onChange={event => update('includeOptionalWork', event.target.checked)} />Include optional Admin work in production and billing</label></div>
+    <div className="prod-filter-actions"><button className="prod-primary">{loading ? 'Preparing…' : 'Generate report'}</button></div></fieldset></form>
     {loading && <p className="prod-status" role="status">Preparing report…</p>}
     {error && <p className="prod-error" role="alert">{error}</p>}
     {data && !loading && <>
       <div className="prod-summary-grid" aria-label="Report summary">{headline.map(row => <article className="prod-panel prod-card" key={row.label}><span>{row.label}</span><strong>{productionReportCell(row.value, row)}</strong></article>)}</div>
-      <section className="prod-panel"><div className="prod-section-heading"><div><h2>{data.title}</h2><p>{data.basisLabel} · {data.period.startDate} – {data.period.endDate} · {data.period.timezone}</p><p>As of {new Date(data.asOf).toLocaleString()} · Durations are h:mm:ss</p></div>{report.canExport && <div className="prod-export-actions"><button className="prod-secondary" disabled={exporting || pending} onClick={() => exportFile('excel')}>Export Excel</button><button className="prod-primary" disabled={exporting || pending} onClick={() => exportFile('pdf')}>Export PDF</button></div>}</div>
-        <div className="prod-table-wrap"><table className="prod-table" aria-label="Production report data"><thead><tr>{data.columns.map(col => <th key={col.key}>{col.label}</th>)}</tr></thead><tbody>{data.rows.slice((page - 1) * 25, page * 25).map((row, index) => <tr key={index}>{row.map((value, columnIndex) => <td key={columnIndex}>{productionReportCell(value, data.columns[columnIndex])}</td>)}</tr>)}</tbody></table></div>
+      <section className="prod-panel"><div className="prod-section-heading"><div><h2>{data.title}</h2><p>{data.period.startDate} – {data.period.endDate}</p></div>{report.canExport && <div className="prod-export-actions"><button className="prod-secondary" disabled={exporting || pending} onClick={() => exportFile('excel')}>Export Excel</button><button className="prod-primary" disabled={exporting || pending} onClick={() => exportFile('pdf')}>Export PDF</button></div>}</div>
+        <ProductionReportLedger data={data} rows={data.rows.slice((page - 1) * 25, page * 25)} offset={(page - 1) * 25} />
         {!data.rows.length && <p className="prod-empty">No records match these filters.</p>}
-        <div className="prod-pagination"><span>{data.rows.length} rows · Page {page} of {pages} · Downloads include every report row.</span><div><button className="prod-secondary" disabled={page === 1 || exporting} onClick={() => setPage(value => value - 1)}>Previous</button><button className="prod-secondary" disabled={page === pages || exporting} onClick={() => setPage(value => value + 1)}>Next</button></div></div>
+        {pages > 1 && <div className="prod-pagination"><span>{data.rows.length} records · Page {page} of {pages}</span><div><button className="prod-secondary" disabled={page === 1 || exporting} onClick={() => setPage(value => value - 1)}>Previous</button><button className="prod-secondary" disabled={page === pages || exporting} onClick={() => setPage(value => value + 1)}>Next</button></div></div>}
       </section>
-      <details className="prod-panel prod-settings-form"><summary>Full report totals</summary><table className="prod-table" aria-label="Full report totals"><tbody>{data.summary.map(row => <tr key={row.label}><th>{row.label}</th><td>{productionReportCell(row.value, row)}</td></tr>)}</tbody></table></details>
+      {data.employeeSummary && <section className="prod-panel" aria-label="Employee contributions"><div className="prod-section-heading"><h2>Employee contributions</h2><span className="prod-badge">{data.employeeSummary.rows.length} employees</span></div><ProductionReportLedger data={data.employeeSummary} rows={data.employeeSummary.rows.slice((employeePage - 1) * 10, employeePage * 10)} offset={(employeePage - 1) * 10} />{data.employeeSummary.rows.length > 10 && <div className="prod-pagination"><span>Page {employeePage} of {Math.ceil(data.employeeSummary.rows.length / 10)}</span><div><button className="prod-secondary" disabled={employeePage === 1} onClick={() => setEmployeePage(value => value - 1)}>Previous employees</button><button className="prod-secondary" disabled={employeePage * 10 >= data.employeeSummary.rows.length} onClick={() => setEmployeePage(value => value + 1)}>Next employees</button></div></div>}</section>}
+      {data.detailedWorkTable && <details className="prod-panel prod-report-totals"><summary>Employee task details ({data.detailedWorkTable.rows.length})</summary><ProductionReportLedger data={data.detailedWorkTable} rows={data.detailedWorkTable.rows.slice((workPage - 1) * 10, workPage * 10)} offset={(workPage - 1) * 10} />{data.detailedWorkTable.rows.length > 10 && <div className="prod-pagination"><span>Page {workPage} of {Math.ceil(data.detailedWorkTable.rows.length / 10)}</span><div><button className="prod-secondary" disabled={workPage === 1} onClick={() => setWorkPage(value => value - 1)}>Previous work</button><button className="prod-secondary" disabled={workPage * 10 >= data.detailedWorkTable.rows.length} onClick={() => setWorkPage(value => value + 1)}>Next work</button></div></div>}</details>}
+      <details className="prod-panel prod-report-totals"><summary>All report totals</summary><dl>{data.summary.map(row => <div key={row.label}><dt>{row.label}</dt><dd>{productionReportCell(row.value, row)}</dd></div>)}</dl></details>
       {!!report.uiWarnings.length && <div className="prod-warning"><strong>Review items</strong><ul>{report.uiWarnings.map(row => <li key={row.code}>{row.message} ({row.count})</li>)}</ul></div>}
-      <div className="prod-footnote">{data.notes.map(note => <p key={note}>{note}</p>)}</div>
     </>}
   </section></DashboardLayout>;
 }

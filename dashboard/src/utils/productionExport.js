@@ -56,7 +56,7 @@ export async function exportProductionExcel(data) {
   sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: data.rows.length + 1, column: data.columns.length } };
   for (const worksheet of [summary, sheet]) worksheet.eachRow(row => row.eachCell(cell => { cell.alignment = { vertical: 'top', wrapText: true }; }));
   if (data.employeeSummary) {
-    const employees = workbook.addWorksheet('Employee review', { views: [{ state: 'frozen', ySplit: 1 }] });
+    const employees = workbook.addWorksheet(data.basis === 'live' ? 'Employee contributions' : 'Employee review', { views: [{ state: 'frozen', ySplit: 1 }] });
     employees.columns = data.employeeSummary.columns.map(col => ({ width: col.key === 'issues' ? 52 : 26 }));
     employees.addRow(data.employeeSummary.columns.map(col => col.label));
     employees.getRow(1).height = 32;
@@ -67,6 +67,15 @@ export async function exportProductionExcel(data) {
     });
     employees.autoFilter = { from: { row: 1, column: 1 }, to: { row: data.employeeSummary.rows.length + 1, column: data.employeeSummary.columns.length } };
     employees.eachRow(row => row.eachCell(cell => { cell.alignment = { vertical: 'top', wrapText: true }; }));
+  }
+  if (data.detailedWorkTable) {
+    const details = workbook.addWorksheet('Employee task details', { views: [{ state: 'frozen', ySplit: 1 }] });
+    details.columns = data.detailedWorkTable.columns.map(() => ({ width: 25 }));
+    details.addRow(data.detailedWorkTable.columns.map(col => col.label));
+    details.getRow(1).eachCell(cell => { cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }; cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2853DC' } }; });
+    data.detailedWorkTable.rows.forEach(values => { const row = details.addRow([]); values.forEach((value, index) => excelCell(row.getCell(index + 1), value, data.detailedWorkTable.columns[index])); });
+    details.autoFilter = { from: { row: 1, column: 1 }, to: { row: data.detailedWorkTable.rows.length + 1, column: data.detailedWorkTable.columns.length } };
+    details.eachRow(row => row.eachCell(cell => { cell.alignment = { vertical: 'top', wrapText: true }; }));
   }
   if (data.workDetails) {
     const projectData = billingProjectTable(data.workDetails);
@@ -82,7 +91,7 @@ export async function exportProductionExcel(data) {
   downloadBlob(new Blob([buffer], { type: MIME_XLSX }), `${filename(data)}.xlsx`);
 }
 export async function exportProductionPdf(data) {
-  if (data.rows.length > 1000) throw new Error('PDF exports support up to 1000 rows. Narrow the report or use Excel.');
+  if (data.rows.length + (data.employeeSummary?.rows.length || 0) + (data.detailedWorkTable?.rows.length || 0) > 1000) throw new Error('PDF exports support up to 1000 rows including employee details. Narrow the report or use Excel.');
   const [{ jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
   const width = doc.internal.pageSize.getWidth(), height = doc.internal.pageSize.getHeight();
@@ -110,19 +119,24 @@ export async function exportProductionPdf(data) {
     styles: { ...style.styles, fontSize: 8, cellPadding: 4 }, didDrawPage: () => header(`Summary - as of ${data.asOf}`) });
   // Repeat identifying columns in each horizontal panel instead of shrinking
   // a wide report to unreadable text or dropping columns.
-  const firstMetric = data.columns.findIndex(col => col.type !== 'text');
-  const identityCount = Math.min(Math.max(firstMetric, 1), 3), identities = data.columns.slice(0, identityCount);
-  const remaining = data.columns.slice(identityCount), panels = [];
+  const tables = [{ title: 'Report data', columns: data.columns, rows: data.rows },
+    ...(data.employeeSummary ? [{ title: 'Employee contributions', ...data.employeeSummary }] : []),
+    ...(data.detailedWorkTable ? [{ title: 'Employee task details', ...data.detailedWorkTable }] : [])];
+  for (const table of tables) {
+  const firstMetric = table.columns.findIndex(col => col.type !== 'text');
+  const identityCount = Math.min(Math.max(firstMetric, 1), 3), identities = table.columns.slice(0, identityCount);
+  const remaining = table.columns.slice(identityCount), panels = [];
   for (let index = 0; index < remaining.length; index += 6) panels.push([...identities, ...remaining.slice(index, index + 6)]);
   if (!panels.length) panels.push(identities);
   panels.forEach((columns, panelIndex) => {
     doc.addPage();
-    const subtitle = `Report data - section ${panelIndex + 1} of ${panels.length} - ${data.rows.length} rows`;
+    const subtitle = `${table.title} - section ${panelIndex + 1} of ${panels.length} - ${table.rows.length} rows`;
     header(subtitle);
-    const indexes = columns.map(col => data.columns.indexOf(col));
+    const indexes = columns.map(col => table.columns.indexOf(col));
     autoTable(doc, { ...style, startY: 80, head: [['Row', ...columns.map(col => text(col.label))]],
-      body: data.rows.map((row, rowIndex) => [String(rowIndex + 1), ...indexes.map((index, position) => text(productionReportCell(row[index], columns[position])))]), didDrawPage: () => header(subtitle) });
+      body: table.rows.map((row, rowIndex) => [String(rowIndex + 1), ...indexes.map((index, position) => text(productionReportCell(row[index], columns[position])))]), didDrawPage: () => header(subtitle) });
   });
+  }
   for (let page = 1; page <= doc.getNumberOfPages(); page++) { doc.setPage(page); doc.setFontSize(8); doc.setTextColor(110, 123, 145); doc.text(`Page ${page} of ${doc.getNumberOfPages()}`, width - 36, height - 16, { align: 'right' }); }
   doc.save(`${filename(data)}.pdf`);
 }
