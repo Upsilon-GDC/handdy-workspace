@@ -36,10 +36,19 @@ function workProjectIds(employee) {
   return [...new Set((policies.get(key('employee', employee._id))?.workProjects || []).map(id))].filter(Boolean);
 }
 async function activeWorkTeams(employee) {
-  const hasActiveTeam = employee.team ? Boolean(await Team.exists({ _id: employee.team, isActive: true })) : false;
-  const extra = additionalWorkTeamIds(employee);
-  const active = extra.length ? await Team.find({ _id: { $in: extra }, isActive: true }).select('_id').lean() : [];
-  return { hasActiveTeam, teamIds: [...new Set([...(hasActiveTeam ? [id(employee.team)] : []), ...active.map(id)])] };
+  const requested = workTeamIds(employee);
+  if (!requested.length) return { hasActiveTeam: false, teamIds: [] };
+  if (employee.team && requested.length === 1) {
+    const hasActiveTeam = Boolean(await Team.exists({ _id: employee.team, isActive: true }));
+    return { hasActiveTeam, teamIds: hasActiveTeam ? requested : [] };
+  }
+  // Check home and additional teams together, without caching access decisions.
+  const active = await Team.find({ _id: { $in: requested }, isActive: true }).select('_id').lean();
+  const activeIds = new Set(active.map(id));
+  return {
+    hasActiveTeam: Boolean(employee.team && activeIds.has(id(employee.team))),
+    teamIds: requested.filter(teamId => activeIds.has(teamId)),
+  };
 }
 function clientAccessError(employee, client, project) {
   const allowed = allowedClientIds(employee, project);
