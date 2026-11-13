@@ -256,7 +256,7 @@ const startServer = async () => {
     if (trafficMetrics.enabled) {
       trafficMetrics.meterHttpServer(server);
       metricsLog = trafficMetrics.startPeriodicLog();
-      console.log("[metrics] Traffic metrics are on; a summary is logged every 10 minutes.");
+      console.log("[metrics] Traffic metrics are on; search [traffic-summary] for MB totals and top data-using routes every 10 minutes.");
     }
     installGracefulShutdown({
       server,

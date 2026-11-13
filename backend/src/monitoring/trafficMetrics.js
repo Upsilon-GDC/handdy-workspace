@@ -267,12 +267,39 @@ function describeBucket(bucket, limit) {
   };
 }
 
+// Readable rankings use every counter, not just the raw log's top-15 rows.
+// Socket/route/BSON measurements overlap and must never be added together.
+function summarizeTraffic(bucket, destinations, limit = 5) {
+  const mb = bytes => Number((bytes / 1_000_000).toFixed(3));
+  const sum = (rows, field) => rows.reduce((total, row) => total + (row[field] || 0), 0);
+  const routes = [...bucket.routes.values()], db = [...bucket.db.values()];
+  const responseBytes = sum(routes, 'responseBytes');
+  const external = Object.entries(destinations).filter(([key]) => key !== 'http-clients').map(([, value]) => value);
+  const routeRow = row => ({ route: row.key, requests: row.count, responseMB: mb(row.responseBytes),
+    responseSharePercent: responseBytes ? Number((row.responseBytes / responseBytes * 100).toFixed(1)) : 0,
+    averageResponseKB: row.count ? Number((row.responseBytes / row.count / 1000).toFixed(2)) : 0 });
+  const dbRow = row => ({ operation: row.key, commands: row.count, sentMB: mb(row.sentBytes), replyMB: mb(row.replyBytes) });
+  return {
+    requests: sum(routes, 'count'), responseBodyMB: mb(responseBytes),
+    requestBodyMB: mb(sum(routes, 'requestBytes')),
+    httpSocketSentMB: mb(destinations['http-clients']?.sentBytes || 0),
+    externalSocketSentMB: mb(sum(external, 'sentBytes')), externalSocketReceivedMB: mb(sum(external, 'receivedBytes')),
+    topRoutesByData: sortedTop(bucket.routes, 'responseBytes', limit).map(routeRow),
+    topRoutesByRequests: sortedTop(bucket.routes, 'count', limit).map(routeRow),
+    topDatabaseBySentData: sortedTop(bucket.db, 'sentBytes', limit).map(dbRow),
+    topDatabaseByReceivedData: sortedTop(bucket.db, 'replyBytes', limit).map(dbRow),
+    destinations: Object.entries(destinations).map(([destination, row]) => ({ destination,
+      connections: row.connections, sentMB: mb(row.sentBytes), receivedMB: mb(row.receivedBytes) })),
+  };
+}
+
 function snapshot({ limit = 50 } = {}) {
   return {
     enabled,
     since: startedAt,
     uptimeMinutes: Math.round((Date.now() - startedAt.getTime()) / 60000),
     destinations: Object.fromEntries(destinationTotals()),
+    usageSinceStartup: summarizeTraffic(totals, Object.fromEntries(destinationTotals())),
     total: describeBucket(totals, limit),
     currentWindow: describeBucket(window, limit),
   };
@@ -292,6 +319,12 @@ function logWindow() {
   }
   lastLoggedDestinations = current;
   console.log(`[metrics] ${JSON.stringify({ windowMinutes: Math.round((Date.now() - window.startedAt.getTime()) / 60000), destinations, ...describeBucket(window, TOP) })}`);
+  console.log(`[traffic-summary] ${JSON.stringify({
+    from: window.startedAt, to: new Date(), units: 'decimal MB; KB',
+    window: summarizeTraffic(window, destinations),
+    sinceStartup: { from: startedAt, ...summarizeTraffic(totals, Object.fromEntries(current)) },
+    interpretation: 'Network estimates, not disk usage or Render billing. HTTP socket totals include response bodies: do not add them together. Database operation sizes are uncompressed BSON; socket totals are a separate measurement. Received bytes are not sent bytes. Counters reset on process restart.',
+  })}`);
   for (const alert of windowAlerts(window, destinations)) console.warn(`[alert] ${alert}`);
   window = newBucket();
 }
