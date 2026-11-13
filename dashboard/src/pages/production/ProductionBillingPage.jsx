@@ -40,7 +40,7 @@ function TeamWorkReport() {
   const data = report?.data;
   const columns = data?.columns.filter(column => ['fullName', 'actualSeconds', 'productionSeconds', 'trainingSeconds', 'breakIdleSeconds', 'billableSeconds'].includes(column.key) || column.type === 'money') || [];
   const summary = data?.summary.filter(row => ['Tracked', 'Production', 'Break / Idle'].includes(row.label) || row.type === 'money') || [];
-  return <DashboardLayout title="Billing management"><section className="production-module production-billing">
+  return <DashboardLayout hideHeader title="Billing management"><section className="production-module production-billing">
     <form className="prod-panel prod-filter-form" aria-label="Team work report filters" onSubmit={generate}><fieldset disabled={loading || exporting}>
       <div className="prod-filter-grid">
         <label>Team<select aria-label="Report team" required value={draft.team} onChange={event => change({ team: event.target.value })}><option value="">Choose a team</option>{teams.map(team => <option key={team._id} value={team._id}>{team.teamName}</option>)}</select></label>

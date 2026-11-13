@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import DashboardLayout from '../../components/layout/DashboardLayout';
 import useAuth from '../../context/useAuth';
 import { getProductionCatalog, getProductionHistory, saveProductionSetting, saveProductionClassifications } from '../../api/productionApi';
@@ -85,9 +84,8 @@ export default function ProductionSettingsPage() {
   const rateEmployees = rateReady ? catalog.employees.filter(row => !employee || row._id === employee) : [];
   const missingRateEmployees = rateEmployees.filter(row => !row.projectRates?.length || row.projectRates.some(rate => !rate.project || !Number.isFinite(rate.chargeRate) || rate.chargeRate <= 0)).length;
   const select = (label, value, change, rows, name, optional = false, disabled = false) => <label>{label}<select aria-label={label} required={!optional} disabled={disabled} value={value} onChange={event => change(event.target.value)}><option value="">{optional ? kind === 'rate' && label === 'Employee' ? 'All team employees' : `Any ${label.toLowerCase()}` : `Choose ${label.toLowerCase()}`}</option>{rows?.map(row => <option key={row._id} value={row._id}>{row[name]}{row.employeeId ? ` (${row.employeeId})` : ''}</option>)}</select></label>;
-  return <DashboardLayout title="Production settings"><section className="production-module production-settings">
+  return <DashboardLayout hideHeader title="Production settings"><section className="production-module production-settings">
     {!admin ? <p role="alert">Only an Admin can configure Production.</p> : <>
-      <div className="prod-intro"><div><p className="prod-kicker">PRODUCTION SETTINGS</p><p>Manage team configuration with effective dates and a record of every change.</p></div><Link to="/admin/production" className="prod-secondary">Back to production</Link></div>
       <div className="prod-tabs" aria-label="Settings sections">{Object.entries(kinds).map(([value, [label]]) => <button key={value} className="prod-secondary" disabled={saving} aria-pressed={kind === value} onClick={() => { if (value !== kind) { setEditingRates(null); setKind(value); setEmployee(''); setTarget(''); setIncludeArchivedTasks(false); setMultiple(false); setSelectedTasks([]); } setMessage(''); }}>{label}</button>)}</div>
       <form className={`prod-panel prod-settings-form${kind === 'rate' ? ' prod-rates-form' : ''}`} onSubmit={save} aria-label="Production settings form"><h2>{kinds[kind][0]}</h2><p>{kinds[kind][1]}</p>
         <fieldset disabled={saving || !catalog}><div className="prod-form-grid">

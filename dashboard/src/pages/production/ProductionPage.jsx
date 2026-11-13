@@ -61,7 +61,7 @@ function ProductionPage({ view = 'overview' }) {
   };
   const drillTo = (path, overrides) => `${path}?${new URLSearchParams({ ...query, ...overrides, page: 1 })}`;
   const summary = report?.summary, billing = summary?.billing?.applicable === true;
-  const [title, description] = pages[view];
+  const [title] = pages[view];
   const layout = productionViews[view];
   const cards = summary ? {
     employees: ['Employees', String(summary.employeeCount)], teams: ['Teams compared', String(report.total)],
@@ -79,8 +79,7 @@ function ProductionPage({ view = 'overview' }) {
     : view === 'client' ? <Link to={drillTo('/admin/production/employee', { client: row.client || 'all', project: row.project })}>{row.clientName}<small>{row.projectName}</small></Link>
     : <Link to={drillTo('/admin/production/employee', { task: row.task })}>{row.taskName}</Link>;
   const visible = report && !loading && !error;
-  return <DashboardLayout title={title}><section className="production-module" data-production-view={view}>
-    <div className="prod-intro"><div><p className="prod-kicker">PRODUCTION</p><p>{description}</p></div>{report?.scope.canConfigure && <Link className="prod-secondary" to="/admin/production/settings">Production settings</Link>}</div>
+  return <DashboardLayout hideHeader title={title}><section className="production-module" data-production-view={view}>
     <form className="prod-panel prod-filter-form" onSubmit={apply} aria-label="Production filters">
       <fieldset disabled={loading}>
         <ProductionWorkFilters view={view} draft={draft} choices={choices} personal={report?.scope.mode === 'personal'} onChange={patch => setDraft(previous => ({ ...previous, ...patch }))} />

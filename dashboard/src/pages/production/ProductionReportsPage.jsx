@@ -61,7 +61,7 @@ export default function ProductionReportsPage() {
   const headline = data?.summary.filter(row => data.basis === 'live'
     ? reportHeadlines[productionReportView(query.type)].includes(row.label) || (row.type === 'money' && ['employee', 'client'].includes(query.type))
     : row.type === 'money' || ['Saved periods', 'Adjustments', 'Eligible work'].includes(row.label)) || [];
-  return <DashboardLayout title="Production reports"><section className="production-module production-reports">
+  return <DashboardLayout hideHeader title="Production reports"><section className="production-module production-reports">
     <form className="prod-panel prod-filter-form" aria-label="Production report filters" onSubmit={generate}><fieldset disabled={loading || exporting}><div className="prod-filter-grid">
       <label>Report<select aria-label="Report source" value={['adjusted', 'adjustments'].includes(draft.basis) ? 'finalized' : draft.basis} onChange={event => update('basis', event.target.value)}>{Object.entries(bases).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       {draft.basis === 'live' && <label>Report type<select aria-label="Report type" value={draft.type} onChange={event => update('type', event.target.value)}>{Object.entries(types).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}
