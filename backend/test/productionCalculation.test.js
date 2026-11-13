@@ -89,6 +89,18 @@ test('productive nonbillable work stays production and does not require rates', 
   assert.equal(result.totals.productionSeconds, 3600); assert.equal(result.totals.nonBillableProductiveSeconds, 3600);
   assert.equal(result.totals.billing.billableSeconds, 0); assert.equal(result.warnings.some(row => row.code === 'missing-rate'), false);
 });
+
+test('shared Training skips the missing-team alert without crediting production or hiding other work', () => {
+  const training = log(9, 10, { task: 'training' }), work = log(10, 11);
+  const shared = ['wcpa', 'renau'];
+  const result = calc({ logs: [training, work], tasks: [{ ...task, teams: shared }, { _id: 'training', taskName: ' Training ', teams: shared }],
+    projects: [{ ...project, teams: shared }] });
+  assert.equal(result.totals.actualSeconds, 7200);
+  assert.equal(result.totals.unallocatedSeconds, 7200);
+  assert.equal(result.totals.productionSeconds, 0);
+  assert.equal(result.totals.billing.billableSeconds, 0);
+  assert.deepEqual(result.warnings.find(row => row.code === 'needs-team-allocation').timeLogIds, [work._id]);
+});
 test('optional excluded Admin work contributes to production and billing only in an opted-in report', () => {
   const settings = [config(), revision('classification', 'wcpa:task:audit', { category: 'excluded', billable: false, reportOptionalBillable: true })];
   const excluded = calc({ settings }), included = calc({ settings, includeOptionalWork: true });

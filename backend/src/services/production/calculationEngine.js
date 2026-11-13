@@ -151,7 +151,9 @@ function calculateProduction({ employees = [], logs = [], tasks = [], projects =
     // Explicit Break/Lunch tasks never enter production or billing, even when
     // shared across teams. Their team links do not need a production review.
     if (task?.taskType !== 'break') {
-      if (!allocation.team) warn('needs-team-allocation', log);
+      // Shared Training needs no team-assignment notice. This changes only
+      // the notice: unresolved time stays unallocated and cannot be billed.
+      if (!allocation.team && String(task?.taskName || '').trim().toLowerCase() !== 'training') warn('needs-team-allocation', log);
       else if (allocation.source === 'current-relationships') warn('team-inferred-from-current-relationships', log);
     }
     const pauses = [];
