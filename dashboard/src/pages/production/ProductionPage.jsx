@@ -10,6 +10,7 @@ import { productionViews, productionColumnLabels } from '../../utils/productionV
 import '../../styles/production.css';
 
 const pages = {
+  overview: ['Production overview', 'See working hours, targets and production in one place.'],
   employee: ['Employee production', 'Compare employee progress or open an employee to see their work.'],
   team: ['Team production', 'Compare team progress or open a team to see its employees.'],
   client: ['Client & project production', 'See where client and project work is being completed.'],
@@ -26,7 +27,7 @@ function Estimates({ billing }) {
   if (!billing?.applicable) return <span className="prod-muted">Not applicable</span>;
   return <div className="prod-estimates">{billing.estimates?.map(row => <span key={row.currency}>{money(row.estimatedAmount, row.currency)}{!row.complete && <small>Incomplete estimate</small>}</span>)}</div>;
 }
-function ProductionPage({ view = 'team' }) {
+function ProductionPage({ view = 'overview' }) {
   const [params, setParams] = useSearchParams();
   const [draft, setDraft] = useState(() => filtersFrom(params));
   const [query, setQuery] = useState(() => ({ ...draft, page: 1 }));

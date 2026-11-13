@@ -80,6 +80,7 @@ export const workspaceNavigation = [
   { path: "/admin/timesheets/attendance", title: "Attendance", role: "hr", group: "Time & attendance" },
   { path: "/admin/help", title: "Help", role: "hr", group: "System" },
   ...['admin', 'manager', 'hr', 'team_lead', 'employee'].flatMap(role => [
+    { path: "/admin/production", title: 'Overview', role, group: 'Production' },
     { path: "/admin/production/employee", title: 'Employees', activePaths: ['/admin/production/employee', '/admin/production/employee/details'], role, group: 'Production' },
     { path: "/admin/production/team", title: 'Teams', role, group: 'Production' },
     { path: "/admin/production/clients", title: 'Clients & projects', role, group: 'Production' },
