@@ -37,8 +37,10 @@ test("repeated requests reuse the cached employee and session instead of re-read
   t.mock.method(AuthSession, "findOne", async () => { sessionReads += 1; return { _id: "s", lastActivity: new Date(), expiresAt: new Date(Date.now() + 60_000) }; });
   for (let i = 0; i < 5; i += 1) {
     let ok = false;
-    await protect({ headers: req.headers }, response(), () => { ok = true; });
+    const request = { headers: req.headers };
+    await protect(request, response(), () => { ok = true; });
     assert.equal(ok, true);
+    assert.equal(request.authSessionReadFromDatabase, i === 0);
   }
   assert.equal(employeeReads, 1);
   assert.equal(sessionReads, 1);

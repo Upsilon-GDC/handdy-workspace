@@ -493,11 +493,16 @@ const waitForLoginRequest = async (req, res) => {
 const getPendingLoginRequest = async (req, res) => {
   const waiter = createLoginWaiter(req, res, [`session:${req.authSession._id}`, `employee:${req.authSession.employee}`]);
   try {
+    let initialSession = isOn('authSessionReuse') && req.authSessionReadFromDatabase === true
+      && req.authSession.status === 'active' && req.authSession.expiresAt > new Date()
+      ? req.authSession : null;
     const deadline = Date.now() + LONG_POLL_MS;
     do {
       if (waiter.closed) return;
       countEvent(`longpoll.pending.check.${req.authSession.clientType || "unknown"}`);
-      const activeSession = await AuthSession.findOne({ _id: req.authSession._id, status: "active" });
+      countEvent(initialSession ? 'longpoll.session.reused' : 'longpoll.session.read');
+      const activeSession = initialSession || await AuthSession.findOne({ _id: req.authSession._id, status: "active" });
+      initialSession = null;
       if (waiter.closed) return;
       if (!activeSession) {
         return res.status(401).json({ success: false, code: "SESSION_REVOKED", message: "This device session is no longer active." });

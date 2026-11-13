@@ -194,6 +194,39 @@ test("desktop approval monitor wakes immediately for a new request and rechecks 
   assert.equal(reads.mock.callCount(), 2);
 });
 
+test('fresh authenticated session avoids one duplicate read while revocation still wakes and rechecks', async t => {
+  withEnv(t, 'OPT_AUTH_SESSION_REUSE', 'true');
+  const reads = t.mock.method(AuthSession, 'findOne', async () => null);
+  const pendingReads = t.mock.method(DeviceLoginRequest, 'findOne', () => ({ sort: async () => null }));
+  const req = Object.assign(new EventEmitter(), { authSessionReadFromDatabase: true,
+    authSession: { _id: 'fresh-monitor', employee: 'person', status: 'active', clientType: 'desktop', expiresAt: new Date(Date.now() + 3600000) } });
+  const res = response();
+  const pending = getPendingLoginRequest(req, res);
+  await flush();
+  assert.equal(reads.mock.callCount(), 0, 'Authentication already read the database for this request');
+  assert.equal(pendingReads.mock.callCount(), 1, 'Pending device approval is still checked');
+  notify(['session:fresh-monitor']);
+  await pending;
+  assert.equal(reads.mock.callCount(), 1);
+  assert.equal(res.statusCode, 401);
+  assert.equal(res.body.code, 'SESSION_REVOKED');
+});
+
+test('cached, expired, and disabled-reuse sessions retain the independent database lookup', async t => {
+  withEnv(t, 'OPT_AUTH_SESSION_REUSE', 'true');
+  for (const kind of ['cached', 'expired', 'disabled']) {
+    process.env.OPT_AUTH_SESSION_REUSE = kind === 'disabled' ? 'false' : 'true';
+    const reads = t.mock.method(AuthSession, 'findOne', async () => null);
+    const req = Object.assign(new EventEmitter(), { authSessionReadFromDatabase: kind !== 'cached',
+      authSession: { _id: 'not-reused', employee: 'person', status: 'active', clientType: 'desktop',
+        expiresAt: new Date(Date.now() + (kind === 'expired' ? -1 : 3600000)) } });
+    const res = response(); await getPendingLoginRequest(req, res);
+    assert.equal(reads.mock.callCount(), 1, kind);
+    assert.equal(res.statusCode, 401, kind);
+    reads.mock.restore();
+  }
+});
+
 test("profile reuses the authenticated employee and still omits secrets", async (t) => {
   const reads = t.mock.method(Employee, "findById", () => { throw new Error("duplicate query"); });
   const res = response();
