@@ -51,6 +51,7 @@ function employeeReport(bucket) {
     unattributedRequests: [...bucket.routes.values()].reduce((sum, row) => sum + row.count, 0) - rows.reduce((sum, row) => sum + row.requests, 0),
     rows: rows.map(row => ({ employeeId: row.employeeId, employeeName: row.employeeName, client: row.client,
       appVersion: row.appVersion, requests: row.requests, errors: row.errors,
+      requestBodyBytes: row.requestBytes, responseBodyBytes: row.responseBytes,
       requestBodyMB: mb(row.requestBytes), responseBodyMB: mb(row.responseBytes),
       averageResponseKB: Number((row.responseBytes / row.requests / 1000).toFixed(3)),
       firstSeenAt: row.firstSeenAt, lastSeenAt: row.lastSeenAt,
