@@ -2,14 +2,44 @@ const Policy = require('../models/ClientAccessPolicy');
 const Change = require('../models/ClientAccessChange');
 const Team = require('../models/Team');
 const id = value => String(value?._id || value || '');
-// Single-instance deployment, like the permission cache. Load before serving
-// requests; successful policy writes update this snapshot before responding.
+// Load before serving requests; successful policy writes update this snapshot
+// before responding. Bounded refresh also picks up saves from another server.
 let policies = new Map();
+let refreshedAt = 0;
+let generation = 0;
+let refreshing;
+const REFRESH_MS = 30_000;
 const key = (type, subject) => `${type}:${id(subject)}`;
-function replacePolicies(rows) { policies = new Map(rows.map(row => [key(row.subjectType, row.subjectId), row])); }
+function replacePolicies(rows) {
+  policies = new Map(rows.map(row => [key(row.subjectType, row.subjectId), row]));
+  generation += 1;
+  refreshedAt = Date.now();
+}
 function rememberPolicy(row) {
   const name = key(row.subjectType, row.subjectId);
-  if ((policies.get(name)?.version || 0) <= (row.version || 0)) policies.set(name, row);
+  if ((policies.get(name)?.version || 0) <= (row.version || 0)) {
+    policies.set(name, row);
+    generation += 1;
+  }
+}
+// Another server (for example local admin + hosted desktop API) can save to
+// the same database. Revalidate before serving requests, not just at startup.
+// A failed refresh rejects the request rather than serving stale grants.
+async function refreshClientAccessIfStale() {
+  if (Date.now() - refreshedAt < REFRESH_MS) return;
+  if (refreshing) return refreshing;
+  const promise = Promise.resolve().then(async () => {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const startedGeneration = generation;
+      const rows = await Policy.find({}).lean();
+      if (generation === startedGeneration) { replacePolicies(rows); return; }
+      // A local save raced the refresh. Re-read before allowing this request:
+      // preserving that save alone can leave another employee's grants stale.
+    }
+    throw new Error('Client access changed repeatedly during refresh. Retry the request.');
+  }).finally(() => { if (refreshing === promise) refreshing = null; });
+  refreshing = promise;
+  return promise;
 }
 function allowedClientIds(employee, project) {
   const team = policies.get(key('team', employee.team));
@@ -63,4 +93,4 @@ async function initializeClientAccess() {
   replacePolicies(await Policy.find({}).lean());
 }
 module.exports = { allowedClientIds, clientAccessError, initializeClientAccess, replacePolicies, rememberPolicy,
-  additionalWorkTeamIds, workTeamIds, activeWorkTeams, workProjectIds };
+  additionalWorkTeamIds, workTeamIds, activeWorkTeams, workProjectIds, refreshClientAccessIfStale };

@@ -28,11 +28,33 @@ function excelCell(cell, value, col) {
   if (col.type === 'duration') { cell.value = value / 86400; cell.numFmt = Number.isInteger(value) ? '[h]:mm:ss' : '[h]:mm:ss.000'; }
   else if (col.type === 'percent') { cell.value = value / 100; cell.numFmt = '0.00%'; }
   else if (col.type === 'money') { const decimal = digits(col.currency); cell.numFmt = `"${col.currency} "#,##0${decimal ? `.${'0'.repeat(decimal)}` : ''};[Red]("${col.currency} "#,##0${decimal ? `.${'0'.repeat(decimal)}` : ''})`; }
+  else if (col.type === 'hours') cell.numFmt = '0.00';
   else cell.numFmt = '#,##0.########';
 }
 export async function exportProductionExcel(data) {
   const { default: ExcelJS } = await import('exceljs');
   const workbook = new ExcelJS.Workbook(); workbook.creator = 'CRM'; workbook.created = new Date(data.asOf);
+  if (data.taskTotalsTable) {
+    const totals = workbook.addWorksheet('Employee task totals', { views: [{ state: 'frozen', ySplit: 4 }] });
+    totals.columns = [{ width: 30 }, { width: 42 }, { width: 24 }, { width: 16 }];
+    totals.mergeCells('A1:D1'); totals.getCell('A1').value = `${data.selection?.team || 'Team'} task totals`;
+    totals.getCell('A1').font = { size: 16, bold: true };
+    totals.mergeCells('A2:D2'); totals.getCell('A2').value = `${data.period.startDate} to ${data.period.endDate} | Total billable hours for the selected period`;
+    totals.getRow(2).height = 32;
+    totals.addRow([]);
+    const heading = totals.addRow(data.taskTotalsTable.columns.map(col => col.label));
+    heading.height = 28;
+    heading.eachCell(cell => { cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }; cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2853DC' } }; });
+    data.taskTotalsTable.rows.forEach(values => {
+      const row = totals.addRow([]);
+      values.forEach((value, index) => excelCell(row.getCell(index + 1), value, data.taskTotalsTable.columns[index]));
+    });
+    totals.autoFilter = { from: { row: 4, column: 1 }, to: { row: Math.max(4, totals.rowCount), column: 4 } };
+    const total = totals.addRow(['Total', '', '', { formula: data.taskTotalsTable.rows.length ? `SUM(D5:D${totals.rowCount})` : '0',
+      result: data.taskTotalsTable.rows.reduce((sum, row) => sum + row[3], 0) }]);
+    total.font = { bold: true }; total.getCell(4).numFmt = '0.00';
+    totals.eachRow(row => row.eachCell(cell => { cell.alignment = { vertical: 'middle', wrapText: true }; }));
+  }
   const summary = workbook.addWorksheet('Summary'); summary.columns = [{ width: 42 }, { width: 34 }, { width: 24 }, { width: 24 }];
   summary.mergeCells('A1:D1'); summary.getCell('A1').value = data.title; summary.getCell('A1').font = { size: 20, bold: true, color: { argb: 'FFFFFFFF' } };
   summary.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2853DC' } }; summary.getRow(1).height = 34;
@@ -69,7 +91,7 @@ export async function exportProductionExcel(data) {
     employees.eachRow(row => row.eachCell(cell => { cell.alignment = { vertical: 'top', wrapText: true }; }));
   }
   if (data.detailedWorkTable) {
-    const details = workbook.addWorksheet('Employee task details', { views: [{ state: 'frozen', ySplit: 1 }] });
+    const details = workbook.addWorksheet('Daily work details', { views: [{ state: 'frozen', ySplit: 1 }] });
     details.columns = data.detailedWorkTable.columns.map(() => ({ width: 25 }));
     details.addRow(data.detailedWorkTable.columns.map(col => col.label));
     details.getRow(1).eachCell(cell => { cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }; cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2853DC' } }; });

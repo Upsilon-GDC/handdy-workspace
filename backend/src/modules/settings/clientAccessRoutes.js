@@ -13,6 +13,7 @@ const router = express.Router();
 router.use(protect, (req, res, next) => isAdminRole(req.user.role) ? next()
   : res.status(403).json({ success: false, message: 'Only company administrators can configure client access.' }), requirePermission('manage_activity_links'));
 router.get('/history', getHistory);
+router.get('/employees/:employeeId/links', require('./employeeAccessController').getEmployeeLinks);
 router.post('/employees/batch', saveBatch);
 router.get('/', async (req, res) => {
   try {

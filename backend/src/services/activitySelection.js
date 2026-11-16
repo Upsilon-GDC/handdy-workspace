@@ -17,6 +17,7 @@ async function buildEmployeeScope(employee, { projectId } = {}) {
   let taskScope = elevated ? {} : employee.role === 'team_lead'
     ? extra.length ? { $or: [leadScope, { $and: [{ $or: [{ team: { $in: extra } }, { teams: { $in: extra } }] }, { assignToAllEmployees: true }] }] } : leadScope
     : { $or: [{ assignedTo: employee._id }, ...(teamIds.length ? [{ $and: [teamMatch, { assignToAllEmployees: true }] }] : [])] };
+  const baseTaskScope = taskScope;
   const configuredProjects = elevated ? [] : workProjectIds(employee).filter(value => !projectId || value === id(projectId));
   const projects = configuredProjects.length ? await Project.find({ _id: { $in: configuredProjects }, status: 'Active', deletedAt: null })
     .select('_id teams linkedTasks').lean() : [];
@@ -26,7 +27,8 @@ async function buildEmployeeScope(employee, { projectId } = {}) {
     ...(project.teams?.length ? [{ $and: [{ project: null }, { $or: [{ team: { $in: project.teams } }, { teams: { $in: project.teams } }] }] }] : []),
   ] }] }));
   if (projectTaskScopes.length) taskScope = { $or: [taskScope, ...projectTaskScopes] };
-  return { hasActiveTeam, teamIds, projectIds: projects.map(id), projectTaskScopes, taskScope,
+  return { hasActiveTeam, teamIds, projectIds: projects.map(id), projectTaskScopes, taskScope, baseTaskScope,
+    projectTaskScopesById: Object.fromEntries(projects.map((project, index) => [id(project), projectTaskScopes[index]])),
     projectFilter: { status: 'Active', deletedAt: null }, restrictProjectsToTeam: !elevated };
 }
 const projectAllowedForTeam = (project, scope, employee) => !scope.restrictProjectsToTeam || !(project.teams || []).length
@@ -44,8 +46,14 @@ async function validateActivitySelection(project, client, task, employee) {
   return mapping ? { mapping: mapping._id } : { error: 'This task is not linked to the selected project and client. Refresh your choices.' };
 }
 
-async function activityOptionsForEmployee(project, employee, { workOnly = false, includeShared = true } = {}) {
-  const scope = await buildEmployeeScope(employee, { projectId: project._id });
+async function activityOptionsForEmployee(project, employee, { workOnly = false, includeShared = true, scope: suppliedScope } = {}) {
+  const scope = suppliedScope ? { ...suppliedScope,
+    // A reusable overview scope contains grants for every additional project.
+    // Only this project's grant belongs in its picker, just like a fresh read.
+    taskScope: suppliedScope.projectTaskScopesById?.[id(project)]
+      ? { $or: [suppliedScope.baseTaskScope, suppliedScope.projectTaskScopesById[id(project)]] }
+      : suppliedScope.baseTaskScope,
+  } : await buildEmployeeScope(employee, { projectId: project._id });
   if (!projectAllowedForTeam(project, scope, employee)) return null;
   const clientIds = projectClientIds(project);
   const access = allowedClientIds(employee, project);

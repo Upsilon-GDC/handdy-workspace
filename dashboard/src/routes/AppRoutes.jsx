@@ -4,6 +4,7 @@ import ProductionBillingPage from '../pages/production/ProductionBillingPage';
 import ProductionReportsPage from '../pages/production/ProductionReportsPage';
 import AdminTaskLinksPage from '../pages/admin/AdminTaskLinksPage';
 import ClientAccessSettings from '../pages/admin/ClientAccessSettings';
+import EmployeeWorkAccessPage from '../pages/admin/EmployeeWorkAccessPage';
 import {
   Navigate,
   Route,
@@ -455,6 +456,7 @@ function AppRoutes() {
       <Route path="/admin/task-links" element={<AdminStaffOnly needs={["manage_activity_links"]} grants={["manage_activity_links"]}><AdminTaskLinksPage /></AdminStaffOnly>} />
       <Route path="/admin/project-client-links" element={<AdminStaffOnly needs={["manage_activity_links"]} grants={["manage_activity_links"]}><AdminTaskLinksPage key="project-client-links" clientsOnly /></AdminStaffOnly>} />
       <Route path="/admin/client-access" element={<AdminOnly><ClientAccessSettings /></AdminOnly>} />
+      <Route path="/admin/employee-work-access" element={<AdminOnly><EmployeeWorkAccessPage /></AdminOnly>} />
 
       <Route
         path="/admin/projects"

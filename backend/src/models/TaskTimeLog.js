@@ -116,6 +116,18 @@ const taskTimeLogSchema = new mongoose.Schema(
     // Absent on every pre-existing log, which is treated as "timer".
     entrySource: { type: String, enum: ["timer", "manual"], default: "timer" },
     editVersion: { type: Number, default: 0, min: 0 },
+    // Audited per-entry exceptions. These can exclude billing, never turn an
+    // otherwise excluded activity into billable work. Omitted on old records.
+    productionBillingOverrides: {
+      type: [new mongoose.Schema({
+        excludeFromBilling: { type: Boolean, required: true },
+        changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Employee', required: true },
+        changedAt: { type: Date, required: true },
+        reason: { type: String, required: true, minlength: 10, maxlength: 500 },
+      }, { _id: false })],
+      default: undefined,
+      select: false,
+    },
     manualEntry: {
       type: new mongoose.Schema(
         {
