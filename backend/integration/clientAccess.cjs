@@ -14,6 +14,7 @@ const ActivityMapping = require('../src/models/ActivityMapping');
 const TaskTimeLog = require('../src/models/TaskTimeLog');
 const Attendance = require('../src/models/Attendance');
 const { activityOptionsForEmployee } = require('../src/services/activitySelection');
+const { getEmployeeLinks } = require('../src/modules/settings/employeeAccessController');
 const { getAllProjects } = require('../src/modules/projects/projectController');
 const { startTimer } = require('../src/modules/timers/taskTimeLogController');
 const { getManualEntryOptions, createManualEntry } = require('../src/modules/timers/manualTimeEntryController');
@@ -294,4 +295,28 @@ test('employee project client limits persist, preserve exceptions, and enforce t
   assert.equal(cleared.statusCode, 200, JSON.stringify(cleared.body));
   assert.equal((await activityOptionsForEmployee(projects[0], restricted)).clients.length, 2);
   assert.equal((await TaskTimeLog.findById(started.body.timeLog._id)).status, 'running');
+});
+
+test('employee access preview keeps additional-project task grants inside that project, matching the real picker', async t => {
+  const token = String(new mongoose.Types.ObjectId());
+  const own = await Team.create({ teamName: `Own ${token}`, createdBy: actor._id });
+  const foreign = await Team.create({ teamName: `Additional ${token}`, createdBy: actor._id });
+  const employee = { _id: new mongoose.Types.ObjectId(), fullName: 'Preview employee', employeeId: token, role: 'employee', team: own._id, isActive: true };
+  await Employee.collection.insertOne(employee);
+  const homeProject = await Project.create({ projectCode: `home-${token}`, projectName: 'Home project', teams: [own._id], clients: [upsilon._id], createdBy: actor._id });
+  const extraProject = await Project.create({ projectCode: `extra-${token}`, projectName: 'Granted project', teams: [foreign._id], clients: [upsilon._id], createdBy: actor._id });
+  const homeTask = await Task.create({ taskCode: `home-${token}`, taskName: 'Home task', project: homeProject._id, teams: [own._id], assignToAllEmployees: true, createdBy: actor._id });
+  const extraShared = await Task.create({ taskCode: `extra-${token}`, taskName: 'Foreign shared task', project: null, teams: [foreign._id], assignToAllEmployees: true, createdBy: actor._id });
+  await Policy.create({ subjectType: 'employee', subjectId: employee._id, enabled: false, clients: [], workProjects: [extraProject._id], version: 1, updatedBy: actor._id });
+  replacePolicies(await Policy.find({}).lean());
+  t.after(async () => replacePolicies(await Policy.find({}).lean()));
+  const actual = await activityOptionsForEmployee(homeProject.toObject(), employee);
+  assert.deepEqual(actual.tasks.map(row => String(row._id)), [String(homeTask._id)]);
+  const res = { statusCode: 200, status(code) { this.statusCode = code; return this; }, set() {}, json(body) { this.body = body; return this; } };
+  await getEmployeeLinks({ params: { employeeId: String(employee._id) } }, res);
+  assert.equal(res.statusCode, 200, JSON.stringify(res.body));
+  const home = res.body.projects.find(row => String(row._id) === String(homeProject._id));
+  const extra = res.body.projects.find(row => String(row._id) === String(extraProject._id));
+  assert.deepEqual(home.tasks.map(row => String(row._id)), actual.tasks.map(row => String(row._id)));
+  assert.ok(extra.tasks.some(row => String(row._id) === String(extraShared._id)));
 });

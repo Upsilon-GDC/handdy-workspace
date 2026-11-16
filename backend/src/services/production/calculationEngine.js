@@ -141,6 +141,13 @@ function calculateProduction({ employees = [], logs = [], tasks = [], projects =
   const prepared = [];
   for (const log of logs) {
     if (!employeeMap.has(id(log.employee)) || log.manualEntry?.deletedAt) continue;
+    // A stopped timer that never accumulated any time is an empty attempt,
+    // not a damaged billable interval. Keep the record, exclude it from sums.
+    // Inconsistent positive/missing totals or pauses still require review.
+    if (log.status === 'stopped' && log.startedAt && log.stoppedAt
+      && +new Date(log.startedAt) === +new Date(log.stoppedAt)
+      && [log.totalWorkedSeconds, log.totalPausedSeconds, log.totalIdleSeconds].every(value => value === 0)
+      && !(log.pauses || []).length) continue;
     const start = Math.max(+range.start, +new Date(log.startedAt));
     let stop = log.stoppedAt ? +new Date(log.stoppedAt) : log.status === 'stopped' ? NaN : asOf;
     if (!log.stoppedAt && log.desktopHeartbeatAt && asOf - +new Date(log.desktopHeartbeatAt) >= 90000) stop = Math.min(stop, +new Date(log.desktopHeartbeatAt));
@@ -215,7 +222,10 @@ function calculateProduction({ employees = [], logs = [], tasks = [], projects =
       const metric = { productive: 'productionSeconds', training: 'trainingSeconds', 'break-idle': 'breakIdleSeconds',
         excluded: 'excludedSeconds', unclassified: 'unclassifiedSeconds', unallocated: 'unallocatedSeconds', conflict: 'conflictSeconds' }[category];
       row[metric] = seconds;
-      const eligible = category === 'productive' && (chosen.classification?.values.billable === true || chosen.optionalIncluded);
+      // Conservatively retain an entry-level exclusion across duplicate or
+      // overlapping records. It changes billing only, not worked/production time.
+      const billingExcluded = candidates.some(entry => entry.item.log.productionBillingOverrides?.at(-1)?.excludeFromBilling === true);
+      const eligible = !billingExcluded && category === 'productive' && (chosen.classification?.values.billable === true || chosen.optionalIncluded);
       row.eligibleClientWorkSeconds = eligible ? seconds : 0;
       row.nonBillableProductiveSeconds = category === 'productive' && !eligible ? seconds : 0;
       if (!allowedTeams || allowedTeams.has(row.team)) {

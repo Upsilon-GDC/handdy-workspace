@@ -53,7 +53,8 @@ app.whenReady().then(async () => {
     win = new BrowserWindow({ show: false, width: 1280, height: 1000, webPreferences: { partition: `work-setup-${Date.now()}`, backgroundThrottling: false } });
     await win.loadURL(`${base}/login`); await evaluate(`localStorage.setItem('app-theme','upsilon');localStorage.setItem('token','mock');localStorage.setItem('user',${JSON.stringify(JSON.stringify(user))});`);
     await win.loadURL(`${base}/admin/project-client-links`); await until(`document.querySelectorAll('.activity-batch-picker').length===3`);
-    assert.equal(await evaluate(`document.querySelectorAll('.crm-nav details[aria-label="Task linking"] a').length`), 1);
+    assert.equal(await evaluate(`document.querySelectorAll('.crm-nav details[aria-label="Task linking"] a').length`), 2);
+    assert.equal(await evaluate(`document.querySelector('.crm-nav details[aria-label="Task linking"] a[href="/admin/employee-work-access"]').textContent.trim()`), 'Employee work access');
     assert.equal(await evaluate(`!!document.querySelector('.setup-progress') || !!document.querySelector('.work-setup-options')`), false);
     const select = async (group, value) => evaluate(`document.querySelector('[aria-label="Select ${group}"] input[value="${value}"]').click()`);
     await capture('all-selections-desktop.png');

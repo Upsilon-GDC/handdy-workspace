@@ -54,7 +54,7 @@ function TeamWorkReport() {
       <section className="prod-panel" aria-label="Team work report"><div className="prod-section-heading"><div><h2>{data.selection.team}</h2><p>{data.period.startDate} to {data.period.endDate}</p></div>{report.canExport && <button className="prod-primary" disabled={exporting} onClick={download}>{exporting ? 'Downloading...' : 'Download Excel'}</button>}</div>
         <div className="prod-table-wrap"><table className="prod-table"><thead><tr>{columns.map(column => <th key={column.key}>{column.key === 'fullName' ? 'Employee' : column.label.replace(' (h:mm:ss)', '')}</th>)}</tr></thead><tbody>{data.rows.map((row, index) => <tr key={index}>{columns.map(column => <td key={column.key}>{productionReportCell(row[data.columns.findIndex(value => value.key === column.key)], column)}</td>)}</tr>)}</tbody></table></div>
         {!data.rows.length && <p className="prod-settings-form">No work found for this team and period.</p>}
-        <p className="prod-settings-form prod-muted">Excel includes employee totals and task details. Billing amounts are current estimates.</p>
+        <p className="prod-settings-form prod-muted">Excel opens with employee task totals for the full date range. Hrs/Qty shows decimal billable hours.</p>
       </section></>}
   </section></DashboardLayout>;
 }

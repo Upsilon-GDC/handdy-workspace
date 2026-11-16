@@ -46,3 +46,18 @@
 .client-access-history :is(td,th) { padding: 12px; vertical-align: top; border-bottom: 1px solid var(--border, #dce2ed); }
 .client-access-history summary { cursor: pointer; }
 .client-access-history-pages { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; }
+.employee-access-list { margin: 20px 0; padding: 18px; border: 1px solid var(--border, #dce2ed); border-radius: 10px; }
+.employee-access-list h3 { margin: 0; }
+.employee-access-list header p { margin: 6px 0 14px; color: var(--text-secondary); font-size: 13px; }
+.employee-access-list-controls { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; }
+.employee-access-list-controls label { display: grid; gap: 7px; flex: 1 1 260px; max-width: 460px; }
+.employee-access-list-table { margin-top: 16px; overflow-x: auto; }
+.employee-access-list table { width: 100%; border-collapse: collapse; text-align: left; }
+.employee-access-list :is(th,td) { padding: 12px; border-bottom: 1px solid var(--border, #dce2ed); vertical-align: top; }
+.employee-access-list th { background: var(--surface-soft, #f4f6fb); font-size: 13px; }
+.employee-access-list summary { cursor: pointer; }
+.employee-access-list ul { max-height: 200px; overflow-y: auto; padding-left: 20px; margin-bottom: 0; }
+.employee-access-list li { margin: 6px 0; }
+.employee-work-access-intro { margin: 0 0 18px; color: var(--text-secondary); }
+.employee-work-access-team { display: grid; gap: 7px; max-width: 460px; }
+.employee-work-access-page > .employee-access-list { margin-bottom: 0; }

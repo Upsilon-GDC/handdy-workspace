@@ -3,6 +3,7 @@ const Employee = require("../models/Employee");
 const AuthSession = require("../models/AuthSession");
 const { getAuthEntry, setAuthEntry } = require("../services/authCache");
 const { PERMISSION_VERSION_HEADER, getPermissionVersion } = require("../services/permissionService");
+const { refreshClientAccessIfStale } = require('../services/clientAccess');
 
 const protect = async (req, res, next) => {
   try {
@@ -92,6 +93,7 @@ const protect = async (req, res, next) => {
     // A fresh read can be reused immediately by the approval long-poll.
     // Cached sessions must still receive its independent database check.
     req.authSessionReadFromDatabase = !cached;
+    if (Employee.db.readyState === 1) await refreshClientAccessIfStale();
     // Lets an open dashboard pick up permission changes (AuthProvider).
     res.setHeader(PERMISSION_VERSION_HEADER, getPermissionVersion(employee));
 

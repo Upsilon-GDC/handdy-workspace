@@ -19,14 +19,16 @@ test('a personal linking grant opens Work setup without project/task administrat
   assert.equal(paths('hr', []).includes('/admin/project-client-links'), false);
 });
 
-test('work setup has one menu entry covering all three existing pages', () => {
+test('task linking keeps Work setup aliases together and shows a separate admin employee-access page', () => {
   for (const role of ['admin', 'alpha', 'manager', 'hr']) {
     const items = navigationForRole(role, grants(role, ['manage_activity_links'])).filter(item => item.group === 'Task linking');
-    assert.equal(items.length, 1);
+    assert.equal(items.length, role === 'hr' ? 1 : 2);
     assert.equal(items[0].title, 'Work setup');
     for (const path of ['/admin/project-client-links', '/admin/task-links', '/admin/client-access']) {
       assert.ok(items[0].activePaths.includes(path));
     }
+    assert.equal(items.some(item => item.path === '/admin/employee-work-access'), role !== 'hr');
+    assert.equal(items[0].activePaths.includes('/admin/employee-work-access'), false);
   }
 });
 

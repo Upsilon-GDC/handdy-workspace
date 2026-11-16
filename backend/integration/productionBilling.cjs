@@ -22,6 +22,7 @@ const workflow = require('../src/services/production/billingWorkflow');
 const { productionReport } = require('../src/services/production/reportsService');
 const { authorizeReportExport } = require('../src/services/production/reportTokens');
 const { productionReportData } = require('../src/modules/production/productionReportController');
+const { loadProductionCalculation } = require('../src/services/production/calculationService');
 const { ensureProductionSettingsIndexes } = require('../src/services/production/settingsService');
 const { today } = require('../src/services/production/settingsValidation');
 const { addDateKeyDays } = require('../src/utils/billingUtils');
@@ -204,6 +205,9 @@ test('daily, weekly, monthly and employee reports reconcile to the same dashboar
     assert.equal(report.data.employeeSummary.rows[0][amountIndex], 25);
     assert.equal(report.data.detailedWorkTable.rows.length, 1);
     assert.ok(report.data.detailedWorkTable.rows[0].includes('Synthetic Employee'));
+    assert.equal(report.data.taskTotalsTable.rows.length, 1);
+    assert.equal(report.data.taskTotalsTable.rows[0][0], 'Synthetic Employee');
+    assert.equal(report.data.taskTotalsTable.rows[0][3], normal.summary.billing.billableSeconds / 3600);
   }
 });
 test('saved reports separate original finalized amounts, corrected totals and adjustment deltas', async () => {
@@ -317,4 +321,22 @@ test('team preparation rolls back every draft when a later employee audit fails'
   t.mock.method(Event, 'create', function (...args) { if (++calls === 2) throw new Error('Synthetic second audit failure'); return original.apply(this, args); });
   await assert.rejects(prepareReview(admin, { team: String(f.team._id), employee: 'all', startDate: date, endDate: date, reason: 'Atomic review preparation', requestId: crypto.randomUUID() }), /Synthetic second audit failure/);
   assert.equal(await Batch.countDocuments({ team: f.team._id }), 0);
+});
+
+test('persisted per-entry billing exclusion reaches live calculations without exposing its audit metadata in timer reads', async () => {
+  const f = await fixture({ rate: false });
+  await Log.updateOne({ _id: f.log._id }, { $push: { productionBillingOverrides: {
+    excludeFromBilling: true, changedBy: admin._id, changedAt: new Date(), reason: 'Approved historical nonbillable work',
+  } } }, { runValidators: true });
+  assert.equal((await Log.findById(f.log._id).lean()).productionBillingOverrides, undefined);
+  const report = await loadProductionCalculation({ employeeIds: [String(f.employee._id)], startDate: date, endDate: date,
+    timezone: 'UTC', includeBilling: true, filters: { team: String(f.team._id) } });
+  assert.equal(report.totals.productionSeconds, 3600);
+  assert.equal(report.totals.nonBillableProductiveSeconds, 3600);
+  assert.equal(report.totals.billing.billableSeconds, 0);
+  assert.ok(!report.warnings.some(row => row.code === 'missing-rate'));
+  const draft = await create(f);
+  assert.equal(draft.snapshot.summary.productionSeconds, 3600);
+  assert.equal(draft.snapshot.summary.billing.billableSeconds, 0);
+  assert.ok(!draft.snapshot.blockers.includes('missing-or-mismatched-rate'));
 });

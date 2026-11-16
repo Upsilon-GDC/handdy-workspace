@@ -25,6 +25,9 @@ const server = http.createServer((req, res) => {
     if (url.pathname === '/api/auth/login-requests/pending') body = { loginRequest: null };
     if (url.pathname === '/api/client-access' && req.method === 'GET') body = { ...data, success: true };
     if (url.pathname === '/api/client-access/history') body = { history, page: 1, totalPages: 1, totalRecords: history.length };
+    if (url.pathname === '/api/client-access/employees/one/links') body = { success: true,
+      employee: data.employees[0], projects: [{ _id: 'software-project', projectName: 'SOFTWARE', clients: [data.clients[0]],
+        mappingEnabled: false, tasks: [{ _id: 'debug', taskName: 'Debugging', taskType: 'work' }] }] };
     if (url.pathname.startsWith('/api/client-access/') && ['PUT', 'POST'].includes(req.method)) {
       const [, , , routeType, routeId] = url.pathname.split('/'); const input = JSON.parse(raw);
       const bulk = req.method === 'POST', subjectType = bulk ? 'employee' : routeType;
@@ -147,7 +150,25 @@ app.whenReady().then(async () => {
     await evaluate('window.scrollTo(0,0); new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
     assert.equal(await evaluate(`document.documentElement.scrollWidth <= innerWidth + 1`), true);
     fs.writeFileSync(path.join(output, 'mobile.png'), (await win.webContents.capturePage()).toPNG());
-    console.log('PASS: team scope, whole-team selection including hidden members, mixed-settings choice, atomic batch payloads, failed-save retention, selection reset, history reload and mobile layout.');
+    await win.loadURL(`${base}/admin/employee-work-access`);
+    await until(`!!document.querySelector('.employee-work-access-team select')`);
+    assert.equal(await evaluate(`document.querySelectorAll('.client-access-editor').length`), 0, 'Preview is separate from Work setup editing');
+    await evaluate(`(() => { const select = document.querySelector('.employee-work-access-team select'); select.value = 'software'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    await until(`document.querySelector('.employee-access-list select')?.options.length === 3`);
+    assert.equal(await evaluate(`document.querySelector('.employee-access-list select').textContent.includes('Other Team Employee')`), false);
+    await evaluate(`(() => { const select = document.querySelector('.employee-access-list select'); select.value = 'one'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    await until(`document.querySelector('.employee-access-list-table')?.textContent.includes('SOFTWARE')`);
+    assert.equal(await evaluate(`document.querySelector('.employee-access-list-table').textContent.includes('Upsilon')`), true);
+    await evaluate(`document.querySelector('.employee-access-list-table summary').click()`);
+    assert.equal(await evaluate(`document.querySelector('.employee-access-list-table details').open && document.querySelector('.employee-access-list-table li').textContent === 'Debugging'`), true);
+    assert.equal(await evaluate(`document.documentElement.scrollWidth <= innerWidth + 1`), true);
+    win.setSize(1280, 900);
+    await evaluate('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
+    fs.writeFileSync(path.resolve(__dirname, '../../output/code-audit-employee-work-access.png'), (await win.webContents.capturePage()).toPNG());
+    await evaluate(`(() => { const select = document.querySelector('.employee-work-access-team select'); select.value = 'wcpa'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+    await until(`document.querySelector('.employee-access-list select')?.options.length === 2`);
+    assert.equal(await evaluate(`!!document.querySelector('.employee-access-list-table')`), false, 'Changing team clears the previous access results');
+    console.log('PASS: team scope, whole-team selection including hidden members, mixed-settings choice, atomic batch payloads, failed-save retention, history, mobile layout, and separate employee work access with team-scoped choices and task details.');
   } catch (error) { code = 1; console.error(error); }
   finally { win?.destroy(); server.closeAllConnections(); server.close(); app.exit(code); }
 });

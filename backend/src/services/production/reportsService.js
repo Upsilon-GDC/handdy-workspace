@@ -4,7 +4,7 @@ const Team = require('../../models/Team');
 const { productionReportData } = require('../../modules/production/productionReportController');
 const { productionAccess, scopedEmployees } = require('./access');
 const { monetary } = require('./billingWorkflow');
-const { column, financialColumns, financialValues, liveReportTable } = require('./reportTables');
+const { column, financialColumns, financialValues, liveReportTable, billableTaskTotals } = require('./reportTables');
 const { reportExportToken } = require('./reportTokens');
 const { getBillingDateRange } = require('../../utils/billingUtils');
 const { fail, objectId } = require('./settingsValidation');
@@ -111,6 +111,7 @@ async function productionReport(user, query) {
     data = { title: names[type], ...liveReportTable(report, type), warnings: report.warnings,
       employeeSummary: { columns: employeeSummary.columns, rows: employeeSummary.rows },
       detailedWorkTable: { columns: detailedWorkTable.columns, rows: detailedWorkTable.rows },
+      ...(report.summary.billing?.applicable ? { taskTotalsTable: billableTaskTotals(report.employeeBreakdown.work) } : {}),
       choices: report.choices, selection: report.selectionLabels,
       asOf: report.asOf, notes: [ 'Live estimates are provisional and are separate from approved or finalized billing.',
         includeOptionalWork ? 'Optional Admin work is included in production and billing estimates using employee project rates. Training and Break / Idle remain excluded.' : 'Optional Admin work is excluded from production and billing estimates.',

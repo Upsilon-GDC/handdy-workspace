@@ -23,6 +23,25 @@ function calc(overrides = {}) {
     settings: [config(), classification(), rate()], policies: [policy()], attendance: [present()],
     startDate: day, endDate: day, timezone: 'UTC', now: at(23, tomorrow), includeBilling: true, ...overrides });
 }
+
+test('stopped zero-duration attempts with explicit zero totals need no billing repair', () => {
+  const emptyAttempt = log(9, 9, { totalWorkedSeconds: 0, totalPausedSeconds: 0, totalIdleSeconds: 0 });
+  const result = calc({ logs: [emptyAttempt, log(10, 11)] });
+  assert.equal(result.totals.productionSeconds, 3600);
+  assert.equal(result.totals.billing.estimates[0].estimatedAmount, 25);
+  assert.ok(!result.warnings.some(row => row.code === 'invalid-or-empty-interval'));
+});
+
+test('zero-duration records with inconsistent totals, pauses or unknown totals remain reviewable', () => {
+  for (const overrides of [{}, { totalWorkedSeconds: 60, totalPausedSeconds: 0, totalIdleSeconds: 0 },
+    { totalWorkedSeconds: 0, totalPausedSeconds: 0, totalIdleSeconds: 0, pauses: [{ pausedAt: at(9), resumedAt: at(10) }] }]) {
+    const result = calc({ logs: [log(9, 9, overrides)] });
+    assert.equal(result.totals.productionSeconds, 0);
+    assert.ok(result.warnings.some(row => row.code === 'invalid-or-empty-interval'));
+  }
+  const reversed = calc({ logs: [log(10, 9, { totalWorkedSeconds: 0, totalPausedSeconds: 0, totalIdleSeconds: 0 })] });
+  assert.ok(reversed.warnings.some(row => row.code === 'invalid-or-empty-interval'));
+});
 test('example: 8 tracked hours gives 6 production hours, 1 training, 1 Break / Idle and $150', () => {
   const result = calc({ logs: [log(8, 14), log(14, 15, { task: 'training' }), log(15, 16, { task: 'break' })],
     tasks: [task, { _id: 'training', teams: ['wcpa'] }, { _id: 'break', taskType: 'break', teams: ['wcpa'] }],
@@ -58,6 +77,37 @@ test('training, excluded work and explicit breaks cannot produce billing', () =>
   }
   const result = calc({ tasks: [{ ...task, taskType: 'break' }] });
   assert.equal(result.totals.productionSeconds, 0); assert.equal(result.totals.breakIdleSeconds, 3600);
+});
+
+test('an entry billing exclusion preserves production, prevents missing-rate notices and does not affect later work', () => {
+  const excluded = log(9, 10, { productionBillingOverrides: [{ excludeFromBilling: true }] });
+  const result = calc({ employees: [{ ...employee, projectRates: [] }], logs: [excluded] });
+  assert.equal(result.totals.actualSeconds, 3600);
+  assert.equal(result.totals.productionSeconds, 3600);
+  assert.equal(result.totals.nonBillableProductiveSeconds, 3600);
+  assert.equal(result.totals.billing.billableSeconds, 0);
+  assert.ok(!result.warnings.some(row => row.code === 'missing-rate'));
+  const other = calc({ logs: [excluded, log(10, 11)] });
+  assert.equal(other.totals.productionSeconds, 7200);
+  assert.equal(other.totals.billing.billableSeconds, 3600);
+  assert.equal(other.totals.billing.estimates[0].estimatedAmount, 25);
+});
+
+test('an exclusion cannot be bypassed by a duplicate session or optional Admin inclusion', () => {
+  const excluded = log(9, 10, { productionBillingOverrides: [{ excludeFromBilling: true }] });
+  const result = calc({ logs: [log(9, 10), excluded] });
+  assert.equal(result.totals.productionSeconds, 3600);
+  assert.equal(result.totals.billing.billableSeconds, 0);
+  const optional = { ...classification('audit', 'excluded', false), values: { category: 'excluded', billable: false, reportOptionalBillable: true } };
+  assert.equal(calc({ logs: [excluded], settings: [config(), optional], includeOptionalWork: true }).totals.billing.billableSeconds, 0);
+});
+
+test('ending an entry exclusion restores only the underlying classification, never forces Training billable', () => {
+  const resumed = log(9, 10, { productionBillingOverrides: [{ excludeFromBilling: true }, { excludeFromBilling: false }] });
+  assert.equal(calc({ logs: [resumed] }).totals.billing.billableSeconds, 3600);
+  const training = calc({ logs: [resumed], settings: [config(), classification('audit', 'training', false)] });
+  assert.equal(training.totals.trainingSeconds, 3600);
+  assert.equal(training.totals.billing.billableSeconds, 0);
 });
 test('task names never activate billing or classify production', () => {
   const result = calc({ tasks: [{ ...task, taskName: 'Billable Billing Training' }], settings: [config(), rate()] });

@@ -31,12 +31,15 @@
     "express": "^5.1.0",
     "express-mongo-sanitize": "^2.2.0",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^9.0.0",
+    "mongoose": "^9.11.4",
     "nodemailer": "^10.2.1"
   },
   "devDependencies": {
     "mongodb-memory-server-core": "^11.3.0",
     "nodemon": "^3.1.10"
+  },
+  "overrides": {
+    "minimatch@>=7.0.0 <11.0.1": "^11.0.1"
   },
   "engines": {
     "node": ">=20.19.0"

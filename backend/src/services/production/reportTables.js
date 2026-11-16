@@ -53,4 +53,21 @@ function liveReportTable(report, type) {
   }
   return { columns: cols, rows, summary };
 }
-module.exports = { column, financialColumns, financialValues, liveReportTable };
+function billableTaskTotals(work) {
+  const groups = new Map();
+  for (const row of work) {
+    const seconds = row.billing?.applicable ? row.billing.billableSeconds : 0;
+    if (!Number.isFinite(seconds) || seconds <= 0) continue;
+    // Sum all dates and rates, keeping distinct employees and work records
+    // separate even when their display names happen to match.
+    const key = JSON.stringify([row.employee, row.project, row.task]);
+    if (!groups.has(key)) groups.set(key, { employee: row.employeeName, description: row.taskName, project: row.projectName, milliseconds: 0 });
+    groups.get(key).milliseconds += Math.round(seconds * 1000);
+  }
+  const rows = [...groups.values()].sort((a, b) => a.employee.localeCompare(b.employee)
+    || a.project.localeCompare(b.project) || a.description.localeCompare(b.description))
+    .map(row => [row.employee, row.description, row.project, row.milliseconds / 3600000]);
+  return { columns: [column('employeeName', 'Person Worked On'), column('taskName', 'Description'),
+    column('projectName', 'Task'), column('hours', 'Hrs/Qty', 'hours')], rows };
+}
+module.exports = { column, financialColumns, financialValues, liveReportTable, billableTaskTotals };
