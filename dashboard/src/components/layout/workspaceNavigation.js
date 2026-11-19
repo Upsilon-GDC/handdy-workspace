@@ -25,10 +25,10 @@ export const workspaceNavigation = [
   { path: "/admin/timesheets/detailed", title: "Detailed timesheet", role: "admin", group: "Time & attendance", needs: ALL_REPORTS },
   { path: "/admin/timesheets/project-hours", title: "Project hours", role: "admin", group: "Time & attendance", needs: ALL_REPORTS },
   { path: "/admin/timesheets/attendance", title: "Attendance", role: "admin", group: "Time & attendance" },
-  { path: "/admin/help", title: "Help", role: "admin", group: "System" },
-  { path: "/admin/settings", title: "Idle & logout", role: "admin", group: "System" },
-  { path: "/admin/working-hours", title: "Working Hours Settings", role: "admin", group: "System" },
-  { path: "/admin/permissions", title: "Permissions", role: "admin", group: "System" },
+  { path: "/admin/help", title: "Help", role: "admin", group: "Settings" },
+  { path: "/admin/settings", title: "Idle & logout", role: "admin", group: "Settings" },
+  { path: "/admin/working-hours", title: "Working Hours Settings", role: "admin", group: "Settings" },
+  { path: "/admin/permissions", title: "Permissions", role: "admin", group: "Settings" },
 
   { path: "/team-lead/dashboard", title: "Overview", role: "team_lead", group: "Workspace", needs: TEAM_REPORTS },
   { path: "/team-lead/employee-insights", title: "Employee insights", role: "team_lead", group: "Workspace", needs: TEAM_REPORTS },
@@ -39,12 +39,12 @@ export const workspaceNavigation = [
   { path: "/team-lead/timesheets/detailed", title: "Detailed timesheet", role: "team_lead", group: "Time & attendance", needs: TEAM_REPORTS },
   { path: "/team-lead/timesheets/project-hours", title: "Project hours", role: "team_lead", group: "Time & attendance", needs: TEAM_REPORTS },
   { path: "/team-lead/timesheets/attendance", title: "Attendance", role: "team_lead", group: "Time & attendance" },
-  { path: "/team-lead/help", title: "Help", role: "team_lead", group: "System" },
+  { path: "/team-lead/help", title: "Help", role: "team_lead", group: "Settings" },
 
   { path: "/employee/dashboard", title: "Overview", role: "employee", group: "Workspace" },
   { path: "/employee/timesheet", title: "My timesheet", role: "employee", group: "Time & attendance" },
   { path: "/employee/timesheet/details", title: "My detailed timesheet", role: "employee", group: "Time & attendance" },
-  { path: "/employee/help", title: "Help", role: "employee", group: "System" },
+  { path: "/employee/help", title: "Help", role: "employee", group: "Settings" },
 
   // Manager receives the complete admin navigation.
   { path: "/admin/dashboard", title: "Overview", role: "manager", group: "Workspace", needs: ALL_REPORTS },
@@ -63,10 +63,10 @@ export const workspaceNavigation = [
   { path: "/admin/timesheets/detailed", title: "Detailed timesheet", role: "manager", group: "Time & attendance", needs: ALL_REPORTS },
   { path: "/admin/timesheets/project-hours", title: "Project hours", role: "manager", group: "Time & attendance", needs: ALL_REPORTS },
   { path: "/admin/timesheets/attendance", title: "Attendance", role: "manager", group: "Time & attendance" },
-  { path: "/admin/help", title: "Help", role: "manager", group: "System" },
-  { path: "/admin/settings", title: "Idle & logout", role: "manager", group: "System" },
-  { path: "/admin/working-hours", title: "Working Hours Settings", role: "manager", group: "System" },
-  { path: "/admin/permissions", title: "Permissions", role: "manager", group: "System" },
+  { path: "/admin/help", title: "Help", role: "manager", group: "Settings" },
+  { path: "/admin/settings", title: "Idle & logout", role: "manager", group: "Settings" },
+  { path: "/admin/working-hours", title: "Working Hours Settings", role: "manager", group: "Settings" },
+  { path: "/admin/permissions", title: "Permissions", role: "manager", group: "Settings" },
 
   // HR receives business/operational modules but not employee administration
   // or idle/logout security settings.
@@ -82,7 +82,7 @@ export const workspaceNavigation = [
   { path: "/admin/timesheets/detailed", title: "Detailed timesheet", role: "hr", group: "Time & attendance", needs: ALL_REPORTS },
   { path: "/admin/timesheets/project-hours", title: "Project hours", role: "hr", group: "Time & attendance", needs: ALL_REPORTS },
   { path: "/admin/timesheets/attendance", title: "Attendance", role: "hr", group: "Time & attendance" },
-  { path: "/admin/help", title: "Help", role: "hr", group: "System" },
+  { path: "/admin/help", title: "Help", role: "hr", group: "Settings" },
   ...['admin', 'manager'].flatMap(role => [
     { path: "/admin/production", title: 'Overview', role, group: 'Production' },
     { path: "/admin/production/employee", title: 'Employees', activePaths: ['/admin/production/employee', '/admin/production/employee/details'], role, group: 'Production' },
