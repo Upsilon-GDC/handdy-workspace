@@ -1,5 +1,5 @@
-// Admin-level roles always hold every permission (backend utils/roles.js).
 export const ADMIN_ROLES = ["admin", "alpha", "manager"];
+export const PRODUCTION_ACCESS = "access_production";
 
 export const isAdminRole = (role) => ADMIN_ROLES.includes(role);
 
@@ -21,6 +21,7 @@ export const PERMISSION_LABELS = {
   view_all_reports: "View all employee reports",
   export_reports: "Export Excel/PDF",
   view_billing_amounts: "View billing amounts",
+  [PRODUCTION_ACCESS]: "Production access",
 };
 
 export const permissionNames = (keys) => keys

@@ -14,6 +14,12 @@ export const getEmployeePermissions = async () =>
 export const saveEmployeePermissions = async (employeeId, { granted, revoked }) =>
   (await axiosInstance.put(`/permissions/employees/${employeeId}`, { granted, revoked })).data;
 
+export const getProductionAccessAccounts = async () =>
+  (await axiosInstance.get("/permissions/production")).data.employees;
+
+export const saveProductionAccess = async (employeeId, enabled) =>
+  (await axiosInstance.put(`/permissions/production/${employeeId}`, { enabled })).data.employee;
+
 // Effective permission keys for the signed-in user, with their fingerprint
 // (see permissionVersion.js). Used only to show or hide controls; the API
 // enforces every action regardless.

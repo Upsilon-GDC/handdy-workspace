@@ -213,6 +213,8 @@ const employeeSchema = new mongoose.Schema(
       updatedAt: { type: Date, default: null, select: false },
     },
 
+    productionAccessDisabled: { type: Boolean, default: false, select: false },
+
     teamLead: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Employee",

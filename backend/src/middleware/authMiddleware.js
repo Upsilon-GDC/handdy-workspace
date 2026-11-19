@@ -32,7 +32,7 @@ const protect = async (req, res, next) => {
 
     const employee = cached?.employee ?? await Employee.findById(decoded.employeeId).select(
       "+tokenVersion +idleTrackingExempt +idlePolicyOverride.idleThresholdMinutes +idlePolicyOverride.autoLogoutMinutes"
-      + " +permissionOverrides.granted +permissionOverrides.revoked"
+      + " +permissionOverrides.granted +permissionOverrides.revoked +productionAccessDisabled"
     );
 
     if (!employee) {

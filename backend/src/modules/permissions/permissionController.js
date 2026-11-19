@@ -10,8 +10,12 @@ const {
   normalizePermissionList,
 } = require("../../utils/permissions");
 const {
+  PERMISSION_VERSION_HEADER,
+  PRODUCTION_ROLES,
   getEffectivePermissionsSync,
+  getPermissionVersion,
   getRolePermissionsSync,
+  hasProductionAccess,
   setRoleOverride,
 } = require("../../services/permissionService");
 const sendErrorResponse = require("../../utils/sendErrorResponse");
@@ -190,10 +194,65 @@ const updateEmployeePermissions = async (req, res) => {
   }
 };
 
+const PRODUCTION_ACCOUNT_FIELDS = "employeeId fullName email role +productionAccessDisabled";
+const productionAccounts = { isActive: true, role: { $in: PRODUCTION_ROLES } };
+const describeProductionAccount = (employee) => ({
+  id: String(employee._id),
+  employeeId: employee.employeeId,
+  fullName: employee.fullName,
+  email: employee.email,
+  role: employee.role,
+  enabled: hasProductionAccess(employee),
+});
+
+const listProductionAccounts = async (_req, res) => {
+  try {
+    const employees = await Employee.find(productionAccounts)
+      .select(PRODUCTION_ACCOUNT_FIELDS).sort({ fullName: 1, _id: 1 }).lean();
+    return res.status(200).json({ success: true, employees: employees.map(describeProductionAccount) });
+  } catch (error) {
+    return sendErrorResponse(res, error, "Unable to load Production access.");
+  }
+};
+
+const updateProductionAccount = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    const { enabled } = req.body || {};
+    if (!mongoose.isValidObjectId(employeeId) || typeof enabled !== "boolean") {
+      return res.status(400).json({ success: false, message: "Provide a valid account ID and access setting." });
+    }
+    const productionAccessDisabled = !enabled;
+    const employee = await Employee.findOneAndUpdate(
+      { ...productionAccounts, _id: employeeId },
+      { $set: { productionAccessDisabled } },
+      { returnDocument: "after" },
+    ).select(PRODUCTION_ACCOUNT_FIELDS).lean();
+    if (!employee) {
+      return res.status(404).json({ success: false, message: "Active Admin or Manager account not found." });
+    }
+    if (String(req.user._id) === String(employee._id)) {
+      res.set(PERMISSION_VERSION_HEADER, getPermissionVersion({
+        role: employee.role,
+        permissions: req.user.permissions,
+        productionAccessDisabled,
+      }));
+    }
+    console.info("[permissions] Production access updated", JSON.stringify({
+      employee: employeeId, by: String(req.user._id), enabled,
+    }));
+    return res.status(200).json({ success: true, employee: describeProductionAccount(employee) });
+  } catch (error) {
+    return sendErrorResponse(res, error, "Unable to save Production access.");
+  }
+};
+
 module.exports = {
   getMyPermissions,
   getPermissionConfig,
   listEmployeePermissions,
   updateEmployeePermissions,
   updateRolePermissions,
+  listProductionAccounts,
+  updateProductionAccount,
 };

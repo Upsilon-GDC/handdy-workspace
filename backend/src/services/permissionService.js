@@ -9,6 +9,10 @@ const {
   permissionAppliesToRole,
 } = require("../utils/permissions");
 
+const PRODUCTION_ACCESS = "access_production";
+const PRODUCTION_ROLES = ["admin", "manager"];
+const hasProductionAccess = (user) => PRODUCTION_ROLES.includes(user?.role) && user.productionAccessDisabled !== true;
+
 // Role grants change rarely, so permission checks read an in-memory snapshot
 // instead of querying MongoDB on every guarded request. The snapshot is loaded
 // at startup, replaced immediately when an administrator saves a role, and
@@ -72,7 +76,10 @@ function getEffectivePermissionsSync(user) {
     }
     for (const key of revoked || []) effective.delete(key);
   }
-  for (const key of user.permissions || []) effective.add(key);
+  for (const key of user.permissions || []) {
+    if (key !== PRODUCTION_ACCESS) effective.add(key);
+  }
+  if (hasProductionAccess(user)) effective.add(PRODUCTION_ACCESS);
   return [...effective];
 }
 
@@ -89,17 +96,22 @@ function getPermissionVersion(user) {
 
 function userHasPermission(user, ...keys) {
   if (!user) return false;
-  if (isAdminRole(user.role)) return true;
+  if (isAdminRole(user.role)) {
+    return keys.length === 0 || keys.some((key) => key !== PRODUCTION_ACCESS || hasProductionAccess(user));
+  }
   const effective = getEffectivePermissionsSync(user);
   return keys.some((key) => effective.includes(key));
 }
 
 module.exports = {
   PERMISSION_VERSION_HEADER,
+  PRODUCTION_ACCESS,
+  PRODUCTION_ROLES,
   clearPermissionCache,
   getEffectivePermissionsSync,
   getPermissionVersion,
   getRolePermissionsSync,
+  hasProductionAccess,
   refreshPermissionOverrides,
   setRoleOverride,
   userHasPermission,

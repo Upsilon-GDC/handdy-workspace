@@ -15,7 +15,7 @@ import {
 } from "../api/authApi";
 import { getMyPermissions } from "../api/permissionApi";
 import { createPermissionVersionTracker, onPermissionVersion } from "../api/permissionVersion";
-import { isAdminRole } from "../utils/permissions";
+import { isAdminRole, PRODUCTION_ACCESS } from "../utils/permissions";
 import { normalizeUser, permissionOwnerFor } from "../utils/authUser";
 
 const NO_PERMISSIONS = [];
@@ -185,10 +185,9 @@ function AuthProvider({ children }) {
   const hasFullAccess = isAdminRole(user?.role);
   const permissionsLoaded = permissionResult.owner === permissionOwner;
   const permissions = permissionsLoaded ? permissionResult.keys : NO_PERMISSIONS;
-  // True when the user holds every named permission. Admin-level roles always
-  // do, matching the API.
+  // Production uses the same account-specific grant for every role.
   const hasPermission = useCallback(
-    (...keys) => hasFullAccess || keys.every((key) => permissions.includes(key)),
+    (...keys) => keys.every((key) => (hasFullAccess && key !== PRODUCTION_ACCESS) || permissions.includes(key)),
     [hasFullAccess, permissions],
   );
 
@@ -321,8 +320,8 @@ function AuthProvider({ children }) {
     isAuthLoading,
 
     permissions,
-    permissionsReady: hasFullAccess || permissionsLoaded,
-    permissionsFailed: !hasFullAccess && permissionsLoaded && permissionResult.failed,
+    permissionsReady: permissionsLoaded,
+    permissionsFailed: permissionsLoaded && permissionResult.failed,
     hasPermission,
 
     login,
