@@ -13,15 +13,8 @@
 //   "frontend" - only controls UI (e.g. exports are generated in the browser)
 //   "none"     - catalogued for future use; switching it changes nothing yet
 //
-// Every permission can be given to every configurable role (product decision,
-// 2026-10-26), so an administrator can hand a team lead or employee any duty.
-// Company-wide duties then cover the whole company, as they do for HR. Team
-// duties cover the person's own team (services/teamScope.js): the team a team
-// lead leads, or the team an employee belongs to.
-//
-// `roles` (optional) would limit a permission to some configurable roles;
-// grants for other roles are then ignored and dropped on save. No entry uses
-// it at present.
+// A permission's optional `roles` limits which configurable roles can hold
+// it. Team Lead reports use their assigned team scope (services/teamScope.js).
 const CONFIGURABLE_ROLES = ["hr", "team_lead", "employee"];
 
 const PERMISSION_CATEGORIES = [
@@ -96,10 +89,12 @@ const PERMISSION_CATEGORIES = [
       { key: "view_team_reports", label: "View team reports", enforcement: "none",
         description: "Not used yet. Team reports follow “View team timesheets”." },
       { key: "view_all_reports", label: "View all employee reports", enforcement: "backend", sensitive: true,
+        roles: ["hr", "employee"],
         description: "Company-wide overview, timesheets, attendance and reports for every employee (adds the company reports to the menu)." },
       { key: "export_reports", label: "Export Excel/PDF", enforcement: "frontend",
         description: "Shows the Export Excel and Export PDF buttons. Exports are built in the browser from data the person can already see." },
       { key: "view_billing_amounts", label: "View billing amounts", enforcement: "backend", sensitive: true,
+        roles: ["hr", "employee"],
         description: "Open the Billing page and see charge amounts for every employee." },
       { key: "manage_service_rates", label: "Manage employee service rates", enforcement: "none", sensitive: true,
         description: "Not used yet. Charge rates are edited on the Employees page." },
