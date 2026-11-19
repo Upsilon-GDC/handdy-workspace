@@ -4,13 +4,17 @@ const assert = require("node:assert/strict");
 
 const Employee = require("../src/models/Employee");
 const { requirePermission } = require("../src/middleware/authorizeRoles");
-const { getEffectivePermissionsSync } = require("../src/services/permissionService");
+const { getEffectivePermissionsSync, getPermissionVersion, PRODUCTION_ACCESS } = require("../src/services/permissionService");
 const {
   getMyPermissions,
   listEmployeePermissions,
   updateEmployeePermissions,
+  listProductionAccounts,
+  updateProductionAccount,
 } = require("../src/modules/permissions/permissionController");
 const permissionRoutes = require("../src/modules/permissions/permissionRoutes");
+const productionRoutes = require("../src/modules/production/productionRoutes");
+const billingRoutes = require("../src/modules/billing/billingRoutes");
 
 const LEAD_ID = "64b000000000000000000a07";
 
@@ -152,4 +156,70 @@ test("only admin, alpha or manager can list or change a person's permissions", (
 test("the sign-in check loads each person's exceptions", () => {
   const source = require("node:fs").readFileSync(require.resolve("../src/middleware/authMiddleware"), "utf8");
   assert.match(source, /\+permissionOverrides\.granted \+permissionOverrides\.revoked/);
+});
+
+test("Production and its legacy URL require an enabled Admin or Manager account", () => {
+  const guard = productionRoutes.stack[1].handle;
+  const legacyGuard = billingRoutes.stack.find((layer) => layer.route?.path === "/production").route.stack[0].handle;
+  for (const role of ["admin", "manager", "alpha", "hr", "team_lead", "employee"]) {
+    for (const productionAccessDisabled of [undefined, true, false]) {
+      const user = { role, productionAccessDisabled, permissions: [PRODUCTION_ACCESS] };
+      const enabled = ["admin", "manager"].includes(role) && productionAccessDisabled !== true;
+      assert.equal(getEffectivePermissionsSync(user).includes(PRODUCTION_ACCESS), enabled);
+      for (const check of [guard, legacyGuard]) {
+        let reached = false;
+        const res = response();
+        check({ user }, res, () => { reached = true; });
+        assert.equal(reached, enabled);
+        assert.equal(res.statusCode, enabled ? 200 : 403);
+      }
+    }
+  }
+});
+
+test("Production account controls are available to Admin and Alpha, including disabled Admins", () => {
+  for (const path of ["/production", "/production/:employeeId"]) {
+    const guard = permissionRoutes.stack.find((layer) => layer.route?.path === path).route.stack[1].handle;
+    for (const role of ["admin", "alpha", "manager", "hr", "team_lead", "employee"]) {
+      let reached = false;
+      const res = response();
+      guard({ user: { role, productionAccessDisabled: true } }, res, () => { reached = true; });
+      assert.equal(reached, ["admin", "alpha"].includes(role));
+    }
+  }
+});
+
+test("Production access can be disabled and restored on individual eligible accounts", async (t) => {
+  t.mock.method(console, "info", () => {});
+  const account = { _id: LEAD_ID, fullName: "Alex", role: "admin" };
+  const eligibility = { isActive: true, role: { $in: ["admin", "manager"] } };
+  t.mock.method(Employee, "find", (filter) => {
+    assert.deepEqual(filter, eligibility);
+    return query([account]);
+  });
+  const list = response();
+  await listProductionAccounts({}, list);
+  assert.equal(list.body.employees[0].enabled, true);
+
+  const writes = t.mock.method(Employee, "findOneAndUpdate", (filter, update) => {
+    assert.deepEqual(filter, { ...eligibility, _id: LEAD_ID });
+    Object.assign(account, update.$set);
+    return query(account);
+  });
+  const save = async (enabled) => {
+    const res = response();
+    res.set = (name, value) => { res[name] = value; };
+    await updateProductionAccount({ params: { employeeId: LEAD_ID }, body: { enabled }, user: account }, res);
+    return res;
+  };
+  assert.equal((await save("false")).statusCode, 400);
+  assert.equal(writes.mock.callCount(), 0);
+  const originalVersion = getPermissionVersion(account);
+  const disabled = await save(false);
+  assert.equal(disabled.body.employee.enabled, false);
+  assert.notEqual(disabled["X-Permissions-Version"], originalVersion);
+  assert.equal(await allowed(account, "create_tasks"), true);
+  const enabled = await save(true);
+  assert.equal(enabled.body.employee.enabled, true);
+  assert.equal(enabled["X-Permissions-Version"], originalVersion);
 });

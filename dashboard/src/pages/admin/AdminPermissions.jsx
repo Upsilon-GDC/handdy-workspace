@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, ChevronDown, Lock, RotateCcw, Save, Search, ShieldCheck, UserRound } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, Factory, RotateCcw, Save, Search, ShieldCheck, UserRound } from "lucide-react";
 
 import DashboardLayout from "../../components/layout/DashboardLayout";
 import useAuth from "../../context/useAuth";
@@ -10,6 +10,7 @@ import {
   saveRolePermissions,
 } from "../../api/permissionApi";
 import getApiErrorMessage from "../../utils/getApiErrorMessage";
+import ProductionAccessPanel from "./ProductionAccessPanel";
 import {
   NO_OVERRIDES,
   clearPersonPermission,
@@ -34,7 +35,14 @@ const appliesTo = (permission, role) => !permission.roles || permission.roles.in
 const MODES = [
   { key: "role", label: "By role", icon: ShieldCheck },
   { key: "employee", label: "By employee", icon: UserRound },
+  { key: "production", label: "Production access", icon: Factory },
 ];
+
+const MODE_COPY = {
+  role: ["Role permissions", "Choose which permissions each role grants by default."],
+  employee: ["Employee permissions", "Choose which permissions to change for an individual HR, Team Lead or Employee account."],
+  production: ["Production access", "Turn Production on or off for individual Admin and Manager accounts. Access is on by default."],
+};
 
 const FILTERS = [
   { key: "all", label: "All" },
@@ -52,6 +60,7 @@ const initials = (name) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((pa
 function AdminPermissions() {
   const { user } = useAuth();
   const canManage = ["admin", "alpha", "manager"].includes(user?.role);
+  const canManageProduction = ["admin", "alpha"].includes(user?.role);
   const [mode, setMode] = useState("role");
   const [config, setConfig] = useState(null);
   const [activeRole, setActiveRole] = useState("");
@@ -346,15 +355,11 @@ function AdminPermissions() {
         <header className="permissions-hero card">
           <div>
             <span className="permissions-kicker">Access control</span>
-            <h2>{mode === "role" ? "Role permissions" : "Employee permissions"}</h2>
-            <p>
-              {mode === "role"
-                ? "Choose what each role can do. Changes apply to every account with that role, except where a person has their own setting. Administrators, managers and the alpha role always keep full access."
-                : "Give one person more or less access than their role. Everything you don't change here keeps following the role. Administrators, managers and the alpha role always keep full access."}
-            </p>
+            <h2>{MODE_COPY[mode][0]}</h2>
+            <p>{MODE_COPY[mode][1]}</p>
           </div>
           <div className="permissions-modes" role="tablist" aria-label="Set permissions">
-            {MODES.map((item) => {
+            {MODES.filter((item) => item.key !== "production" || canManageProduction).map((item) => {
               const Icon = item.icon;
               return (
                 <button key={item.key} type="button" role="tab" aria-selected={mode === item.key}
@@ -366,8 +371,9 @@ function AdminPermissions() {
           </div>
         </header>
 
-        {loading && <p role="status">Loading permissions…</p>}
-        {error && <p className="permissions-message is-error" role="alert">{error}</p>}
+        {mode === "production" && canManageProduction && <ProductionAccessPanel />}
+        {mode !== "production" && loading && <p role="status">Loading permissions…</p>}
+        {mode !== "production" && error && <p className="permissions-message is-error" role="alert">{error}</p>}
 
         {config && mode === "role" && (
           <>
@@ -387,7 +393,6 @@ function AdminPermissions() {
                   </button>
                 ))}
               </div>
-              <span className="permissions-fixed"><Lock size={14} /> Admin and Manager keep full access (not editable)</span>
             </div>
             {editor}
           </>
@@ -416,7 +421,6 @@ function AdminPermissions() {
                     </button>
                   ))}
                 </div>
-                <span className="permissions-fixed"><Lock size={14} /> Admins and managers are not listed (full access)</span>
               </div>
               {shownPeople.length ? (
                 <ul className="permissions-people-list" aria-label="Employees">

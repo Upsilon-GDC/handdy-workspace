@@ -1,3 +1,5 @@
+import { PRODUCTION_ACCESS } from "../../utils/permissions.js";
+
 // Only implemented, role-authorized modules belong in the primary navigation.
 // Compatibility aliases and form/detail routes stay routable but are not menu items.
 // `needs` lists the role permissions an item's data requires; the shell hides
@@ -81,7 +83,7 @@ export const workspaceNavigation = [
   { path: "/admin/timesheets/project-hours", title: "Project hours", role: "hr", group: "Time & attendance", needs: ALL_REPORTS },
   { path: "/admin/timesheets/attendance", title: "Attendance", role: "hr", group: "Time & attendance" },
   { path: "/admin/help", title: "Help", role: "hr", group: "System" },
-  ...['admin', 'manager', 'hr', 'team_lead', 'employee'].flatMap(role => [
+  ...['admin', 'manager'].flatMap(role => [
     { path: "/admin/production", title: 'Overview', role, group: 'Production' },
     { path: "/admin/production/employee", title: 'Employees', activePaths: ['/admin/production/employee', '/admin/production/employee/details'], role, group: 'Production' },
     { path: "/admin/production/team", title: 'Teams', role, group: 'Production' },
@@ -90,14 +92,15 @@ export const workspaceNavigation = [
     { path: "/admin/production/billing", title: 'Billing management', role, group: 'Production' },
     { path: "/admin/production/reports", title: 'Reports', role, group: 'Production' },
     ...(role === 'admin' ? [{ path: "/admin/production/settings", title: 'Settings', role, group: 'Production' }] : []),
-  ]),
+  ].map(item => ({ ...item, needs: [PRODUCTION_ACCESS] }))),
 ];
 
 // The menu for a role (alpha uses the admin menu), narrowed to the items
 // whose `needs` the signed-in user holds.
 export const navigationForRole = (role, hasPermission) => {
   const navigationRole = role === "alpha" ? "admin" : role;
-  return workspaceNavigation.filter((item) => item.role === navigationRole && hasPermission(...(item.needs || [])));
+  return workspaceNavigation.filter((item) =>
+    item.role === (item.group === "Production" ? role : navigationRole) && hasPermission(...(item.needs || [])));
 };
 
 // Pages HR, team leads and employees reach through duties an administrator

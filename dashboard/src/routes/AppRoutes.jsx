@@ -5,8 +5,10 @@ import ProductionReportsPage from '../pages/production/ProductionReportsPage';
 import AdminTaskLinksPage from '../pages/admin/AdminTaskLinksPage';
 import ClientAccessSettings from '../pages/admin/ClientAccessSettings';
 import EmployeeWorkAccessPage from '../pages/admin/EmployeeWorkAccessPage';
+import { PRODUCTION_ACCESS } from '../utils/permissions';
 import {
   Navigate,
+  Outlet,
   Route,
   Routes,
 } from "react-router-dom";
@@ -241,19 +243,18 @@ function AppRoutes() {
         }
       />
 
-      <Route path="/admin/production" element={<ProtectedRoute><ProductionPage key="overview" view="overview" /></ProtectedRoute>} />
-      <Route path="/admin/production/employee" element={<ProtectedRoute><ProductionPage key="employee" view="employee" /></ProtectedRoute>} />
-      <Route path="/admin/production/team" element={<ProtectedRoute><ProductionPage key="team" view="team" /></ProtectedRoute>} />
-      <Route path="/admin/production/clients" element={<ProtectedRoute><ProductionPage key="client" view="client" /></ProtectedRoute>} />
-      <Route path="/admin/production/tasks" element={<ProtectedRoute><ProductionPage key="task" view="task" /></ProtectedRoute>} />
-      <Route path="/admin/production/employee/details" element={<ProtectedRoute><ProductionPage key="details" view="details" /></ProtectedRoute>} />
-      <Route path="/admin/production/settings" element={<ProtectedRoute><ProductionSettingsPage /></ProtectedRoute>} />
-      <Route path="/admin/production/billing" element={<ProtectedRoute><ProductionBillingPage /></ProtectedRoute>} />
-      <Route path="/admin/production/reports" element={<ProtectedRoute><ProductionReportsPage /></ProtectedRoute>} />
-      <Route
-        path="/admin/billing"
-        element={<ProtectedRoute><Navigate to="/admin/production/billing" replace /></ProtectedRoute>}
-      />
+      <Route element={<ProtectedRoute needs={[PRODUCTION_ACCESS]}><Outlet /></ProtectedRoute>}>
+        <Route path="/admin/production" element={<ProductionPage key="overview" view="overview" />} />
+        <Route path="/admin/production/employee" element={<ProductionPage key="employee" view="employee" />} />
+        <Route path="/admin/production/team" element={<ProductionPage key="team" view="team" />} />
+        <Route path="/admin/production/clients" element={<ProductionPage key="client" view="client" />} />
+        <Route path="/admin/production/tasks" element={<ProductionPage key="task" view="task" />} />
+        <Route path="/admin/production/employee/details" element={<ProductionPage key="details" view="details" />} />
+        <Route path="/admin/production/settings" element={<ProductionSettingsPage />} />
+        <Route path="/admin/production/billing" element={<ProductionBillingPage />} />
+        <Route path="/admin/production/reports" element={<ProductionReportsPage />} />
+        <Route path="/admin/billing" element={<Navigate to="/admin/production/billing" replace />} />
+      </Route>
 
       <Route
         path="/admin/help"

@@ -1,11 +1,13 @@
 const express = require('express');
 const { protect } = require('../../middleware/authMiddleware');
+const { requirePermission } = require('../../middleware/authorizeRoles');
+const { PRODUCTION_ACCESS } = require('../../services/permissionService');
 const controller = require('./productionSettingsController');
 const reports = require('./productionReportController');
 const billing = require('./productionBillingController');
 const exportsController = require('./productionReportsController');
 const router = express.Router();
-router.use(protect);
+router.use(protect, requirePermission(PRODUCTION_ACCESS));
 router.get('/report', reports.getReport);
 router.get('/reports', exportsController.read);
 router.post('/reports/export-authorization', exportsController.authorize);

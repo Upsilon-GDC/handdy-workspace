@@ -6,6 +6,8 @@ const {
   listEmployeePermissions,
   updateEmployeePermissions,
   updateRolePermissions,
+  listProductionAccounts,
+  updateProductionAccount,
 } = require("./permissionController");
 
 const router = express.Router();
@@ -17,10 +19,17 @@ const adminOnly = (req, res, next) =>
     ? next()
     : res.status(403).json({ success: false, message: "Only an administrator or manager can manage permissions." });
 
+const productionAccessAdmin = (req, res, next) =>
+  ["admin", "alpha"].includes(req.user?.role)
+    ? next()
+    : res.status(403).json({ success: false, message: "Only an administrator can manage Production access." });
+
 router.get("/me", protect, getMyPermissions);
 router.get("/", protect, adminOnly, getPermissionConfig);
 router.put("/roles/:role", protect, adminOnly, updateRolePermissions);
 router.get("/employees", protect, adminOnly, listEmployeePermissions);
 router.put("/employees/:employeeId", protect, adminOnly, updateEmployeePermissions);
+router.get("/production", protect, productionAccessAdmin, listProductionAccounts);
+router.put("/production/:employeeId", protect, productionAccessAdmin, updateProductionAccount);
 
 module.exports = router;
