@@ -72,7 +72,7 @@ test("the employee list shows active people in configurable roles with their exc
     calls.filter = filter;
     return query([
       { _id: LEAD_ID, employeeId: "E7", fullName: "Asha Rao", email: "asha@example.com", role: "team_lead",
-        team: { name: "Design" }, permissionOverrides: { granted: ["add_manual_entries", "assign_tasks"], revoked: ["create_tasks"] } },
+        team: { name: "Design" }, permissionOverrides: { granted: ["add_manual_entries", "assign_tasks", "view_all_reports"], revoked: ["create_tasks"] } },
       { _id: "64b000000000000000000a08", fullName: "", email: "new@example.com", role: "employee", team: null },
     ], calls);
   });
@@ -84,7 +84,7 @@ test("the employee list shows active people in configurable roles with their exc
   assert.doesNotMatch(calls.select, /password|rate/i, "only what the page shows");
   const [lead, newcomer] = res.body.employees;
   assert.equal(lead.team, "Design");
-  assert.deepEqual([lead.granted, lead.revoked], [["add_manual_entries"], ["create_tasks"]], "retired keys are not sent to the page");
+  assert.deepEqual([lead.granted, lead.revoked], [["add_manual_entries"], ["create_tasks"]], "only current permissions that apply to the role are sent to the page");
   assert.ok(lead.permissions.includes("add_manual_entries") && !lead.permissions.includes("create_tasks"));
   assert.equal(newcomer.fullName, "new@example.com");
   assert.deepEqual([newcomer.granted, newcomer.revoked], [[], []]);
@@ -117,10 +117,10 @@ test("saving a person's settings validates them and stores the complete exceptio
   assert.match(both.body.message, /both on and off/);
   assert.equal(saved, undefined, "nothing is written for a rejected request");
 
-  const ok = await save(LEAD_ID, { granted: ["add_manual_entries", "add_manual_entries", "manage_clients"], revoked: ["create_tasks"] });
+  const ok = await save(LEAD_ID, { granted: ["add_manual_entries", "add_manual_entries", "manage_clients", "view_all_reports", "view_billing_amounts"], revoked: ["create_tasks"] });
   assert.equal(ok.statusCode, 200);
   assert.deepEqual(saved.filter, { _id: LEAD_ID });
-  assert.deepEqual(saved.update.$set["permissionOverrides.granted"], ["add_manual_entries", "manage_clients"], "duplicates removed");
+  assert.deepEqual(saved.update.$set["permissionOverrides.granted"], ["add_manual_entries", "manage_clients"]);
   assert.deepEqual(saved.update.$set["permissionOverrides.revoked"], ["create_tasks"]);
   assert.equal(saved.update.$set["permissionOverrides.updatedBy"], "admin-1");
   assert.ok(saved.update.$set["permissionOverrides.updatedAt"] instanceof Date);

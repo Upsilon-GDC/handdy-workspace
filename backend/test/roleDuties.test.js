@@ -197,16 +197,16 @@ test("teammates are listed without rates or contact details for someone who is n
   assert.doesNotMatch(calls.select, /rate|email|password|phone|address/i);
 });
 
-test("billing follows the permission, not the role", () => {
+test("billing follows eligible grants and excludes Team Leads", () => {
   const target = "64b000000000000000000d01";
-  assert.equal(getBillingEmployeeAccess({ role: "team_lead", permissionOverrides: { granted: ["view_billing_amounts"] } }, target).forbidden, false);
+  assert.equal(getBillingEmployeeAccess({ role: "team_lead", permissionOverrides: { granted: ["view_billing_amounts"] } }, target).forbidden, true);
   assert.equal(getBillingEmployeeAccess({ role: "employee" }, target).forbidden, true);
   assert.equal(getBillingEmployeeAccess({ role: "hr" }, target).forbidden, false, "HR keeps billing by default");
   assert.equal(getBillingEmployeeAccess({ role: "hr", permissionOverrides: { revoked: ["view_billing_amounts"] } }, target).forbidden, true);
   assert.equal(getBillingEmployeeAccess({ role: "manager" }, target).forbidden, false);
 });
 
-test("team and company report endpoints open by permission instead of role", async () => {
+test("team and company report endpoints enforce reporting scope", async () => {
   const gate = (router, path, method = "get") => {
     const layer = router.stack.find((item) => item.route?.path === path && item.route.methods[method]);
     return layer.route.stack.slice(1, -1).map((item) => item.handle);
@@ -220,15 +220,19 @@ test("team and company report endpoints open by permission instead of role", asy
     return true;
   };
   const teamViewer = { role: "employee", permissionOverrides: { granted: ["view_team_timesheets"] } };
-  const companyViewer = { role: "team_lead", permissionOverrides: { granted: ["view_all_reports"] } };
+  const companyViewer = { role: "employee", permissionOverrides: { granted: ["view_all_reports"] } };
+  const lead = { role: "team_lead", permissionOverrides: { granted: ["view_all_reports"] } };
   const plain = { role: "employee" };
   const cases = [
     [taskTimeLogRoutes, "/team", teamViewer, true],
+    [taskTimeLogRoutes, "/team", lead, true],
+    [taskTimeLogRoutes, "/admin", lead, false],
     [taskTimeLogRoutes, "/team", plain, false],
     [attendanceRoutes, "/team/history", teamViewer, true],
     [attendanceRoutes, "/team/history", { role: "team_lead", permissionOverrides: { revoked: ["view_team_timesheets"] } }, false],
     [attendanceRoutes, "/team/history", plain, false],
     [attendanceRoutes, "/admin/history", companyViewer, true],
+    [attendanceRoutes, "/admin/history", lead, false],
     [attendanceRoutes, "/admin/history", { role: "hr" }, true],
     [attendanceRoutes, "/admin/history", plain, false],
     [employeeRoutes, "/options", companyViewer, true],

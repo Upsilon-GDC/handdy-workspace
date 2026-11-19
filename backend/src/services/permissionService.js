@@ -77,7 +77,9 @@ function getEffectivePermissionsSync(user) {
     for (const key of revoked || []) effective.delete(key);
   }
   for (const key of user.permissions || []) {
-    if (key !== PRODUCTION_ACCESS) effective.add(key);
+    if (key === PRODUCTION_ACCESS) continue;
+    if (isConfigurableRole(user.role) && ALL_PERMISSION_KEYS.includes(key) && !permissionAppliesToRole(key, user.role)) continue;
+    effective.add(key);
   }
   if (hasProductionAccess(user)) effective.add(PRODUCTION_ACCESS);
   return [...effective];

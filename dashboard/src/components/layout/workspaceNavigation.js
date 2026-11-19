@@ -105,16 +105,15 @@ export const navigationForRole = (role, hasPermission) => {
 
 // Pages HR, team leads and employees reach through duties an administrator
 // gave them (to their role or to them personally). An item appears when the
-// person holds any of `anyOf`; `roles` limits team pages to employees (team
-// leads already have them). Company pages say "Company" for team leads and
-// employees, so they are not mistaken for their own team's pages.
+// person holds any of `anyOf` and is in `roles` when specified.
 const TASK_DUTIES = ["create_tasks", "edit_tasks", "reassign_tasks", "archive_tasks"];
 const TEAM_ADMIN = ["create_teams", "edit_teams", "assign_team_leads"];
 const EMPLOYEES = ["employee"];
+const COMPANY_REPORT_ROLES = ["hr", "employee"];
 
 export const dutyNavigation = [
   { path: "/admin/project-client-links", title: "Work setup", activePaths: WORK_SETUP_PATHS, group: "Task linking", anyOf: ["manage_activity_links"] },
-  { path: "/admin/dashboard", title: "Company overview", group: "Workspace", anyOf: ALL_REPORTS },
+  { path: "/admin/dashboard", title: "Company overview", group: "Workspace", anyOf: ALL_REPORTS, roles: COMPANY_REPORT_ROLES },
   { path: "/admin/clients", title: "Clients", group: "Workspace", anyOf: ["manage_clients"] },
   { path: "/admin/projects", title: "Projects", group: "Workspace", anyOf: ["manage_projects"] },
   { path: "/admin/team", title: "Teams", group: "Workspace", anyOf: TEAM_ADMIN },
@@ -124,10 +123,10 @@ export const dutyNavigation = [
   { path: "/team-lead/timesheets/detailed", title: "Detailed team timesheet", group: "Time & attendance", anyOf: TEAM_REPORTS, roles: EMPLOYEES },
   { path: "/team-lead/timesheets/project-hours", title: "Team project hours", group: "Time & attendance", anyOf: TEAM_REPORTS, roles: EMPLOYEES },
   { path: "/team-lead/timesheets/attendance", title: "Team attendance", group: "Time & attendance", anyOf: TEAM_REPORTS, roles: EMPLOYEES },
-  { path: "/admin/timesheets/team", title: "Company timesheet", group: "Time & attendance", anyOf: ALL_REPORTS },
-  { path: "/admin/timesheets/detailed", title: "Company detailed timesheet", group: "Time & attendance", anyOf: ALL_REPORTS },
-  { path: "/admin/timesheets/project-hours", title: "Company project hours", group: "Time & attendance", anyOf: ALL_REPORTS },
-  { path: "/admin/timesheets/attendance", title: "Company attendance", group: "Time & attendance", anyOf: ALL_REPORTS },
+  { path: "/admin/timesheets/team", title: "Company timesheet", group: "Time & attendance", anyOf: ALL_REPORTS, roles: COMPANY_REPORT_ROLES },
+  { path: "/admin/timesheets/detailed", title: "Company detailed timesheet", group: "Time & attendance", anyOf: ALL_REPORTS, roles: COMPANY_REPORT_ROLES },
+  { path: "/admin/timesheets/project-hours", title: "Company project hours", group: "Time & attendance", anyOf: ALL_REPORTS, roles: COMPANY_REPORT_ROLES },
+  { path: "/admin/timesheets/attendance", title: "Company attendance", group: "Time & attendance", anyOf: ALL_REPORTS, roles: COMPANY_REPORT_ROLES },
 ];
 
 // Duty pages for a person, leaving out anything their role menu already has.

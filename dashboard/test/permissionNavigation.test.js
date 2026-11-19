@@ -101,8 +101,14 @@ const menu = (role, keys) => {
 
 test("duties given to a team lead or employee add their pages to the menu", () => {
   const lead = menu("team_lead", ["view_team_timesheets", "manage_clients", "view_all_reports", "view_billing_amounts"]);
-  for (const path of ["/admin/clients", "/admin/dashboard", "/admin/timesheets/team", "/admin/timesheets/attendance"]) {
+  for (const path of ["/admin/clients", "/team-lead/dashboard", "/team-lead/timesheets/team", "/team-lead/timesheets/detailed", "/team-lead/timesheets/project-hours", "/team-lead/timesheets/attendance"]) {
     assert.ok(lead.includes(path), path);
+  }
+  const companyPages = ["/admin/dashboard", "/admin/timesheets/team", "/admin/timesheets/detailed", "/admin/timesheets/project-hours", "/admin/timesheets/attendance"];
+  const companyViewer = menu("employee", ["view_all_reports"]);
+  for (const path of companyPages) {
+    assert.equal(lead.includes(path), false, path);
+    assert.ok(companyViewer.includes(path), path);
   }
   assert.equal(lead.filter((path) => path === "/team-lead/timesheets/team").length, 1, "a lead's own team pages are not repeated");
 

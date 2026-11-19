@@ -117,7 +117,7 @@ test("saving a role validates the role and every permission key", async (t) => {
   }
 });
 
-test("any duty can be given to any configurable role and takes effect at once", async (t) => {
+test("applicable duties take effect at once and Team Leads cannot inherit company reports", async (t) => {
   let saved;
   t.mock.method(RolePermission, "findOneAndUpdate", async (filter, update) => { saved = update.$set.permissions; return {}; });
   try {
@@ -132,9 +132,22 @@ test("any duty can be given to any configurable role and takes effect at once", 
     assert.equal((await run(requirePermission("edit_tasks"), { role: "employee" })).res.statusCode, 403, "only what was granted");
 
     setRoleOverride("team_lead", [...DEFAULT_ROLE_PERMISSIONS.team_lead, "manage_clients", "view_billing_amounts", "view_all_reports"]);
-    for (const key of ["manage_clients", "view_billing_amounts", "view_all_reports", "create_tasks"]) {
+    for (const key of ["manage_clients", "create_tasks", "view_team_timesheets"]) {
       assert.equal((await run(requirePermission(key), { role: "team_lead" })).allowed, true, key);
     }
+    const companyKeys = ["view_billing_amounts", "view_all_reports"];
+    const lead = { role: "team_lead", permissions: companyKeys, permissionOverrides: { granted: companyKeys } };
+    for (const key of companyKeys) {
+      assert.equal((await run(requirePermission(key), lead)).res.statusCode, 403, key);
+    }
+    const leadConfig = response();
+    await updateRolePermissions({
+      user: { _id: "admin-1" },
+      params: { role: "team_lead" },
+      body: { permissions: ["view_team_timesheets", ...companyKeys] },
+    }, leadConfig);
+    assert.equal(leadConfig.statusCode, 200);
+    assert.deepEqual(saved, ["view_team_timesheets"]);
   } finally {
     setRoleOverride("employee", DEFAULT_ROLE_PERMISSIONS.employee);
     setRoleOverride("team_lead", DEFAULT_ROLE_PERMISSIONS.team_lead);
@@ -148,8 +161,9 @@ test("every catalog entry documents its effect and the roles it applies to", () 
     assert.ok(permission.description?.length > 10, `${permission.key} needs a description`);
     if (permission.enforcement === "none") assert.match(permission.description, /^Not used yet/, permission.key);
     for (const role of permission.roles || []) assert.ok(CONFIGURABLE_ROLES.includes(role), `${permission.key}: ${role}`);
-    // 2026-10-26: every switch is available for every configurable role.
-    for (const role of CONFIGURABLE_ROLES) assert.equal(permissionAppliesToRole(permission.key, role), true, `${permission.key}: ${role}`);
+    for (const role of CONFIGURABLE_ROLES) {
+      assert.equal(permissionAppliesToRole(permission.key, role), (permission.roles || CONFIGURABLE_ROLES).includes(role), `${permission.key}: ${role}`);
+    }
   }
   for (const [role, keys] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
     for (const key of keys) assert.equal(permissionAppliesToRole(key, role), true, `default ${role} grant ${key} must apply`);
