@@ -415,8 +415,9 @@ async function stopForHeartbeatIdle(req, res, timer, seconds) {
     if (seconds === undefined || seconds < 60 || req.user.idleTrackingExempt || timer.status !== 'running') return false;
     const policy = resolveIdlePolicy(await getSettings(), req.user);
     if (seconds < policy.idleThresholdMinutes * 60) return false;
-    const task = await Task.findById(timer.task).select('taskType').lean();
-    if (!task || task.taskType === 'break') return false;
+    const task = await Task.findById(timer.task).select('taskType idleLogout').lean();
+    // Tasks created without "Enable idle logout" are never stopped for idleness.
+    if (!task || task.taskType === 'break' || task.idleLogout !== true) return false;
     const reply = { statusCode: 200, body: null, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
     await stopTimer({ ...req, idleHeartbeatOnly: true, body: { timeLogId: String(timer._id), idleSeconds: Math.min(seconds, 43200) } }, reply);
     res.status(reply.statusCode).json({ ...reply.body, ...(reply.statusCode === 200 && reply.body?.timeLog?.status === 'stopped' ? { idleStopped: true, idleSeconds: seconds } : {}) });

@@ -19,9 +19,9 @@ before(async () => {
   await Settings.create({ key: 'global', idleThresholdMinutes: 26, autoLogoutMinutes: 50 }); invalidateSettings();
 }, { timeout: 180000 });
 after(async () => { try { await mongoose.disconnect(); } finally { await replica?.stop(); } });
-async function fixture(taskType = 'work', person = {}) {
+async function fixture(taskType = 'work', person = {}, idleLogout = true) {
   const user = { _id: new mongoose.Types.ObjectId(), ...person };
-  const task = await Task.create({ taskCode: crypto.randomUUID(), taskName: 'Synthetic work', taskType, idleLogout: false, createdBy: user._id });
+  const task = await Task.create({ taskCode: crypto.randomUUID(), taskName: 'Synthetic work', taskType, idleLogout, createdBy: user._id });
   const timer = await Log.create({ employee: user._id, task: task._id, project: new mongoose.Types.ObjectId(), startedAt: new Date(Date.now() - 5*3600000),
     desktopHeartbeatAt: new Date(), status: 'running', isActiveTimer: true, pauses: [] });
   return { user, timer, taskType };
@@ -45,6 +45,11 @@ test('five-hour active work is never inferred idle from session length', async (
   assert.equal(response.code, 200); assert.equal(response.body.idleStopped, undefined);
   const saved = await Log.findById(f.timer._id).lean(); assert.equal(saved.status, 'running'); assert.equal(saved.desktopIdleSample.seconds, 10);
 });
+test('a task without idle logout keeps running through hours of OS idleness', async () => {
+  const f = await fixture('work', {}, false); const response = await heartbeat(f, 8 * 3600);
+  assert.equal(response.code, 200); assert.equal(response.body.idleStopped, undefined);
+  const saved = await Log.findById(f.timer._id).lean(); assert.equal(saved.status, 'running'); assert.equal(saved.isActiveTimer, true);
+});
 test('break tasks, exempt employees and intentional pauses retain their behavior', async () => {
   for (const f of [await fixture('break'), await fixture('work', { idleTrackingExempt: true }), await fixture()]) {
     if (f.taskType !== 'break' && !f.user.idleTrackingExempt) await Log.updateOne({ _id: f.timer._id }, { $set: { status: 'paused' }, $push: { pauses: { reason: 'break', pausedAt: new Date() } } });
@@ -65,7 +70,7 @@ test('an intentional pause arriving during the heartbeat check is not stopped as
   const f = await fixture();
   t.mock.method(Task, 'findById', () => ({ select() { return this; }, lean: async () => {
     await Log.updateOne({ _id: f.timer._id }, { $set: { status: 'paused' }, $push: { pauses: { reason: 'break', pausedAt: new Date() } } });
-    return { taskType: 'work' };
+    return { taskType: 'work', idleLogout: true };
   } }));
   const response = await heartbeat(f, 1560);
   assert.equal(response.code, 200); assert.equal(response.body.idleStopped, undefined);

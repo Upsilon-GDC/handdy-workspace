@@ -1,6 +1,6 @@
 {
   "name": "handdy-desktop-app",
-  "version": "2.0.12",
+  "version": "2.0.13",
   "description": "Employee Time & Attendance System Desktop App",
   "main": "main.js",
   "scripts": {
