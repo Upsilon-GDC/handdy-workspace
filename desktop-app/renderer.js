@@ -645,6 +645,9 @@ async function checkSystemIdleState() {
     // A deliberately running break task ends only through an explicit user
     // action. Hours away from the keyboard must not stop it or sign out.
     if (currentTimeLog?.status === 'running' && isBreakTask()) return;
+    // A running task created without "Enable idle logout" keeps running no
+    // matter how long the computer is idle: no idle stop and no auto-logout.
+    if (currentTimeLog?.status === 'running' && !activeTaskIdleLogout) return;
     // Returning activity does not acknowledge an open warning. The employee
     // must press Continue; until then its inactivity/countdown remains live.
     const idleSeconds = idleStartedDialog?.open ? getIdleNoticeSeconds()

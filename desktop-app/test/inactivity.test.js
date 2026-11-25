@@ -88,7 +88,7 @@ test("idle popup appears once, acknowledges without resuming, and appears for th
   assert.equal(h.run("currentTimeLog"), null);
   h.state.timer = { _id: "new-task-session", status: "running", startedAt: new Date().toISOString(), pauses: [] };
   h.context.nextSession = h.state.timer;
-  h.run("currentTimeLog = nextSession");
+  h.run("currentTimeLog = nextSession; activeTaskIdleLogout = true");
   h.state.idle = 300;
   h.run("idleAcknowledgedAt = Date.now() - 300_000");
   await h.check();
@@ -378,12 +378,10 @@ test("completed break tasks contribute only to break totals", () => {
 });
 
 test("logout also applies without an active timer and for idle-exempt staff", async () => {
-  for (const timer of [null, "running"]) {
-    // activeTaskIdleLogout defaults to false here (the real default when no
-    // task opted into idle enforcement is running) to prove the session-level
-    // auto-logout fires regardless of that per-task flag, and idlePolicy.exempt
-    // (which only exempts active work from idle auto-pause) doesn't block it either.
-    const h = harness({ timer, idle: 1800, activeTaskIdleLogout: false });
+  for (const [timer, activeTaskIdleLogout] of [[null, false], ["running", true]]) {
+    // idlePolicy.exempt only exempts active work from idle stop; it never
+    // blocks the session-level auto-logout.
+    const h = harness({ timer, idle: 1800, activeTaskIdleLogout });
     h.run("idlePolicy.exempt = true");
     await h.check();
     assert.equal(h.context.localStorage.getItem("token"), null);
@@ -405,11 +403,14 @@ test("a later mouse movement leaves work stopped until Continue and Start", asyn
   assert.equal(h.calls.some(url => url.endsWith("/resume")), false);
 });
 
-test("idle stops work even when the old per-task flag is disabled", async () => {
-  const h = harness({ idle: 300, activeTaskIdleLogout: false });
+test("a task without idle logout keeps running through long inactivity without stop or logout", async () => {
+  const h = harness({ idle: 8 * 3600, activeTaskIdleLogout: false });
   await h.check();
-  assert.equal(h.state.timer.status, "stopped");
-  assert.equal(h.state.stopBody.idleSeconds, 300);
+  assert.equal(h.state.timer.status, "running");
+  assert.equal(h.calls.some((url) => url.endsWith("/stop")), false);
+  assert.equal(h.calls.some((url) => url.endsWith("/auth/logout")), false);
+  assert.equal(h.context.localStorage.getItem("token"), "test-only");
+  assert.notEqual(h.nodes.get("idleStartedDialog")?.open, true);
 });
 
 test("legacy paused break retains account auto-logout", async () => {
