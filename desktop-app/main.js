@@ -150,6 +150,11 @@ ipcMain.on("timer-lock:set", (event, state) => {
   if (lockMilliseconds >= 100) void recordTimerDiagnostic('lock', { lockMilliseconds });
 });
 
+ipcMain.on("idle-warning:show", (event) => {
+  if (!mainWindowRef || mainWindowRef.isDestroyed() || event.sender !== mainWindowRef.webContents) return;
+  timerLock.showIdleWarning();
+});
+
 function createWindow() {
   const mainWindow = new BrowserWindow({
     title: "CRM",

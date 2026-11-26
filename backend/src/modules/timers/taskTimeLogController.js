@@ -420,6 +420,7 @@ async function stopForHeartbeatIdle(req, res, timer, seconds) {
     if (!task || task.taskType === 'break' || task.idleLogout !== true) return false;
     const reply = { statusCode: 200, body: null, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
     await stopTimer({ ...req, idleHeartbeatOnly: true, body: { timeLogId: String(timer._id), idleSeconds: Math.min(seconds, 43200) } }, reply);
+    if (reply.body?.code === 'IDLE_LOGOUT_DISABLED') return false;
     res.status(reply.statusCode).json({ ...reply.body, ...(reply.statusCode === 200 && reply.body?.timeLog?.status === 'stopped' ? { idleStopped: true, idleSeconds: seconds } : {}) });
     return true;
 }
@@ -633,8 +634,19 @@ const stopTimer = async (req, res) => withEmployeeTimeWrite(req.user._id, async 
         if (req.idleHeartbeatOnly && activeTimer.status !== 'running') {
             return res.status(200).json({ success: true, skipped: true });
         }
+        const idleSeconds = Number(req.body?.idleSeconds);
+        if (activeTimer.status === 'running' && (idleSeconds > 0 || req.body?.logoutReason === 'inactivity')) {
+            const task = await Task.findById(activeTimer.task).select('taskType idleLogout').lean();
+            if (task?.idleLogout !== true || task.taskType === 'break') {
+                return res.status(409).json({
+                    success: false,
+                    code: 'IDLE_LOGOUT_DISABLED',
+                    message: 'The timer is still running because idle logout is disabled for this task.',
+                });
+            }
+        }
         const stoppedAt = new Date();
-        const values = computeStopValues(activeTimer, stoppedAt, Number(req.body?.idleSeconds));
+        const values = computeStopValues(activeTimer, stoppedAt, idleSeconds);
         const logout = req.body?.logoutReason === "inactivity"
             ? { logoutReason: "inactivity", autoLogoutAt: stoppedAt }
             : req.body?.logoutReason === "manual" ? { logoutReason: "manual" } : {};

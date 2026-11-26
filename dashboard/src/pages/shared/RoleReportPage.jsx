@@ -57,6 +57,9 @@ function RoleReportPage({ title, description, mode = "time", scope = "team", sho
   const [tasks, setTasks] = useState([]);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [records, setRecords] = useState([]);
+  // Every session in the date range, before the Project/Task filter. Idle
+  // between tasks can only be found from the full history (as in the admin report).
+  const [allTimeRecords, setAllTimeRecords] = useState([]);
   const [loading, setLoading] = useState(false);
   const [hasRun, setHasRun] = useState(() => Boolean(savedReportState.hasRun));
   const [error, setError] = useState("");
@@ -118,13 +121,16 @@ function RoleReportPage({ title, description, mode = "time", scope = "team", sho
 
   const totalSeconds = useMemo(() => records.reduce((sum, record) => sum + getWorkedSeconds(record), 0), [records]);
   const timelineRows = useMemo(
-    () => buildChronologicalReportTimeline(records, {
-      taskFiltered: Boolean(appliedTask),
-      // A server-side project filter hides intervening projects, so gaps
-      // between its remaining sessions cannot safely be called idle.
-      includeGaps: !appliedProject && !appliedTask,
-    }),
-    [appliedProject, appliedTask, records],
+    // Same rules as the admin report: build idle gaps from all sessions, then
+    // apply the filters. A gap is charged to the task before it, and a
+    // selected task shows only its own work/break segments.
+    () => buildChronologicalReportTimeline(allTimeRecords, { includeGaps: true })
+      .filter(({ record, entry }) =>
+        (!appliedProject || String(record.project?._id || record.project || "") === appliedProject)
+        && (!appliedTask || String(record.task?._id || record.task || "") === appliedTask)
+        && (!appliedTask || (entry.source !== "between_sessions"
+          && entry.type === (record.task?.taskType === "break" ? "break" : "work")))),
+    [allTimeRecords, appliedProject, appliedTask],
   );
   const totalBreakIdleSeconds = useMemo(() => timelineRows.filter(({ entry }) => ['break', 'idle'].includes(entry.type)).reduce((sum, { entry }) => sum + entry.durationSeconds, 0), [timelineRows]);
   const clientDetails = useMemo(
@@ -159,6 +165,7 @@ function RoleReportPage({ title, description, mode = "time", scope = "team", sho
     if (!activeFilters.fromDate || !activeFilters.toDate || activeFilters.toDate < activeFilters.fromDate) {
       if (!silent) {
         setRecords([]);
+        setAllTimeRecords([]);
         setError("Select a valid From and To date.");
       }
       return;
@@ -170,18 +177,26 @@ function RoleReportPage({ title, description, mode = "time", scope = "team", sho
         setLoading(true);
         setError("");
       }
+      // Time logs are fetched for all projects and filtered here, so idle
+      // time between tasks on other projects is not lost.
       const params = {
         startDate: activeFilters.fromDate,
         endDate: activeFilters.toDate,
-        project: activeFilters.project || undefined,
-        task: activeFilters.task || undefined,
       };
       const data = mode === "attendance"
         ? isTeamReport ? await getTeamAttendance(params, { force: force || !silent }) : await getMyAttendance(params, { force: force || !silent })
         : isTeamReport ? await getTeamTimeLogs(params, { force: force || !silent }) : await getMyTimeLogs(params, { force: force || !silent });
 
       if (!isCurrent()) return;
-      setRecords(mode === "attendance" ? data.attendance || [] : data.timeLogs || []);
+      if (mode === "time") {
+        const fetched = data.timeLogs || [];
+        setAllTimeRecords(fetched);
+        setRecords(fetched.filter((record) =>
+          (!activeFilters.project || String(record.project?._id || record.project || "") === activeFilters.project)
+          && (!activeFilters.task || String(record.task?._id || record.task || "") === activeFilters.task)));
+      } else {
+        setRecords(data.attendance || []);
+      }
       if (!silent) {
         appliedFiltersRef.current = activeFilters;
         setAppliedProject(activeFilters.project || "");
@@ -191,6 +206,7 @@ function RoleReportPage({ title, description, mode = "time", scope = "team", sho
       if (!isCurrent()) return;
       if (!silent) {
         setRecords([]);
+        setAllTimeRecords([]);
         setError(getApiErrorMessage(requestError, "Unable to generate this report."));
       }
     } finally {
