@@ -536,6 +536,12 @@ async function signOut(inactivity = false) {
               ...(pendingIdleStop ? { idleSeconds: Math.max(1, Math.floor((Date.now() - pendingIdleStop.startedAt) / 1000)) } : {}) }),
             signal: AbortSignal.timeout(10000),
           });
+          if (inactivity && stopResponse.status === 409 && (await stopResponse.json()).code === "IDLE_LOGOUT_DISABLED") {
+            logoutPending = false;
+            keepRunningWithIdleLogoutDisabled();
+            syncTimerLock();
+            return;
+          }
           if (!stopResponse.ok && stopResponse.status !== 404) throw new Error("Timer close pending");
           currentTimeLog = null;
         }
@@ -627,7 +633,12 @@ function showIdleStartedPopup(timeLog, idleSeconds) {
   const idleStart = validTimelineTime(idlePause?.pausedAt);
   idleStartedTime.textContent = idleStart === null ? "" : `Idle started at ${new Date(idleStart).toLocaleTimeString()}.`;
   idleStartedTime.hidden = idleStart === null;
-  if (!idleStartedDialog.open) idleStartedDialog.showModal();
+  if (!idleStartedDialog.open) {
+    idleStartedDialog.showModal();
+    // A heartbeat can confirm the idle stop before the idle poll engages the lock.
+    syncTimerLock();
+    window.electronAPI?.showIdleWarning?.();
+  }
   clearIdleNoticeDisplay();
   idleNoticeSnapshot = { seconds: idleSeconds, observedAt: Date.now() };
   updateIdleStartedPopup();
@@ -672,6 +683,7 @@ async function checkSystemIdleState() {
       }
       await runTimerAction(() => stopTimer({ idleSeconds: Math.max(idleSeconds,
         Math.floor((Date.now() - pendingIdleStop.startedAt) / 1000)) }));
+      if (currentTimeLog?.status === "running" && !activeTaskIdleLogout) return;
     }
     // Other sessions retain automatic logout, including legacy intentional
     // pauses. Only a running break task is exempt above.
@@ -2229,6 +2241,10 @@ async function stopTimer({ idleSeconds = 0 } = {}) {
     if (response.status < 500) pendingStopOperation = null;
 
     if (!response.ok) {
+      if (data.code === "IDLE_LOGOUT_DISABLED") {
+        keepRunningWithIdleLogoutDisabled();
+        return;
+      }
       if (response.status === 404 || data.code === "TIMER_CHANGED") {
         // A disconnected desktop timer may have been closed by the server
         // between the last refresh and this click, or another timer is now
@@ -2258,6 +2274,16 @@ async function stopTimer({ idleSeconds = 0 } = {}) {
     updateBreakUI();
   }
 }
+
+function keepRunningWithIdleLogoutDisabled() {
+  pendingIdleStop = null;
+  activeTaskIdleLogout = false;
+  timerMessage.textContent = "";
+  stopTimerButton.disabled = false;
+  if (pauseTimerButton) pauseTimerButton.disabled = false;
+  startLiveDuration(currentTimeLog);
+}
+
 async function pauseTimer(reason = "manual") {
   const token = getToken();
 
@@ -2537,8 +2563,9 @@ async function startTimer() {
         clock: onBreak ? 'break' : 'work', seconds: previewSeconds }
       : null;
     clearNoteDraft();
-    activeTaskIdleLogout = data.timeLog.task?.idleLogout === true
-      || taskSelect.selectedOptions[0]?.dataset.idleLogout === "true";
+    activeTaskIdleLogout = data.timeLog.task?.idleLogout === undefined
+      ? taskSelect.selectedOptions[0]?.dataset.idleLogout === "true"
+      : data.timeLog.task.idleLogout === true;
     automaticIdlePause = false;
     updateBreakUI(data.timeLog);
     updateNoteControlsUI(data.timeLog);

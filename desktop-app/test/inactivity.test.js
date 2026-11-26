@@ -34,6 +34,7 @@ function harness({ timer = "running", idle = 0, outage = false, activeTaskIdleLo
     window: { electronAPI: {
       getSystemIdleTime: async () => state.idle,
       getIdleDefaults: async () => defaults,
+      showIdleWarning: () => calls.push("show-idle-warning"),
       onBeforeClose: (callback) => { state.beforeClose = callback; },
       notifyCloseReady: () => { state.closeReady += 1; },
       notifyCloseCancelled: () => { state.closeCancelled += 1; },
@@ -72,6 +73,7 @@ test("idle popup appears once, acknowledges without resuming, and appears for th
   const dialog = h.nodes.get("idleStartedDialog");
   assert.equal(dialog.open, true);
   assert.equal(dialog.shown, 1);
+  assert.equal(h.calls.filter(call => call === "show-idle-warning").length, 1);
   assert.equal(h.nodes.get("idleStartedDuration").textContent, "05 mins");
   assert.equal(h.nodes.get("idleLogoutCountdown").textContent, "25 Mins 00 Secs");
   assert.match(h.nodes.get("idleStartedTime").textContent, /Idle started at/);
@@ -95,6 +97,7 @@ test("idle popup appears once, acknowledges without resuming, and appears for th
   assert.equal(dialog.shown, 2);
   await h.check();
   assert.equal(h.intervals.size, 1, "a new warning owns only one display interval");
+  assert.equal(h.calls.filter(call => call === "show-idle-warning").length, 2);
 });
 
 test("idle popup uses the configured threshold and preserves independent idle records", async () => {
@@ -411,6 +414,24 @@ test("a task without idle logout keeps running through long inactivity without s
   assert.equal(h.calls.some((url) => url.endsWith("/auth/logout")), false);
   assert.equal(h.context.localStorage.getItem("token"), "test-only");
   assert.notEqual(h.nodes.get("idleStartedDialog")?.open, true);
+});
+
+test("turning off idle logout on a running task keeps the clock going past the logout threshold", async () => {
+  const h = harness({ idle: 8 * 3600 });
+  const fetch = h.context.fetch;
+  h.context.fetch = (url, options) => {
+    if (!url.endsWith("/stop")) return fetch(url, options);
+    h.calls.push(url);
+    return { ok: false, status: 409, json: async () => ({ code: "IDLE_LOGOUT_DISABLED" }) };
+  };
+  await h.check();
+  await h.check();
+  assert.equal(h.calls.filter(url => url.endsWith("/stop")).length, 1);
+  assert.equal(h.calls.some(url => url.endsWith("/auth/logout")), false);
+  assert.equal(h.run("currentTimeLog.status"), "running");
+  assert.equal(h.run("pendingIdleStop"), null);
+  assert.notEqual(h.run("timerInterval"), null);
+  assert.equal(h.nodes.get("idleStartedDialog").open, false);
 });
 
 test("legacy paused break retains account auto-logout", async () => {
@@ -887,6 +908,19 @@ test("Start unlocks immediately and remains unlocked when the server confirms", 
   await starting;
   assert.equal(h.state.lock.at(-1), "running");
   assert.equal(h.nodes.get("timerLockNotice").hidden, true);
+});
+
+test("a newly started timer uses the server's unchecked idle setting over a stale task option", async () => {
+  const { h, respond } = await startHarness();
+  h.nodes.get("taskSelect").selectedOptions = [{ dataset: { idleLogout: "true" } }];
+  const starting = h.run("runTimerAction(startTimer)");
+  respond(true, { timeLog: { _id: "new", status: "running", startedAt: new Date().toISOString(), pauses: [], task: { idleLogout: false } } });
+  await starting;
+  h.state.idle = 8 * 3600;
+  await h.check();
+  assert.equal(h.run("activeTaskIdleLogout"), false);
+  assert.equal(h.calls.some(url => url.endsWith("/stop") || url.endsWith("/auth/logout")), false);
+  assert.equal(h.nodes.get("idleStartedDialog").open, false);
 });
 
 test("an unsent start stays locked and a refused start restores the lock", async () => {

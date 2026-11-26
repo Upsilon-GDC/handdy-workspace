@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const TaskTimeLog = require("../src/models/TaskTimeLog");
+const Task = require("../src/models/Task");
 const { stopTimer } = require("../src/modules/timers/taskTimeLogController");
 
 // The stop is one conditional update: it applies only while the timer is
@@ -12,7 +13,8 @@ const conditionalStop = (timer, onWrite = () => {}) => async (filter, update) =>
   return timer;
 };
 
-test("short configured idle thresholds remain separate, preserve IDs and are idempotent", async () => {
+test("short configured idle thresholds remain separate, preserve IDs and are idempotent", async (t) => {
+  t.mock.method(Task, "findById", () => ({ select: () => ({ lean: async () => ({ idleLogout: true }) }) }));
   const originalFind = TaskTimeLog.find;
   const originalFindOne = TaskTimeLog.findOne;
   const originalUpdate = TaskTimeLog.findOneAndUpdate;
@@ -43,7 +45,8 @@ test("short configured idle thresholds remain separate, preserve IDs and are ide
   }
 });
 
-test("inactivity stop stores a red idle interval and excludes it from worked time", async () => {
+test("inactivity stop stores a red idle interval and excludes it from worked time", async (t) => {
+  t.mock.method(Task, "findById", () => ({ select: () => ({ lean: async () => ({ idleLogout: true }) }) }));
   const originalFind = TaskTimeLog.find;
   const originalFindOne = TaskTimeLog.findOne;
   const startedAt = new Date(Date.now() - 600_000);
@@ -67,4 +70,26 @@ test("inactivity stop stores a red idle interval and excludes it from worked tim
     TaskTimeLog.findOne = originalFindOne;
     TaskTimeLog.findOneAndUpdate = originalUpdate;
   }
+});
+
+test("a task with idle logout turned off rejects stale automatic stops and can still be stopped manually", async (t) => {
+  const timer = { _id: "log", task: "task", status: "running", startedAt: new Date(Date.now() - 600_000), pauses: [] };
+  t.mock.method(TaskTimeLog, "find", () => ({ lean: async () => [] }));
+  t.mock.method(TaskTimeLog, "findOne", async () => timer);
+  t.mock.method(Task, "findById", () => ({ select: () => ({ lean: async () => ({ idleLogout: false }) }) }));
+  const write = t.mock.method(TaskTimeLog, "findOneAndUpdate", conditionalStop(timer));
+  const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
+  for (const body of [{ idleSeconds: 300 }, { logoutReason: "inactivity" }]) {
+    await stopTimer({ user: { _id: "employee" }, body }, res);
+    assert.equal(res.code, 409);
+    assert.equal(res.body.code, "IDLE_LOGOUT_DISABLED");
+    assert.equal(timer.status, "running");
+    assert.deepEqual(timer.pauses, []);
+  }
+  assert.equal(write.mock.callCount(), 0);
+  await stopTimer({ user: { _id: "employee" }, body: {} }, res);
+  assert.equal(res.code, 200);
+  assert.equal(timer.status, "stopped");
+  assert.equal(timer.totalIdleSeconds, 0);
+  assert.ok(timer.totalWorkedSeconds >= 600);
 });

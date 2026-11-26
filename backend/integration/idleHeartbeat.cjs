@@ -9,7 +9,7 @@ const Task = require('../src/models/Task');
 const Attendance = require('../src/models/Attendance');
 const Settings = require('../src/models/SystemSettings');
 const { invalidateSettings } = require('../src/services/idlePolicySettings');
-const { heartbeatTimer } = require('../src/modules/timers/taskTimeLogController');
+const { heartbeatTimer, stopTimer } = require('../src/modules/timers/taskTimeLogController');
 let replica;
 before(async () => {
   replica = await MongoMemoryReplSet.create({ binary: { version: '7.0.24' }, replSet: { count: 1, ip: '127.0.0.1', storageEngine: 'wiredTiger', spawn: { windowsHide: true } } });
@@ -49,6 +49,18 @@ test('a task without idle logout keeps running through hours of OS idleness', as
   const f = await fixture('work', {}, false); const response = await heartbeat(f, 8 * 3600);
   assert.equal(response.code, 200); assert.equal(response.body.idleStopped, undefined);
   const saved = await Log.findById(f.timer._id).lean(); assert.equal(saved.status, 'running'); assert.equal(saved.isActiveTimer, true);
+});
+test('disabling idle logout on an active task protects it from an older desktop idle stop', async () => {
+  const f = await fixture();
+  await Task.updateOne({ _id: f.timer.task }, { $set: { idleLogout: false } });
+  const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
+  await stopTimer({ user: f.user, body: { timeLogId: String(f.timer._id), idleSeconds: 8 * 3600 } }, res);
+  assert.equal(res.code, 409);
+  assert.equal(res.body.code, 'IDLE_LOGOUT_DISABLED');
+  assert.equal((await heartbeat(f, 8 * 3600)).body.idleStopped, undefined);
+  const saved = await Log.findById(f.timer._id).lean();
+  assert.equal(saved.status, 'running');
+  assert.deepEqual(saved.pauses, []);
 });
 test('break tasks, exempt employees and intentional pauses retain their behavior', async () => {
   for (const f of [await fixture('break'), await fixture('work', { idleTrackingExempt: true }), await fixture()]) {

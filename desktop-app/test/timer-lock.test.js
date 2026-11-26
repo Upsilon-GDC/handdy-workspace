@@ -181,6 +181,21 @@ test("while nothing needs repair the lock never reorders windows, so open dropdo
   assert.ok(h.main.topCount > settled[0], "after a repair CRM is put back above the overlays");
 });
 
+test("opening the idle warning brings locked CRM to the front again", () => {
+  const h = setup();
+  h.lock.showIdleWarning();
+  assert.equal(h.main.focusCount, 0);
+
+  h.lock.report("locked");
+  const focusCount = h.main.focusCount;
+  const topCount = h.main.topCount;
+  h.lock.showIdleWarning();
+
+  assert.equal(h.main.focusCount, focusCount + 1);
+  assert.equal(h.main.topCount, topCount + 1);
+  assert.equal(h.main.alwaysOnTop, true);
+});
+
 test("a renderer that stops reporting releases the lock", () => {
   const h = setup();
   h.lock.report("locked");

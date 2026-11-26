@@ -220,6 +220,7 @@ function createTimerLock({
     report,
     release,
     isActive: () => active,
+    showIdleWarning: () => raise({ focus: true }),
     onMainWindowBlur,
     onMainWindowMinimize,
   };
